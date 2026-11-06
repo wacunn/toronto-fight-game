@@ -2660,6 +2660,13 @@ function spawnEnemy(x, z, kind = 'robot', archIdx = 0, isGuard = false, guardTit
     guardTitle = null;
   }
 
+  // Citizens / civilians must NEVER spawn on active airport runways or taxiways
+  const isRunway = (typeof islands !== 'undefined' && islands && islands.isAirportRunway && islands.isAirportRunway(x, z)) ||
+    (typeof city !== 'undefined' && city && city.isAirportRunway && city.isAirportRunway(x, z));
+  if (isRunway && (kind === 'civilian' || z > 840)) {
+    return null;
+  }
+
   const fighterRig = create3DHumanFighter(x, z, kind, archIdx);
   const groundFloorY = (city && city.floorAt) ? city.floorAt(x, z, 0) : 0;
   fighterRig.root.position.y = groundFloorY;
@@ -2841,6 +2848,10 @@ function spawnSingleReinforcement(originX, originZ) {
       const dist = 22 + Math.random() * 45;
       const tx = pX + Math.cos(angle) * dist;
       const tz = pZ + Math.sin(angle) * dist;
+      // Prohibit spawning reinforcements on Billy Bishop active runway or taxiways
+      const onRwy = (typeof islands !== 'undefined' && islands && islands.isAirportRunway && islands.isAirportRunway(tx, tz)) ||
+        (typeof city !== 'undefined' && city && city.isAirportRunway && city.isAirportRunway(tx, tz));
+      if (onRwy) continue;
       if (islands && islands.canMoveTo(tx, tz, 0.5, 0.55)) {
         const fromAnyPlayer = nearestPlayerDist(tx, tz);
         if (fromAnyPlayer >= 16) {
@@ -7687,6 +7698,10 @@ function updateEnemies(dt) {
           const dist = 14 + Math.random() * 42;
           const sx = player.pos.x + Math.cos(angle) * dist;
           const sz = player.pos.z + Math.sin(angle) * dist;
+          // Never spawn ambient park citizens on Billy Bishop active runway or taxiways!
+          const onRwy = (typeof islands !== 'undefined' && islands && islands.isAirportRunway && islands.isAirportRunway(sx, sz)) ||
+            (typeof city !== 'undefined' && city && city.isAirportRunway && city.isAirportRunway(sx, sz));
+          if (onRwy) continue;
           if (city && city.canMoveTo && city.canMoveTo(sx, sz, 0.5, 0.55)) {
             const archIdx = Math.floor(Math.random() * CIVILIAN_ARCHETYPES.length);
             const cit = spawnEnemy(sx, sz, 'civilian', archIdx);
@@ -7698,6 +7713,18 @@ function updateEnemies(dt) {
   }
 
   enemies.forEach(enemy => {
+    // Safety escort: keep citizens strictly off active airport runways and taxiways (players can walk freely!)
+    if (enemy.kind === 'civilian' && !enemy.isDead) {
+      const ePos = enemy.rig.root.position;
+      const onRunway = (typeof islands !== 'undefined' && islands && islands.isAirportRunway && islands.isAirportRunway(ePos.x, ePos.z)) ||
+        (typeof city !== 'undefined' && city && city.isAirportRunway && city.isAirportRunway(ePos.x, ePos.z));
+      if (onRunway) {
+        // Escort civilian off active runway back to safe passenger terminal entrance plaza
+        ePos.set(-1060 + (Math.random() - 0.5) * 16, 0.55, 938 + (Math.random() - 0.5) * 6);
+        enemy.wanderAngle = Math.PI; // Face north toward terminal/ferry
+        enemy.wanderTimer = 3.0;
+      }
+    }
     // 1. Knockout knockdown animation
     if (enemy.isKnockedOut) {
       if (enemy.koProgress < 1.0) {
@@ -7854,7 +7881,9 @@ function updateEnemies(dt) {
 
         const nextCx = enemy.rig.root.position.x + fleeDir.x * (enemy.speed * 1.5) * dt;
         const nextCz = enemy.rig.root.position.z + fleeDir.z * (enemy.speed * 1.5) * dt;
-        if (!city || city.canMoveTo(nextCx, nextCz, 0.4, enemy.rig.root.position.y)) {
+        const fleeRunway = (typeof islands !== 'undefined' && islands && islands.isAirportRunway && islands.isAirportRunway(nextCx, nextCz)) ||
+          (typeof city !== 'undefined' && city && city.isAirportRunway && city.isAirportRunway(nextCx, nextCz));
+        if (!fleeRunway && (!city || city.canMoveTo(nextCx, nextCz, 0.4, enemy.rig.root.position.y))) {
           enemy.rig.root.position.x = nextCx;
           enemy.rig.root.position.z = nextCz;
         }
@@ -7872,7 +7901,7 @@ function updateEnemies(dt) {
         enemy.rig.rightArmPivot.rotation.x = legSwing * 0.9;
         enemy.rig.torsoPivot.position.y = 0.98 + Math.abs(Math.sin(enemy.walkPhase * 2)) * 0.05;
       } else {
-        // Peaceful civilian stroll around Toronto streets
+        // Peaceful civilian stroll around Toronto streets (citizens keep off active airport runways)
         enemy.wanderTimer = (enemy.wanderTimer || 3.0) - dt;
         if (enemy.wanderTimer <= 0) {
           enemy.wanderAngle = (enemy.wanderAngle || 0) + (Math.random() - 0.5) * Math.PI * 0.8;
@@ -7883,7 +7912,9 @@ function updateEnemies(dt) {
         const wz = Math.cos(enemy.wanderAngle);
         const nextCx = enemy.rig.root.position.x + wx * (enemy.speed * 0.6) * dt;
         const nextCz = enemy.rig.root.position.z + wz * (enemy.speed * 0.6) * dt;
-        if (!city || city.canMoveTo(nextCx, nextCz, 0.4, enemy.rig.root.position.y)) {
+        const entersRunway = (typeof islands !== 'undefined' && islands && islands.isAirportRunway && islands.isAirportRunway(nextCx, nextCz)) ||
+          (typeof city !== 'undefined' && city && city.isAirportRunway && city.isAirportRunway(nextCx, nextCz));
+        if (!entersRunway && (!city || city.canMoveTo(nextCx, nextCz, 0.4, enemy.rig.root.position.y))) {
           enemy.rig.root.position.x = nextCx;
           enemy.rig.root.position.z = nextCz;
         } else {
@@ -7925,9 +7956,14 @@ function updateEnemies(dt) {
       const wz = Math.cos(enemy.wanderAngle);
       const nextEx = enemy.rig.root.position.x + wx * (enemy.speed * 0.6) * dt;
       const nextEz = enemy.rig.root.position.z + wz * (enemy.speed * 0.6) * dt;
-      if (!city || city.canMoveTo(nextEx, nextEz, 0.4, 0)) {
+      const entersRunway = (typeof islands !== 'undefined' && islands && islands.isAirportRunway && islands.isAirportRunway(nextEx, nextEz)) ||
+        (typeof city !== 'undefined' && city && city.isAirportRunway && city.isAirportRunway(nextEx, nextEz));
+      if (!entersRunway && (!city || city.canMoveTo(nextEx, nextEz, 0.4, 0))) {
         enemy.rig.root.position.x = nextEx;
         enemy.rig.root.position.z = nextEz;
+      } else {
+        enemy.wanderAngle = (enemy.wanderAngle || 0) + Math.PI * 0.75;
+        enemy.wanderTimer = 1.0;
       }
       enemy.rig.root.rotation.y = enemy.wanderAngle;
 

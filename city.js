@@ -874,6 +874,13 @@
       return false;
     }
 
+    function isAirportRunway(x, z) {
+      if (typeof window !== 'undefined' && window.islands && typeof window.islands.isAirportRunway === 'function') {
+        return window.islands.isAirportRunway(x, z);
+      }
+      return ((x >= -1575 && x <= -920 && z >= 958 && z <= 1090) || (x < -1110 && x >= -1575 && z >= 890 && z <= 1090));
+    }
+
     function isInsideIslandLagoon(x, z, pad) {
       const p = pad || 0;
       // West lagoon channel (Olympic Island channel)
@@ -13766,6 +13773,7 @@
       },
       // Centre Island & Toronto Island Ferries API
       isInsideCentreIsland,
+      isAirportRunway,
       isInsideIslandLagoon,
       isOnIslandBridge,
       getIslandBridge,

@@ -2705,6 +2705,63 @@
       radarDish.position.set(tx, GROUND_Y + 34.4, tz);
       apg.add(radarDish);
 
+      // Billy Bishop Airport Transport Canada Airside Security Perimeter Fence
+      // Separates public terminal / ferry arrival plaza (z < 955) from active airfield / runways (z >= 958)
+      const fenceMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.4, metalness: 0.6 });
+      const fencePostMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.5, metalness: 0.7 });
+      const fenceWireMat = new THREE.MeshBasicMaterial({ color: 0x64748b, wireframe: true });
+      const fenceH = 2.4;
+
+      function buildFenceSegment(x0, z0, x1, z1) {
+        const len = Math.hypot(x1 - x0, z1 - z0);
+        const ang = Math.atan2(x1 - x0, z1 - z0);
+        const midX = (x0 + x1) / 2, midZ = (z0 + z1) / 2;
+
+        const panel = new THREE.Mesh(new THREE.BoxGeometry(0.08, fenceH, len), fenceWireMat);
+        panel.position.set(midX, GROUND_Y + fenceH / 2, midZ);
+        panel.rotation.y = ang;
+        apg.add(panel);
+
+        const topRail = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.08, len), fenceMat);
+        topRail.position.set(midX, GROUND_Y + fenceH, midZ);
+        topRail.rotation.y = ang;
+        apg.add(topRail);
+
+        const nPosts = Math.max(2, Math.floor(len / 6.0));
+        for (let pi = 0; pi <= nPosts; pi++) {
+          const t = pi / nPosts;
+          const px = x0 + (x1 - x0) * t;
+          const pz = z0 + (z1 - z0) * t;
+          const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, fenceH + 0.3, 8), fencePostMat);
+          post.position.set(px, GROUND_Y + (fenceH + 0.3) / 2, pz);
+          apg.add(post);
+        }
+      }
+
+      // 1. West perimeter fence along airside boundary (visual fence with open pilot/player access)
+      buildFenceSegment(ax - 42, 955, -1540, 955);
+
+      // 2. East perimeter fence along airside boundary
+      buildFenceSegment(ax + 42, 955, -930, 955);
+
+      // 3. Hanlan's Point flank boundary fence (x = -930)
+      buildFenceSegment(-930, 955, -930, 1085);
+
+      // Prominent Transport Canada Security Warning Signs mounted on perimeter fence
+      [-1085, -1005, -930].forEach((sx, si) => {
+        const rSign = makeSign(
+          ['RESTRICTED AIRSIDE AREA • KEEP OUT', 'NO CITIZEN ACCESS • ACTIVE RUNWAYS', 'TRANSPORT CANADA SECURITY • CYTZ'],
+          9.5, 1.35,
+          { bg: '#b91c1c', fg: '#ffffff', borderColor: '#fef08a', subFg: '#fef08a' }
+        );
+        rSign.position.set(sx, GROUND_Y + 1.8, 954.5);
+        if (si === 2) {
+          rSign.rotation.y = -Math.PI / 2;
+          rSign.position.set(-929.5, GROUND_Y + 1.8, 1010);
+        }
+        apg.add(rSign);
+      });
+
       // Porter Airlines Tail Emblem Texture (Midnight Navy Fin with Iconic White Badge & Masked Raccoon Motif)
       function makePorterTailTexture() {
         const can = document.createElement('canvas');
@@ -4022,6 +4079,15 @@
       return z >= Z(-360) && z <= Z(650) && x >= -1650 && x <= 1500;
     }
 
+    function isAirportRunway(x, z) {
+      // Billy Bishop Toronto City Airport (CYTZ) Active Airfield & Security Zone
+      // Runway 08/26 (x: -1540..-980, z: 1008..1052), Taxiway Alpha (z: 984..1004), Apron & Aircraft Staging
+      // Players can freely walk here; citizens / ambient NPCs are kept strictly off active runways
+      if (x >= -1575 && x <= -920 && z >= 958 && z <= 1090) return true;
+      if (x < -1110 && x >= -1575 && z >= 890 && z <= 1090) return true;
+      return false;
+    }
+
     function canMoveTo(x, z, radius, y) {
       const r = radius || 0.4;
       if (y !== undefined && y > 18.0) {
@@ -4289,6 +4355,7 @@
       group: islandsGroup,
       Z_BASE,
       isInsideIslands,
+      isAirportRunway,
       canMoveTo,
       floorAt,
       getNeighborhood,
