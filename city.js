@@ -712,6 +712,15 @@
       LM.pizzaPizza = [240.0, 1220.0];
     }
 
+    // ---------- TTC Line 1 Underground Subway Stations (Yonge-University Loop) ----------
+    const SUBWAY_STATIONS = [
+      { id: 'union', name: 'Union Station', line: 'Line 1 (Yonge-University)', x: 265, z: -140, streetX: 258, streetZ: -128, tileColor: 0xca8a04, fontColor: '#000000', label: 'UNION' },
+      { id: 'king', name: 'King Station', line: 'Line 1 (Yonge)', x: 485, z: -586, streetX: 476, streetZ: -578, tileColor: 0xfef3c7, fontColor: '#991b1b', label: 'KING' },
+      { id: 'queen', name: 'Queen Station', line: 'Line 1 (Yonge)', x: 410, z: -915, streetX: 402, streetZ: -905, tileColor: 0xf8fafc, fontColor: '#1d4ed8', label: 'QUEEN' },
+      { id: 'osgoode', name: 'Osgoode Station', line: 'Line 1 (University)', x: -310, z: -705, streetX: -302, streetZ: -695, tileColor: 0xfde047, fontColor: '#000000', label: 'OSGOODE' },
+      { id: 'standrew', name: 'St. Andrew Station', line: 'Line 1 (University)', x: -125, z: -402, streetX: -118, streetZ: -394, tileColor: 0xffffff, fontColor: '#0f172a', label: 'ST. ANDREW' }
+    ];
+
     // ---------- CN Tower vertical walkables ----------
     const TWR = { x: LM.cnTower[0], z: LM.cnTower[1] };
     const DECK_YS = [342.0, 348.0, 354.0];
@@ -1087,6 +1096,10 @@
       if (typeof window !== 'undefined' && window.islands && window.islands.isInsideIslands && window.islands.isInsideIslands(x, z)) {
         return window.islands.floorAt(x, z, y);
       }
+      // TTC Line 1 Underground Subway World Layer (y < -6.0)
+      if (y !== undefined && y < -6.0) {
+        return -14.0;
+      }
       if (y !== undefined && y > 50) {
         const feetY = (y > 300 && (y - 340) % 6 > 1.0 && y % 1 > 0.4) ? (y - 1.7) : y;
         if (elevatorCab) {
@@ -1214,6 +1227,10 @@
           return d >= 22.0 && d <= 24.4;
         }
         return d >= DECK_IN + r && d <= DECK_OUT - r;
+      }
+      if (y !== undefined && y < -6.0) {
+        // Underground Subway System collision: walkable inside station platforms and train cars
+        return SUBWAY_STATIONS.some(st => Math.abs(x - st.x) <= 12.0 && Math.abs(z - st.z) <= 38.0);
       }
       if (x < PLAY.minX || x > PLAY.maxX || z < PLAY.minZ || z > PLAY.maxZ) return false;
 
@@ -2425,7 +2442,8 @@
       [/^Toronto Club$|^The National Club$|^Toronto Fire Station 332$|^Steele Briggs|^240 Richmond|^230 Richmond|^205 Richmond|^Purman Building/, 'victorian', [1.06, 0.86, 0.78]],
       [/^Queen Richmond Centre West|^Picasso Condos|^Three Hundred Front/, 'condo', [1.14, 1.18, 1.24]],
       [/^Shangri-La$|^EY Tower$|^Bay Adelaide|^The St\. Regis/, 'glass', [0.84, 1.04, 1.20]],
-      [/^The Berczy$|^Market Square$|^Market Wharf|^Novotel/, 'victorian', [1.05, 0.88, 0.80]]
+      [/^Market Wharf/, 'condo', [0.82, 0.98, 1.18]], // 34-storey modern glass tower over 8-storey heritage brick podium
+      [/^The Berczy$|^Market Square$|^Novotel/, 'victorian', [1.05, 0.88, 0.80]]
     ];
     const KING_RESTAURANT_ROW_IDS = new Set([306, 299, 309, 302, 301, 303, 310, 311, 304, 307, 305, 300, 297, 298, 308, 457, 458]);
     const KING_WEST_HERITAGE_IDS = new Set([116, 124, 127, 130, 219, 220, 351, 424, 425, 426, 428, 464, 465, 466, 467, 468, 469, 470, 471, 533, 543, 544]);
@@ -2586,7 +2604,26 @@
       const isGooderham = name.indexOf('Gooderham Building') === 0;
       const isMarket = name === 'St. Lawrence Market South' || (name === 'St. Lawrence Market' && !landmarkFeet.market);
       if (isGooderham) { h = 20; landmarkFeet.gooderham = pts; }
-      if (isMarket) { h = 12; landmarkFeet.market = pts; }
+      if (isMarket) {
+        h = 12;
+        // Sanitize north points of St. Lawrence Market so it NEVER sticks out into Front Street East
+        pts = pts.map(([px, pz]) => {
+          // Road 282 (Front St E) runs from (914.5, -564.2) to (945.2, -582.2), width 11 (half-width 5.5m)
+          const p1 = [914.5, -564.2], p2 = [945.2, -582.2];
+          const dx = p2[0] - p1[0], dz = p2[1] - p1[1], L2 = dx * dx + dz * dz;
+          const t = Math.max(0, Math.min(1, ((px - p1[0]) * dx + (pz - p1[1]) * dz) / L2));
+          const projX = p1[0] + dx * t, projZ = p1[1] + dz * t;
+          const d = Math.hypot(px - projX, pz - projZ);
+          const minD = 7.4; // 5.5m road half-width + 1.9m sidewalk curb buffer
+          if (d < minD) {
+            const nx = d > 0.01 ? (px - projX) / d : 0;
+            const nz = d > 0.01 ? (pz - projZ) / d : 1;
+            return [projX + nx * minD, projZ + nz * minD];
+          }
+          return [px, pz];
+        });
+        landmarkFeet.market = pts;
+      }
 
       // Real Toronto Waterfront building base heights & styles (towers/superstructures added in Waterfront section)
       const isPowerPlant = name.indexOf('Home Game Toronto') === 0;
@@ -8211,24 +8248,25 @@
       // clerestory glazing strip along the ridge
       const glow = new THREE.Mesh(new THREE.BoxGeometry(3, 1.2, D - 6), new THREE.MeshStandardMaterial({ color: 0x222222, emissive: 0xffc070, emissiveIntensity: 0.55 }));
       glow.position.set(cx, 21.9, cz); glow.rotation.y = rot; scene.add(glow);
-      // Pediment pavilion centred on the Front Street face
+      // Pediment pavilion centred on the Front Street face — set flush with north facade
       const fm = [cx - south[0] * D / 2, cz - south[1] * D / 2]; // middle of the Front Street face
       const stone = new THREE.MeshStandardMaterial({ color: 0xc9b99a, roughness: 0.7, envMapIntensity: 0.3, side: THREE.DoubleSide });
-      const pavX = fm[0] - south[0] * 1.2, pavZ = fm[1] - south[1] * 1.2;
+      const pavX = fm[0] + south[0] * 1.5, pavZ = fm[1] + south[1] * 1.5;
       const pav = new THREE.Group(); pav.position.set(pavX, 0, pavZ); pav.rotation.y = rot;
-      const block = new THREE.Mesh(new THREE.BoxGeometry(20, 17, 4), stone); block.position.y = 8.5; pav.add(block);
-      const tri = new THREE.Shape(); tri.moveTo(-10.5, 0); tri.lineTo(10.5, 0); tri.lineTo(0, 5.5); tri.closePath();
-      const ped = new THREE.Mesh(new THREE.ExtrudeGeometry(tri, { depth: 4.2, bevelEnabled: false }), stone); ped.position.set(0, 17, -2.1); pav.add(ped);
-      const clock = new THREE.Mesh(new THREE.CircleGeometry(1.5, 32), new THREE.MeshBasicMaterial({ color: 0xfff6dc, toneMapped: false })); clock.position.set(0, 19.2, -2.15); clock.rotation.y = Math.PI; pav.add(clock);
-      const door = new THREE.Mesh(new THREE.PlaneGeometry(6, 7), new THREE.MeshBasicMaterial({ color: 0xffc77a, toneMapped: false })); door.position.set(0, 3.5, -2.05); door.rotation.y = Math.PI; pav.add(door);
-      const s = signMesh(['ST. LAWRENCE MARKET'], 16, 2.0, { bg: '#7f1d1d', fg: '#fde68a', borderColor: '#f59e0b', size: 70 }); s.position.set(0, 13.2, -2.06); s.rotation.y = Math.PI; pav.add(s);
+      const block = new THREE.Mesh(new THREE.BoxGeometry(18, 17, 2.2), stone); block.position.y = 8.5; pav.add(block);
+      const tri = new THREE.Shape(); tri.moveTo(-9.5, 0); tri.lineTo(9.5, 0); tri.lineTo(0, 5.0); tri.closePath();
+      const ped = new THREE.Mesh(new THREE.ExtrudeGeometry(tri, { depth: 2.4, bevelEnabled: false }), stone); ped.position.set(0, 17, -1.2); pav.add(ped);
+      const clock = new THREE.Mesh(new THREE.CircleGeometry(1.4, 32), new THREE.MeshBasicMaterial({ color: 0xfff6dc, toneMapped: false })); clock.position.set(0, 19.2, -1.25); clock.rotation.y = Math.PI; pav.add(clock);
+      const door = new THREE.Mesh(new THREE.PlaneGeometry(5.5, 6.5), new THREE.MeshBasicMaterial({ color: 0xffc77a, toneMapped: false })); door.position.set(0, 3.25, -1.15); door.rotation.y = Math.PI; pav.add(door);
+      const s = signMesh(['ST. LAWRENCE MARKET'], 15, 1.8, { bg: '#7f1d1d', fg: '#fde68a', borderColor: '#f59e0b', size: 66 }); s.position.set(0, 13.0, -1.16); s.rotation.y = Math.PI; pav.add(s);
       pav.traverse(o => { if (o.isMesh) o.castShadow = true; });
       scene.add(pav);
-      const pavPoly = [[-10, -2], [10, -2], [10, 2], [-10, 2]].map(([u, v]) => [pavX - west[0] * u + south[0] * v, pavZ - west[1] * u + south[1] * v]);
+      const pavPoly = [[-9, -1.1], [9, -1.1], [9, 1.1], [-9, 1.1]].map(([u, v]) => [pavX - west[0] * u + south[0] * v, pavZ - west[1] * u + south[1] * v]);
       if (polyArea(pavPoly) < 0) pavPoly.reverse();
       addSolid({ type: 'poly', pts: pavPoly, h: 17, name: 'St. Lawrence Market Pavilion' });
 
       // Colorful St. Lawrence Market side canopies, vendor banners & Market Street patio umbrellas
+      // Confined strictly to the west side (Market Street pedestrian promenade, side = 1)
       const mktCanopyCols = [0xb91c1c, 0x047857, 0xd97706, 0x1d4ed8];
       const mktBanners = [
         ['CAROUSEL BAKERY • PEAMEAL BACON', '#7f1d1d', '#fef08a', '#f59e0b'],
@@ -8236,7 +8274,7 @@
         ["BUSTER'S SEA COVE • FRESH FISH", '#0c4a6e', '#7dd3fc', '#38bdf8'],
         ['OLD TOWN COFFEE & PATISSERIE', '#78350f', '#fef3c7', '#f59e0b']
       ];
-      [-1, 1].forEach(side => {
+      [1].forEach(side => {
         for (let k = 0; k < 4; k++) {
           const alongOff = -D * 0.34 + k * (D * 0.22);
           const acrossOff = side * (W / 2 + 1.15);
@@ -8857,6 +8895,191 @@
             '92 FRONT STREET EAST • SATURDAY FARMERS\' MARKET HALL'
           ], 18.0, 2.0, { bg: '#7f1d1d', fg: '#fde68a', borderColor: '#f59e0b', size: 56 });
           signOnEdge(nmPts, [nx + 10, nz + 50], nmSign, 5.5, 14);
+        }
+
+        // 8. New Times Square Condominiums (109 Front Street East, SE Front & Lower Jarvis):
+        //    Camrost-Felcorp 12-storey red brick & limestone residential midrise with
+        //    signature sweeping curved northwest corner facade embracing Front St E & Jarvis,
+        //    grand 2-storey arched entrance portico, dark balconies, stepped penthouses & inner courtyard
+        {
+          const ntsGrp = new THREE.Group();
+          const ntsBrickMat = new THREE.MeshStandardMaterial({ color: 0x8a3826, roughness: 0.85 });
+          const ntsStoneMat = new THREE.MeshStandardMaterial({ color: 0xdfd4bc, roughness: 0.7 });
+          const ntsGlassMat = new THREE.MeshStandardMaterial({ color: 0x1e3a5f, roughness: 0.15, metalness: 0.8 });
+          const ntsBalconyMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.5, metalness: 0.6 });
+
+          // Sweeping curved corner footprint [x: 998..1046, z: -596..-546]
+          const ntsPoly = [
+            [998, -580], [1000, -586], [1005, -591], [1014, -596],
+            [1046, -604], [1046, -546], [998, -546]
+          ];
+          if (polyArea(ntsPoly) < 0) ntsPoly.reverse();
+
+          // Main 12-storey brick structure (h = 38.0m)
+          ntsGrp.add(new THREE.Mesh(wallsGeo(ntsPoly, 0, () => 38.0, 10, 1.0), ntsBrickMat));
+          ntsGrp.add(new THREE.Mesh(capGeo(ntsPoly, () => 38.0), darkSlateMat));
+
+          // Architectural horizontal limestone beltcourses across floors 2, 4, 8, and roof parapet
+          [4.5, 9.2, 18.5, 27.8, 38.0].forEach(by => {
+            ntsGrp.add(new THREE.Mesh(wallsGeo(scaledPoly(ntsPoly, 1.018), by - 0.35, () => by + 0.35, 8, 0.7), ntsStoneMat));
+          });
+
+          // Ground-Floor Commercial Streetfront Glazing & Awnings along Front St & Lower Jarvis
+          const gfCanvasMat = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.7, side: THREE.DoubleSide });
+          [[1004, -594, -0.4], [1020, -598, -0.22], [1036, -602, -0.22], [998, -562, Math.PI / 2]].forEach(([ax, az, aRot]) => {
+            const awning = new THREE.Mesh(new THREE.BoxGeometry(6.5, 0.14, 1.8), gfCanvasMat);
+            awning.position.set(ax, 3.8, az);
+            awning.rotation.y = aRot;
+            awning.rotation.x = 0.22;
+            ntsGrp.add(awning);
+          });
+
+          // Grand 2-Storey Arched Residential Entrance Portico on Front Street East (x = 1022, z = -599)
+          const portico = new THREE.Group();
+          portico.position.set(1022, 0, -599.5);
+          portico.rotation.y = -0.22;
+          const archFrame = new THREE.Mesh(new THREE.BoxGeometry(8.2, 7.5, 1.8), ntsStoneMat);
+          archFrame.position.y = 3.75;
+          portico.add(archFrame);
+          const archOpening = new THREE.Mesh(
+            new THREE.CylinderGeometry(2.2, 2.2, 2.0, 16, 1, false, 0, Math.PI),
+            ntsStoneMat
+          );
+          archOpening.rotation.x = Math.PI / 2;
+          archOpening.position.set(0, 4.5, 0);
+          portico.add(archOpening);
+
+          // Double glass lobby entrance doors + polished brass sconce lanterns
+          const lobbyDoors = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 3.6), ntsGlassMat);
+          lobbyDoors.position.set(0, 1.8, -0.92);
+          lobbyDoors.rotation.y = Math.PI;
+          portico.add(lobbyDoors);
+          [-2.6, 2.6].forEach(lx => {
+            const lantern = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.65, 0.35), new THREE.MeshBasicMaterial({ color: 0xfef08a, toneMapped: false }));
+            lantern.position.set(lx, 3.8, -0.95);
+            portico.add(lantern);
+          });
+
+          // Signature Illuminated Marquee Signage
+          const ntsSign = signMesh([
+            'NEW TIMES SQUARE • 109 FRONT STREET EAST',
+            'RESIDENTIAL CONDOMINIUMS & LOFTS • EST. 2000'
+          ], 16.0, 2.0, { bg: '#1c1917', fg: '#fde68a', borderColor: '#d4af37', size: 54 });
+          ntsSign.position.set(0, 6.2, -0.98);
+          ntsSign.rotation.y = Math.PI;
+          portico.add(ntsSign);
+          ntsGrp.add(portico);
+
+          // Balcony bands on upper floors (floors 3 to 9)
+          for (let f = 3; f <= 9; f++) {
+            const fy = f * 3.1;
+            [1010, 1028, 1040].forEach(bx => {
+              const bMesh = new THREE.Mesh(new THREE.BoxGeometry(4.5, 0.95, 1.2), ntsBalconyMat);
+              bMesh.position.set(bx, fy, -597.5 - (bx - 1010) * 0.22);
+              bMesh.rotation.y = -0.22;
+              ntsGrp.add(bMesh);
+            });
+            [-555, -572].forEach(bz => {
+              const bMesh = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.95, 4.5), ntsBalconyMat);
+              bMesh.position.set(997.2, fy, bz);
+              ntsGrp.add(bMesh);
+            });
+          }
+
+          // Stepped-back terraced penthouses on Floors 10, 11 & 12 with private rooftop gardens
+          const phGeo = new THREE.BoxGeometry(32.0, 7.5, 34.0);
+          const ph = new THREE.Mesh(phGeo, ntsGlassMat);
+          ph.position.set(1024, 41.5, -574);
+          ntsGrp.add(ph);
+
+          // Landscaped interior courtyard in the center of the block
+          const courtFloor = new THREE.Mesh(new THREE.PlaneGeometry(16, 18), new THREE.MeshStandardMaterial({ color: 0x3f3f46, roughness: 0.8 }));
+          courtFloor.rotation.x = -Math.PI / 2;
+          courtFloor.position.set(1024, 0.05, -572);
+          ntsGrp.add(courtFloor);
+
+          // Courtyard garden maple tree
+          const courtTreeTrunk = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.28, 4.2, 8), new THREE.MeshStandardMaterial({ color: 0x3b2516, roughness: 0.85 }));
+          courtTreeTrunk.position.set(1024, 2.1, -572);
+          ntsGrp.add(courtTreeTrunk);
+          const courtTreeFoliage = new THREE.Mesh(new THREE.SphereGeometry(3.2, 10, 8), new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.95 }));
+          courtTreeFoliage.position.set(1024, 5.2, -572);
+          ntsGrp.add(courtTreeFoliage);
+
+          frGrp.add(ntsGrp);
+          addSolid({ type: 'poly', pts: ntsPoly, h: 38, name: 'New Times Square Condominiums' });
+        }
+
+        // 9. Market Wharf Condominiums (#18, 18 Lower Jarvis Street / 1 Market St):
+        //    Peter Clewes / architectsAlliance award-winning design:
+        //    8-storey heritage red-brick podium (h = 26.5m) echoing the St. Lawrence Market district,
+        //    2-storey curvilinear "Market Club" glass amenity pavilion & rooftop terrace at Level 8,
+        //    34-storey sleek blue-grey glass tower (h = 108m) with dynamic undulating nautical wave balconies!
+        if (MAP.buildings[18]) {
+          const mwGrp = new THREE.Group();
+          const mwPts = toPairs(MAP.buildings[18].p);
+          if (polyArea(mwPts) < 0) mwPts.reverse();
+          const [mwx, mwz] = centroid(mwPts);
+
+          const mwBrickMat = new THREE.MeshStandardMaterial({ color: 0x8a3826, roughness: 0.82 });
+          const mwGlassMat = new THREE.MeshStandardMaterial({ color: 0x1e3a5f, roughness: 0.12, metalness: 0.88 });
+          const mwWaveBalconyMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.28, metalness: 0.35 });
+          const mwWoodDeckMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.75 });
+
+          // A. 8-Storey Heritage Red-Brick Podium (h = 26.5m)
+          const podH = 26.5;
+          mwGrp.add(new THREE.Mesh(wallsGeo(mwPts, 0, () => podH, 8, 1.1), mwBrickMat));
+          mwGrp.add(new THREE.Mesh(capGeo(mwPts, () => podH), mwWoodDeckMat));
+
+          // Heavy architectural brick reveals & stone cornices on the podium
+          [13.2, podH].forEach(cy => {
+            mwGrp.add(new THREE.Mesh(wallsGeo(scaledPoly(mwPts, 1.02), cy - 0.45, () => cy + 0.45, 6, 0.8), stoneTrimMat));
+          });
+
+          // B. "The Market Club" 2-Storey Curvilinear Glass Pavilion & Rooftop Garden Deck (Level 8)
+          const clubPav = new THREE.Mesh(new THREE.CylinderGeometry(14.0, 16.5, 7.0, 20), mwGlassMat);
+          clubPav.position.set(mwx - 10, podH + 3.5, mwz + 15);
+          mwGrp.add(clubPav);
+
+          // Rooftop garden trees & planters on the podium terrace
+          [[-16, 22], [-4, 25], [12, 18], [15, 6]].forEach(([tx, tz]) => {
+            const planter = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.4, 0.8, 12), stoneTrimMat);
+            planter.position.set(mwx + tx, podH + 0.4, mwz + tz);
+            mwGrp.add(planter);
+            const shrub = new THREE.Mesh(new THREE.SphereGeometry(1.5, 8, 8), new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.95 }));
+            shrub.position.set(mwx + tx, podH + 1.8, mwz + tz);
+            mwGrp.add(shrub);
+          });
+
+          // C. 34-Storey Sleek Glass Tower (h = 108.0m)
+          const towerH = 108.0;
+          const towerPoly = scaledPoly(mwPts, 0.76);
+          mwGrp.add(new THREE.Mesh(wallsGeo(towerPoly, podH, () => towerH, 12, 1.0), mwGlassMat));
+          mwGrp.add(new THREE.Mesh(capGeo(towerPoly, () => towerH), darkSlateMat));
+
+          // D. Signature Undulating Nautical Wave Balconies (Floors 9 to 34)
+          // Cascading white-aluminum wave/zigzag balconies that ripple dynamically across the facade
+          for (let f = 9; f <= 33; f++) {
+            const by = podH + (f - 8) * 3.15;
+            const wavePhase = (f % 2 === 0) ? 1.045 : 1.025;
+            const wavePts = scaledPoly(towerPoly, wavePhase);
+            const bBand = new THREE.Mesh(wallsGeo(wavePts, by, () => by + 1.05, 8, 0.75), mwWaveBalconyMat);
+            mwGrp.add(bBand);
+          }
+
+          // E. Modern Projecting Entrance Canopy & Illuminated Sign on Lower Jarvis Street
+          const mwCanopy = new THREE.Mesh(new THREE.BoxGeometry(7.5, 0.22, 4.2), new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.8, roughness: 0.2 }));
+          mwCanopy.position.set(mwx - 26, 4.2, mwz - 18);
+          mwCanopy.rotation.y = 0.28;
+          mwGrp.add(mwCanopy);
+
+          const mwSign = signMesh([
+            'MARKET WHARF • 18 LOWER JARVIS STREET',
+            'ARCHITECTSALLIANCE • RESIDENCES AT THE MARKET'
+          ], 16.0, 1.8, { bg: '#090d16', fg: '#38bdf8', borderColor: '#0284c7', size: 52 });
+          signOnEdge(mwPts, [mwx - 80, mwz - 50], mwSign, 5.6, 12);
+
+          frGrp.add(mwGrp);
         }
 
         scene.add(frGrp);
@@ -12219,8 +12442,10 @@
     // ---------- Per-frame updates ----------
     let lightTimer = 0, t = 0;
     const towerHue = new THREE.Color();
+    let updateSubwayTrain = null;
     function update(dt, playerPos) {
       t += dt;
+      if (updateSubwayTrain) updateSubwayTrain(dt);
       if (playerPos) {
         sky.position.set(playerPos.x, 0, playerPos.z);
         stars.position.set(playerPos.x, 0, playerPos.z);
@@ -13141,6 +13366,276 @@
       scene.add(greaterTorontoGroup);
     }
 
+    // ==========================================================================
+    // 9. UNDERGROUND TTC LINE 1 SUBWAY SYSTEM (YONGE-UNIVERSITY LOOP)
+    //    Stations: Union, King, Queen, Osgoode, St. Andrew
+    //    Street-Level Entrances, Underground Platform Layer (y = -14.0m),
+    //    and Animated 6-Car Toronto Rocket Subway Train Loop
+    // ==========================================================================
+    const subwayGroup = new THREE.Group();
+    const SUBWAY_PLATFORM_Y = -14.0;
+
+    // Materials
+    const subFloorMat = new THREE.MeshStandardMaterial({ color: 0x3f3f46, roughness: 0.8 });
+    const subPlatformMat = new THREE.MeshStandardMaterial({ color: 0x71717a, roughness: 0.75 });
+    const subCeilingMat = new THREE.MeshStandardMaterial({ color: 0x27272a, roughness: 0.9 });
+    const subTactileYellowMat = new THREE.MeshStandardMaterial({ color: 0xeab308, roughness: 0.5 });
+    const subTrackBedMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.95 });
+    const subRailSteelMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.85, roughness: 0.25 });
+    const subWoodTieMat = new THREE.MeshStandardMaterial({ color: 0x3b2516, roughness: 0.9 });
+    const subThirdRailMat = new THREE.MeshStandardMaterial({ color: 0xea580c, roughness: 0.6 });
+    const subSteelMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.85, roughness: 0.2 });
+    const subTtcRedMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.4 });
+    const subWindowGlowMat = new THREE.MeshBasicMaterial({ color: 0xfffbeb, toneMapped: false });
+    const subPrestoGreenMat = new THREE.MeshBasicMaterial({ color: 0x22c55e, toneMapped: false });
+
+    // 1. Build Each Subway Station (Street Entrance + Underground Concourse & Platform)
+    SUBWAY_STATIONS.forEach(st => {
+      // A. Street-Level Entrance Stairwell Portal at (st.streetX, st.streetZ)
+      const stEnt = new THREE.Group();
+      stEnt.position.set(st.streetX, 0, st.streetZ);
+
+      // Granite balustrade walls around descending stairs
+      const balustrade = new THREE.Mesh(new THREE.BoxGeometry(3.6, 1.1, 7.2), new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 }));
+      balustrade.position.y = 0.55;
+      stEnt.add(balustrade);
+
+      // Descending void / steps
+      const stairTreads = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.4, 6.2), new THREE.MeshBasicMaterial({ color: 0x09090b }));
+      stairTreads.position.set(0, 0.45, 0);
+      stEnt.add(stairTreads);
+
+      // Glowing TTC Red & White Pillar Sign
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 3.8, 8), subSteelMat);
+      pole.position.set(-1.6, 1.9, -3.2);
+      stEnt.add(pole);
+
+      const ttcSignBox = new THREE.Mesh(
+        new THREE.BoxGeometry(1.2, 0.75, 0.35),
+        new THREE.MeshBasicMaterial({ color: 0xdc2626, toneMapped: false })
+      );
+      ttcSignBox.position.set(-1.6, 3.5, -3.2);
+      stEnt.add(ttcSignBox);
+
+      const ttcSignText = signMesh(['SUBWAY', st.name.toUpperCase()], 4.2, 1.2, { bg: '#dc2626', fg: '#ffffff', borderColor: '#ffffff', size: 48 });
+      ttcSignText.position.set(-1.6, 3.5, -3.0);
+      stEnt.add(ttcSignText);
+
+      subwayGroup.add(stEnt);
+
+      // B. Underground Concourse & Station Platform at (st.x, SUBWAY_PLATFORM_Y, st.z)
+      const stUnder = new THREE.Group();
+      stUnder.position.set(st.x, SUBWAY_PLATFORM_Y, st.z);
+
+      // Floor slab & Ceiling (22m wide x 76m long, 4.4m ceiling height)
+      const flr = new THREE.Mesh(new THREE.BoxGeometry(22, 0.4, 76), subFloorMat);
+      flr.position.y = -0.2;
+      stUnder.add(flr);
+      const ceil = new THREE.Mesh(new THREE.BoxGeometry(22, 0.4, 76), subCeilingMat);
+      ceil.position.y = 4.4;
+      stUnder.add(ceil);
+
+      // Station Vitrolite Tiled Side Walls (Left and Right tunnel walls)
+      const wallMat = new THREE.MeshStandardMaterial({ color: st.tileColor, roughness: 0.35, metalness: 0.1 });
+      [-10.8, 10.8].forEach(wx => {
+        const wall = new THREE.Mesh(new THREE.BoxGeometry(0.4, 4.4, 76), wallMat);
+        wall.position.set(wx, 2.2, 0);
+        stUnder.add(wall);
+
+        // Station Typography Lettering Bands mounted along the wall
+        [-20, 0, 20].forEach(wz => {
+          const sNameSign = signMesh([st.label, 'LINE 1 YONGE-UNIVERSITY'], 11.5, 1.2, {
+            bg: '#' + st.tileColor.toString(16).padStart(6, '0'),
+            fg: st.fontColor,
+            borderColor: st.fontColor,
+            size: 56
+          });
+          sNameSign.position.set(wx > 0 ? wx - 0.25 : wx + 0.25, 2.5, wz);
+          sNameSign.rotation.y = wx > 0 ? -Math.PI / 2 : Math.PI / 2;
+          stUnder.add(sNameSign);
+        });
+      });
+
+      // Center Island Platform (8.4m wide x 72m long, elevated 1.1m above track bed)
+      const plat = new THREE.Mesh(new THREE.BoxGeometry(8.4, 1.1, 72), subPlatformMat);
+      plat.position.y = 0.55;
+      stUnder.add(plat);
+
+      // Tactile Yellow Safety Warning Edge Tiles along both platform edges
+      [-4.1, 4.1].forEach(tx => {
+        const yStrip = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.04, 72), subTactileYellowMat);
+        yStrip.position.set(tx, 1.12, 0);
+        stUnder.add(yStrip);
+      });
+
+      // Track Beds on West (-X) and East (+X) sides with steel rails & ties
+      [-7.4, 7.4].forEach(trx => {
+        const tbed = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.1, 76), subTrackBedMat);
+        tbed.position.set(trx, 0.05, 0);
+        stUnder.add(tbed);
+
+        // Ties
+        for (let tz = -36; tz <= 36; tz += 1.8) {
+          const tie = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.12, 0.24), subWoodTieMat);
+          tie.position.set(trx, 0.12, tz);
+          stUnder.add(tie);
+        }
+        // Dual steel rails
+        [-0.72, 0.72].forEach(rx => {
+          const rail = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.14, 76), subRailSteelMat);
+          rail.position.set(trx + rx, 0.24, 0);
+          stUnder.add(rail);
+        });
+        // 600V DC third rail with protective orange cover
+        const thirdRail = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.18, 76), subThirdRailMat);
+        thirdRail.position.set(trx + (trx < 0 ? -1.25 : 1.25), 0.32, 0);
+        stUnder.add(thirdRail);
+      });
+
+      // Platform Columns & Backlit Route Maps
+      for (let cz = -26; cz <= 26; cz += 13) {
+        const col = new THREE.Mesh(new THREE.BoxGeometry(0.65, 3.3, 0.65), wallMat);
+        col.position.set(0, 2.75, cz);
+        stUnder.add(col);
+
+        // Glowing Line 1 Route Map Lightbox
+        const rMap = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.85, 0.14), new THREE.MeshBasicMaterial({ color: 0xfef08a, toneMapped: false }));
+        rMap.position.set(0, 2.4, cz);
+        stUnder.add(rMap);
+      }
+
+      // Presto Card Tap Turnstiles & Street Exit Stairwell at Platform End (z = 32)
+      const prestoTurnstile = new THREE.Mesh(new THREE.BoxGeometry(4.8, 1.1, 1.2), subSteelMat);
+      prestoTurnstile.position.set(0, 1.65, 29);
+      stUnder.add(prestoTurnstile);
+      [-1.4, 0, 1.4].forEach(px => {
+        const tapTarget = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.04, 16), subPrestoGreenMat);
+        tapTarget.position.set(px, 2.22, 29);
+        stUnder.add(tapTarget);
+      });
+
+      // Street Exit Sign
+      const exitSign = signMesh(['⬆ STREET EXIT', st.name.toUpperCase()], 7.5, 1.2, { bg: '#18181b', fg: '#22c55e', borderColor: '#22c55e', size: 48 });
+      exitSign.position.set(0, 3.4, 33);
+      stUnder.add(exitSign);
+
+      subwayGroup.add(stUnder);
+    });
+
+    // 2. Animated 6-Car Toronto Rocket Subway Train
+    const rocketTrain = new THREE.Group();
+    const trainCars = [];
+    for (let cIdx = 0; cIdx < 6; cIdx++) {
+      const car = new THREE.Group();
+      // Stainless steel corrugated train car body (18m long, 3.1m wide, 3.4m tall)
+      const carBody = new THREE.Mesh(new THREE.BoxGeometry(3.1, 3.2, 17.5), subSteelMat);
+      carBody.position.y = 1.95;
+      car.add(carBody);
+
+      // Red TTC waist stripe
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(3.14, 0.28, 17.52), subTtcRedMat);
+      stripe.position.y = 1.55;
+      car.add(stripe);
+
+      // Illuminated passenger windows along both sides
+      for (let wz = -6.5; wz <= 6.5; wz += 2.6) {
+        [-1.58, 1.58].forEach(wx => {
+          const win = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.85, 1.6), subWindowGlowMat);
+          win.position.set(wx, 2.2, wz);
+          car.add(win);
+        });
+      }
+
+      // Front car headlights / Rear car taillights
+      if (cIdx === 0) {
+        [-0.95, 0.95].forEach(hx => {
+          const headlight = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false }));
+          headlight.position.set(hx, 1.45, -8.82);
+          car.add(headlight);
+        });
+      } else if (cIdx === 5) {
+        [-0.95, 0.95].forEach(hx => {
+          const taillight = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), new THREE.MeshBasicMaterial({ color: 0xef4444, toneMapped: false }));
+          taillight.position.set(hx, 1.45, 8.82);
+          car.add(taillight);
+        });
+      }
+
+      car.position.z = cIdx * 18.2;
+      rocketTrain.add(car);
+      trainCars.push(car);
+    }
+    subwayGroup.add(rocketTrain);
+    scene.add(subwayGroup);
+
+    // 3. Subway Circuit Simulation Machinery
+    const SUBWAY_LOOP_STOPS = [
+      { id: 'union', name: 'Union Station', x: 257.6, z: -140 },
+      { id: 'king', name: 'King Station', x: 477.6, z: -586 },
+      { id: 'queen', name: 'Queen Station', x: 402.6, z: -915 },
+      { id: 'osgoode', name: 'Osgoode Station', x: -317.4, z: -705 },
+      { id: 'standrew', name: 'St. Andrew Station', x: -132.4, z: -402 }
+    ];
+
+    const subwayTrainState = {
+      currentStopIdx: 0,
+      nextStopIdx: 1,
+      progress: 0,
+      speed: 24.0, // 24 m/s (86 km/h cruising speed)
+      isStopped: true,
+      stopTimer: 8.0,
+      doorsOpen: true,
+      x: SUBWAY_LOOP_STOPS[0].x,
+      y: SUBWAY_PLATFORM_Y + 0.1,
+      z: SUBWAY_LOOP_STOPS[0].z,
+      heading: 0
+    };
+    rocketTrain.position.set(subwayTrainState.x, subwayTrainState.y, subwayTrainState.z);
+
+    updateSubwayTrain = function(dt) {
+      if (subwayTrainState.isStopped) {
+        subwayTrainState.stopTimer -= dt;
+        subwayTrainState.doorsOpen = true;
+        if (subwayTrainState.stopTimer <= 0) {
+          subwayTrainState.isStopped = false;
+          subwayTrainState.doorsOpen = false;
+          subwayTrainState.progress = 0;
+          subwayTrainState.currentStopIdx = subwayTrainState.nextStopIdx;
+          subwayTrainState.nextStopIdx = (subwayTrainState.currentStopIdx + 1) % SUBWAY_LOOP_STOPS.length;
+        }
+        return;
+      }
+
+      const fromStop = SUBWAY_LOOP_STOPS[subwayTrainState.currentStopIdx];
+      const toStop = SUBWAY_LOOP_STOPS[subwayTrainState.nextStopIdx];
+      const totalDist = Math.hypot(toStop.x - fromStop.x, toStop.z - fromStop.z);
+      const stepProg = (subwayTrainState.speed * dt) / Math.max(1, totalDist);
+      subwayTrainState.progress += stepProg;
+
+      if (subwayTrainState.progress >= 1.0) {
+        subwayTrainState.progress = 1.0;
+        subwayTrainState.isStopped = true;
+        subwayTrainState.stopTimer = 10.0;
+        subwayTrainState.doorsOpen = true;
+        subwayTrainState.x = toStop.x;
+        subwayTrainState.z = toStop.z;
+        rocketTrain.position.set(toStop.x, subwayTrainState.y, toStop.z);
+        return;
+      }
+
+      const p = subwayTrainState.progress;
+      const curX = fromStop.x + (toStop.x - fromStop.x) * p;
+      const curZ = fromStop.z + (toStop.z - fromStop.z) * p;
+      const heading = Math.atan2(toStop.x - fromStop.x, toStop.z - fromStop.z);
+
+      subwayTrainState.x = curX;
+      subwayTrainState.z = curZ;
+      subwayTrainState.heading = heading;
+
+      rocketTrain.position.set(curX, subwayTrainState.y, curZ);
+      rocketTrain.rotation.y = heading + Math.PI;
+    };
+
     return {
       canMoveTo,
       hasLineOfSight,
@@ -13261,6 +13756,14 @@
       rogersCentreDome,
       berczyParkFountain: { x: 642.0, z: -428.0, r: 8.0 },
       stLawrenceMarket: { doorX: 840.0, z: -455.0, r: 8.0 },
+      // Underground TTC Line 1 Subway System
+      subway: {
+        stations: SUBWAY_STATIONS,
+        train: rocketTrain,
+        state: subwayTrainState,
+        platformY: SUBWAY_PLATFORM_Y,
+        isUnderground: (y) => y < -6.0
+      },
       // Centre Island & Toronto Island Ferries API
       isInsideCentreIsland,
       isInsideIslandLagoon,

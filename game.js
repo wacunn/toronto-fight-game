@@ -925,6 +925,29 @@ class EnhancedRetroAudio {
     } catch (err) { }
   }
 
+  playPrestoChime() {
+    if (!this.ctx || this.isMuted) return;
+    try {
+      const t = this.ctx.currentTime;
+      const osc1 = this.ctx.createOscillator();
+      const osc2 = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc1.type = 'sine';
+      osc2.type = 'sine';
+      osc1.frequency.setValueAtTime(1760, t);
+      osc2.frequency.setValueAtTime(2349, t + 0.08);
+      gain.gain.setValueAtTime(0.20, t);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.28);
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc1.start(t);
+      osc1.stop(t + 0.08);
+      osc2.start(t + 0.08);
+      osc2.stop(t + 0.28);
+    } catch (err) { }
+  }
+
   playSizzle() {
     if (!this.ctx || this.isMuted) return;
     try {
@@ -1132,6 +1155,8 @@ const state = {
   // Toronto Island Ferry & Centre Island State
   onFerry: false,
   onIsland: false,
+  onSubway: false,
+  isUnderground: false,
   skyShowdownActive: false,
   skyShowdownWave: 0,
   skyShowdownTotalWaves: 3,
@@ -3637,23 +3662,29 @@ function getFerryRouteWaypoints(fromId, toId) {
   const routesFromMainland = {
     centre: [
       { x: 726, z: 330 },
-      { x: 550, z: 530 },
-      { x: 360, z: 740 },
-      { x: 170, z: 950 },
+      { x: 726, z: 450 },  // Back straight south out of Jack Layton slip
+      { x: 690, z: 590 },  // Reach open harbour fairway south of all quays
+      { x: 460, z: 740 },
+      { x: 230, z: 940 },
+      { x: 0, z: 1080 },
       { x: 0, z: 1146 }
     ],
     hanlans: [
       { x: 726, z: 330 },
-      { x: 380, z: 490 },
-      { x: -40, z: 675 },
-      { x: -430, z: 865 },
+      { x: 726, z: 450 },  // Back straight south out of Jack Layton slip into open water
+      { x: 600, z: 585 },  // Open harbour fairway well clear of Harbour Square & mainland piers (z >= 580)
+      { x: 160, z: 690 },  // Deep mid-harbour transit sailing west across Inner Harbour
+      { x: -240, z: 810 },
+      { x: -560, z: 940 },
       { x: -720, z: 1036 }
     ],
     wards: [
       { x: 726, z: 330 },
-      { x: 840, z: 520 },
-      { x: 960, z: 725 },
-      { x: 1065, z: 930 },
+      { x: 726, z: 450 },  // Back straight south out of Jack Layton slip
+      { x: 760, z: 580 },  // Open harbour fairway
+      { x: 920, z: 730 },
+      { x: 1050, z: 910 },
+      { x: 1140, z: 1060 },
       { x: 1140, z: 1126 }
     ]
   };
@@ -3675,6 +3706,8 @@ function getFerryRouteWaypoints(fromId, toId) {
     { x: toDock.slipX, z: toDock.slipZ }
   ];
 }
+const getFerryRoute = getFerryRouteWaypoints;
+if (typeof window !== 'undefined') window.getFerryRoute = getFerryRouteWaypoints;
 
 function evalFerrySpline(prog, dir) {
   const p = Math.max(0, Math.min(1, prog));
@@ -4002,8 +4035,8 @@ function startPorterFlight(viewMode) {
   if (scene.fog) scene.fog.density = 0.00022; // crisp 6km aerial visibility across Greater Toronto!
 
   // Point camera out the left window (-X relative to plane, which is North toward the CN Tower & Downtown Skyline on takeoff!)
-  player.yaw = porterFlightController.viewMode === 'window' ? 0 : (porterFlightController.heading + Math.PI);
-  player.pitch = -0.12;
+  player.yaw = porterFlightController.viewMode === 'window' ? (porterFlightController.heading - Math.PI / 2) : (porterFlightController.heading + Math.PI);
+  player.pitch = -0.10;
   player.velocity.set(0, 0, 0);
   camera.rotation.order = 'YXZ';
   camera.rotation.y = player.yaw;
@@ -4011,7 +4044,7 @@ function startPorterFlight(viewMode) {
 
   if (audio && audio.playFerryHorn) audio.playFerryHorn();
   showAnnouncement(
-    '✈️ PORTER AIRLINES DASH 8-400 (Q400): CLEARED FOR TAKEOFF RUNWAY 08!\n[V] Cycle Window/Cockpit/Chase View • [C] Toggle Free-Pilot Stick • [E] Land at Billy Bishop',
+    '✈️ PORTER AIRLINES DASH 8-400 (Q400): CLEARED FOR TAKEOFF RUNWAY 08!\n[V] Cycle Window (Seat 6A) / Cockpit / Chase • [C] Toggle Free-Pilot Stick • [E] Land at Billy Bishop',
     5200
   );
 }
@@ -4022,11 +4055,13 @@ function cyclePorterFlightView() {
   const nextIdx = (modes.indexOf(porterFlightController.viewMode) + 1) % modes.length;
   porterFlightController.viewMode = modes[nextIdx];
   const labels = {
-    window: '🪟 CABIN WINDOW SEAT VIEW (OVER LEFT WING & TURBOPROP)',
-    cockpit: '👨‍✈️ FLIGHT DECK COCKPIT WINDSHIELD VIEW',
+    window: '🪟 CABIN WINDOW SEAT 6A (LOOKING OUT OVER LEFT WING & TURBOPROP)',
+    cockpit: '👨‍✈️ FLIGHT DECK COCKPIT (CAPTAIN SEAT LOOKING OUT WINDSHIELD)',
     chase: '🎥 EXTERNAL AERIAL CHASE CAMERA VIEW'
   };
-  if (porterFlightController.viewMode !== 'window') {
+  if (porterFlightController.viewMode === 'window') {
+    player.yaw = porterFlightController.heading - Math.PI / 2;
+  } else {
     player.yaw = porterFlightController.heading + Math.PI;
   }
   showAnnouncement(labels[porterFlightController.viewMode], 2600);
@@ -4119,14 +4154,33 @@ function updatePorterFlight(dt) {
     planeMesh.rotation.z = porterFlightController.roll;
   }
 
+  // Exact 3D local eye position relative to the aircraft coordinate frame
+  const eyeLocal = new THREE.Vector3();
   if (porterFlightController.viewMode === 'cockpit') {
-    player.pos.set(fx + sinH * 12.2, fy + 1.05, fz + cosH * 12.2);
+    // Flight deck captain's seat looking out the front windshield
+    eyeLocal.set(-0.52, 0.42, -13.20);
   } else if (porterFlightController.viewMode === 'chase') {
-    player.pos.set(fx - sinH * 34.0, fy + 9.5, fz - cosH * 34.0);
+    // Smooth third-person aerial chase perspective
+    eyeLocal.set(0, 5.8, 28.0);
   } else {
-    // Window seat just ahead of the left high wing & spinning 6-blade turboprop
-    player.pos.set(fx + sinH * 2.8 + leftX * 1.35, fy + 0.55, fz + cosH * 2.8 + leftZ * 1.35);
+    // Cabin Seat 6A window seat (inside fuselage wall at x = -1.08, window eye level at y = 0.38, z = -2.80)
+    eyeLocal.set(-1.08, 0.38, -2.80);
   }
+
+  if (planeMesh && planeMesh.rotation) {
+    if (typeof eyeLocal.applyEuler === 'function') {
+      eyeLocal.applyEuler(planeMesh.rotation);
+    } else {
+      const ry = planeMesh.rotation.y || 0;
+      const cosY = Math.cos(ry);
+      const sinY = Math.sin(ry);
+      const rx = eyeLocal.x * cosY + eyeLocal.z * sinY;
+      const rz = -eyeLocal.x * sinY + eyeLocal.z * cosY;
+      eyeLocal.x = rx;
+      eyeLocal.z = rz;
+    }
+  }
+  player.pos.set(fx + eyeLocal.x, fy + eyeLocal.y, fz + eyeLocal.z);
   player.velocity.set(0, 0, 0);
   if (scene.fog) scene.fog.density = 0.00022;
 }
@@ -4631,6 +4685,43 @@ function updateObservationDeck(dt) {
       setDeckPrompt('[E]', 'CLIMB 1808 LIGHTHOUSE SPIRAL STAIRCASE • MEET KEEPER RADELMÜLLER\'S GHOST');
       return;
     }
+
+    // TTC Line 1 Subway Street Entrances (Union, King, Queen, Osgoode, St. Andrew)
+    if (city && city.subway && city.subway.stations) {
+      for (const st of city.subway.stations) {
+        const dSub = Math.hypot(player.pos.x - st.streetX, player.pos.z - st.streetZ);
+        if (dSub < 6.5) {
+          activeDeckAction = 'enter_subway_' + st.id;
+          setDeckPrompt('[E]', 'ENTER TTC SUBWAY • LINE 1 (' + st.name.toUpperCase() + ')');
+          return;
+        }
+      }
+    }
+  }
+
+  // Underground Subway Platform & Train Interactions (y < -6.0m)
+  if (player.pos.y < -6.0 && city && city.subway && city.subway.stations) {
+    if (state.onSubway) {
+      activeDeckAction = 'disembark_subway_train';
+      const curStop = city.subway.stations[city.subway.state.currentStopIdx] || city.subway.stations[0];
+      setDeckPrompt('[E]', 'DISEMBARK TTC TORONTO ROCKET AT ' + curStop.name.toUpperCase());
+      return;
+    }
+    const tState = city.subway.state;
+    const dTrain = Math.hypot(player.pos.x - tState.x, player.pos.z - tState.z);
+    if (tState.isStopped && tState.doorsOpen && dTrain < 16.0) {
+      activeDeckAction = 'board_subway_train';
+      setDeckPrompt('[E]', 'BOARD TTC TORONTO ROCKET • LINE 1 SUBWAY TRAIN');
+      return;
+    }
+    for (const st of city.subway.stations) {
+      const dExit = Math.hypot(player.pos.x - st.x, player.pos.z - (st.z + 32));
+      if (dExit < 7.5) {
+        activeDeckAction = 'exit_subway_' + st.id;
+        setDeckPrompt('[E]', 'EXIT TO STREET LEVEL (' + st.name.toUpperCase() + ')');
+        return;
+      }
+    }
   }
 
   // Toronto Island Ferry Docks (Jack Layton Terminal, Centre, Hanlan's, Ward's & Billy Bishop Airport Ferry)
@@ -4873,6 +4964,48 @@ function handleDeckAction() {
     player.velocity.set(0, 0, 0);
     player.yaw = 0;
     showAnnouncement('🌲 BACK ON GIBRALTAR POINT • Returned to the island grounds beneath the 1808 limestone tower.', 3500);
+    return true;
+  }
+  // TTC Line 1 Subway System Interactions
+  if (typeof activeDeckAction === 'string' && activeDeckAction.startsWith('enter_subway_')) {
+    const stId = activeDeckAction.replace('enter_subway_', '');
+    const st = (city && city.subway && city.subway.stations) ? city.subway.stations.find(s => s.id === stId) : null;
+    if (st) {
+      if (audio && audio.playPrestoChime) audio.playPrestoChime();
+      else if (audio && audio.playPickup) audio.playPickup();
+      player.pos.set(st.x, city.subway.platformY + EYE_HEIGHT, st.z);
+      player.velocity.set(0, 0, 0);
+      player.yaw = 0;
+      player.pitch = 0;
+      state.isUnderground = true;
+      showAnnouncement(`🚇 ENTERED ${st.name.toUpperCase()} (TTC LINE 1) • PRESTO CARD TAPPED ($3.35 FARE)`, 4000);
+      return true;
+    }
+  }
+  if (typeof activeDeckAction === 'string' && activeDeckAction.startsWith('exit_subway_')) {
+    const stId = activeDeckAction.replace('exit_subway_', '');
+    const st = (city && city.subway && city.subway.stations) ? city.subway.stations.find(s => s.id === stId) : null;
+    if (st) {
+      player.pos.set(st.streetX, 1.7, st.streetZ);
+      player.velocity.set(0, 0, 0);
+      state.isUnderground = false;
+      showAnnouncement(`🏙️ RETURNED TO STREET LEVEL • ${st.name.toUpperCase()}`, 3200);
+      return true;
+    }
+  }
+  if (activeDeckAction === 'board_subway_train') {
+    state.onSubway = true;
+    showAnnouncement('🚇 BOARDED TTC TORONTO ROCKET SUBWAY TRAIN • STAND CLEAR OF THE CLOSING DOORS!', 3600);
+    return true;
+  }
+  if (activeDeckAction === 'disembark_subway_train') {
+    state.onSubway = false;
+    const curStop = (city && city.subway && city.subway.stations)
+      ? (city.subway.stations[city.subway.state.currentStopIdx] || city.subway.stations[0])
+      : { name: 'Station', x: 265, z: -140 };
+    player.pos.set(curStop.x, (city && city.subway) ? city.subway.platformY + EYE_HEIGHT : -14.0 + EYE_HEIGHT, curStop.z);
+    player.velocity.set(0, 0, 0);
+    showAnnouncement(`🚇 DISEMBARKED AT ${curStop.name.toUpperCase()} PLATFORM`, 3200);
     return true;
   }
   if (activeDeckAction === 'elevator') {
@@ -7273,9 +7406,14 @@ function updatePlayer(dt) {
     }
   }
 
-  if (state.inElevator || state.onFerry || state.onPlane || state.onStreetcar) {
+  if (state.inElevator || state.onFerry || state.onPlane || state.onStreetcar || state.onSubway) {
     if (state.onPlane) {
       camera.rotation.z += (porterFlightController.roll * 0.45 - camera.rotation.z) * 0.15;
+    }
+    if (state.onSubway && city && city.subway) {
+      const tState = city.subway.state;
+      player.pos.set(tState.x, city.subway.platformY + 1.25 + EYE_HEIGHT, tState.z);
+      player.velocity.set(0, 0, 0);
     }
     return;
   }

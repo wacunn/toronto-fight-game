@@ -2854,6 +2854,115 @@ CODE = r'''
           });
         }
 
+        // --- Interior Cabin Modeling (Seat 6A Passenger Window View) ---
+        const seatNavyCloth = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.85 });
+        const seatGreyTrim = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.6, metalness: 0.2 });
+        const cabinLiningMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.75, side: THREE.BackSide });
+
+        // Interior fuselage lining for passenger cabin & cockpit
+        const cabinLining = new THREE.Mesh(new THREE.CylinderGeometry(fuseR - 0.06, fuseR - 0.06, 16.0, 16, 1, true), cabinLiningMat);
+        cabinLining.rotation.x = Math.PI / 2;
+        cabinLining.position.set(0, 0, -4.0);
+        pl.add(cabinLining);
+
+        // Seat 5A in front of passenger (looking forward from Seat 6A)
+        const seat5Back = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.68, 0.10), seatNavyCloth);
+        seat5Back.position.set(-1.08, 0.24, -3.72);
+        seat5Back.rotation.x = -0.06;
+        pl.add(seat5Back);
+
+        const seat5Headrest = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.16, 0.12), seatNavyCloth);
+        seat5Headrest.position.set(-1.08, 0.62, -3.74);
+        pl.add(seat5Headrest);
+
+        const seat5Antimacassar = new THREE.Mesh(new THREE.BoxGeometry(0.33, 0.12, 0.04), porterWhiteMat);
+        seat5Antimacassar.position.set(-1.08, 0.63, -3.69);
+        pl.add(seat5Antimacassar);
+
+        // Folded tray table on the back of Seat 5A
+        const trayTable = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.24, 0.02), seatGreyTrim);
+        trayTable.position.set(-1.08, 0.10, -3.66);
+        pl.add(trayTable);
+
+        // Seat 6A armrest and seat base
+        const seat6Armrest = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.40), seatGreyTrim);
+        seat6Armrest.position.set(-0.76, 0.05, -2.80);
+        pl.add(seat6Armrest);
+
+        const seat6WallArmrest = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.40), seatGreyTrim);
+        seat6WallArmrest.position.set(-1.42, 0.05, -2.80);
+        pl.add(seat6WallArmrest);
+
+        // Molded Seat 6A interior window reveal & trim bevel
+        const winReveal = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.46, 0.36), porterWhiteMat);
+        winReveal.position.set(-fuseR + 0.04, 0.36, -2.80);
+        pl.add(winReveal);
+
+        // Overhead passenger service unit (reading light and air vent nozzle)
+        const psu = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.06, 0.25), porterWhiteMat);
+        psu.position.set(-1.12, 1.25, -2.80);
+        pl.add(psu);
+
+        // --- Interior Flight Deck Cockpit Modeling ---
+        const cockpitPanelMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.55, metalness: 0.35 });
+        const pfdScreenMat = new THREE.MeshBasicMaterial({ color: 0x0284c7, toneMapped: false });
+        const eicasScreenMat = new THREE.MeshBasicMaterial({ color: 0x10b981, toneMapped: false });
+
+        // Captain (left) and First Officer (right) high-back flight deck seats
+        [-0.52, 0.52].forEach(pilotX => {
+          const seatBack = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.72, 0.12), seatNavyCloth);
+          seatBack.position.set(pilotX, 0.15, -13.15);
+          pl.add(seatBack);
+          const seatHead = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.18, 0.12), seatNavyCloth);
+          seatHead.position.set(pilotX, 0.56, -13.15);
+          pl.add(seatHead);
+          const seatBase = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.14, 0.46), seatNavyCloth);
+          seatBase.position.set(pilotX, -0.15, -13.25);
+          pl.add(seatBase);
+        });
+
+        // Center throttle quadrant pedestal with dual thrust levers
+        const pedestal = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.45, 0.90), cockpitPanelMat);
+        pedestal.position.set(0, -0.05, -13.0);
+        pl.add(pedestal);
+
+        // Dual black thrust levers and propeller condition levers
+        [-0.06, 0.06].forEach(lx => {
+          const lever = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.14, 0.03), radomeMat);
+          lever.position.set(lx, 0.24, -13.1);
+          lever.rotation.x = -0.25;
+          pl.add(lever);
+        });
+
+        // Glareshield console
+        const glareshield = new THREE.Mesh(new THREE.BoxGeometry(1.58, 0.08, 0.42), cockpitPanelMat);
+        glareshield.position.set(0, 0.58, -13.72);
+        pl.add(glareshield);
+
+        // Main Electronic Flight Instrument System (EFIS) panel
+        const mainPanel = new THREE.Mesh(new THREE.BoxGeometry(1.54, 0.48, 0.06), cockpitPanelMat);
+        mainPanel.position.set(0, 0.34, -13.92);
+        pl.add(mainPanel);
+
+        // 5 Glowing glass cockpit displays (Captain PFD/ND, Center EICAS, FO ND/PFD)
+        [-0.56, -0.28, 0, 0.28, 0.56].forEach((sx, idx) => {
+          const scrMat = (idx === 2) ? eicasScreenMat : pfdScreenMat;
+          const screen = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.18, 0.02), scrMat);
+          screen.position.set(sx, 0.35, -13.88);
+          pl.add(screen);
+        });
+
+        // Dual W-shaped flight control yokes
+        [-0.52, 0.52].forEach(yx => {
+          const col = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.35, 8), seatGreyTrim);
+          col.position.set(yx, 0.12, -13.48);
+          col.rotation.x = -0.28;
+          pl.add(col);
+          const yoke = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.04, 0.05), radomeMat);
+          yoke.position.set(yx, 0.28, -13.42);
+          pl.add(yoke);
+        });
+
         const porterBrandL = makeSign(['porter', 'DE HAVILLAND Q400 • C-GLQP'], 7.2, 0.95, { bg: '#f8fafc', fg: '#0f2557', borderColor: '#f8fafc', subFg: '#64748b', titleSize: 56, subSize: 22 });
         porterBrandL.rotation.y = -Math.PI / 2;
         porterBrandL.position.set(-fuseR - 0.04, 0.85, -3.5);
