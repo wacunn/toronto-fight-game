@@ -1525,8 +1525,9 @@
     const RCELL = 24;
     const roadGrid = new Map();
     function addRoadSeg(ax, az, bx, bz, hw, id) {
-      const x0 = Math.floor((Math.min(ax, bx) - hw) / RCELL), x1 = Math.floor((Math.max(ax, bx) + hw) / RCELL);
-      const z0 = Math.floor((Math.min(az, bz) - hw) / RCELL), z1 = Math.floor((Math.max(az, bz) + hw) / RCELL);
+      const pad = hw + 5;
+      const x0 = Math.floor((Math.min(ax, bx) - pad) / RCELL), x1 = Math.floor((Math.max(ax, bx) + pad) / RCELL);
+      const z0 = Math.floor((Math.min(az, bz) - pad) / RCELL), z1 = Math.floor((Math.max(az, bz) + pad) / RCELL);
       for (let cx = x0; cx <= x1; cx++) for (let cz = z0; cz <= z1; cz++) {
         const k = cellKey(cx, cz);
         let arr = roadGrid.get(k);
@@ -1543,6 +1544,20 @@
         if (lim > 0 && distToSegSq(x, z, sg.ax, sg.az, sg.bx, sg.bz) < lim * lim) return true;
       }
       return false;
+    }
+    function snapOffRoad(x, z, pad, radius) {
+      const m = -(pad !== undefined ? pad : 1.0);
+      const r = radius !== undefined ? radius : 0.6;
+      if (!onRoad(x, z, m, -1) && canMoveTo(x, z, r)) return [x, z];
+      for (let dist = 1.5; dist <= 18; dist += 1.5) {
+        for (let a = 0; a < 16; a++) {
+          const ang = (a / 16) * Math.PI * 2;
+          const nx = x + Math.cos(ang) * dist;
+          const nz = z + Math.sin(ang) * dist;
+          if (!onRoad(nx, nz, m, -1) && canMoveTo(nx, nz, r)) return [nx, nz];
+        }
+      }
+      return [x, z];
     }
     function offsetLine(pts, d) {
       const out = [];
@@ -1782,13 +1797,14 @@
     const concreteMat = new THREE.MeshLambertMaterial({ color: 0x55575c, side: THREE.DoubleSide });
     if (deckGB.pos.length) scene.add(new THREE.Mesh(deckGB.build(), concreteMat));
 
-    // Gardiner pillars (instanced)
-    if (pillarSpots.length) {
+    // Gardiner pillars (instanced, filtered so pillars never stand inside ground road lanes)
+    const validPillars = pillarSpots.filter(p => !onRoad(p.x, p.z, -1.5, -1) && !isInsideTrench(p.x, p.z));
+    if (validPillars.length) {
       const pGeo = new THREE.CylinderGeometry(0.9, 1.1, 1, 10);
       pGeo.translate(0, 0.5, 0);
-      const pillars = new THREE.InstancedMesh(pGeo, concreteMat, pillarSpots.length);
+      const pillars = new THREE.InstancedMesh(pGeo, concreteMat, validPillars.length);
       const m = new THREE.Matrix4();
-      pillarSpots.forEach((p, i) => {
+      validPillars.forEach((p, i) => {
         m.makeScale(1, p.h, 1);
         m.setPosition(p.x, 0, p.z);
         pillars.setMatrixAt(i, m);
@@ -8809,140 +8825,6 @@
       }
     }
 
-    // ---------- Street lamps (instanced) + pooled real lights ----------
-    const lamps = lampSpots.filter(l => canMoveTo(l.x, l.z, 0.3)).slice(0, 700);
-    if (lamps.length) {
-      const poleGeo = new THREE.CylinderGeometry(0.09, 0.14, 7, 6);
-      poleGeo.translate(0, 3.5, 0);
-      const headGeo = new THREE.BoxGeometry(0.5, 0.18, 1.1);
-      const poles = new THREE.InstancedMesh(poleGeo, new THREE.MeshLambertMaterial({ color: 0x2a2d33 }), lamps.length);
-      const heads = new THREE.InstancedMesh(headGeo, new THREE.MeshBasicMaterial({ color: 0xffe2b0 }), lamps.length);
-      const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(1, 1, 1), up = new THREE.Vector3(0, 1, 0);
-      lamps.forEach((l, i) => {
-        m.makeTranslation(l.x, 0, l.z);
-        poles.setMatrixAt(i, m);
-        q.setFromAxisAngle(up, l.ang);
-        const hx = l.x + Math.sin(l.ang) * 0.6, hz = l.z + Math.cos(l.ang) * 0.6;
-        m.compose(new THREE.Vector3(hx, 7, hz), q, s);
-        heads.setMatrixAt(i, m);
-        addCircle(l.x, l.z, 0.25);
-      });
-      poles.castShadow = true;
-      scene.add(poles);
-      scene.add(heads);
-
-      // Glow halos around every lamp head (bloom makes these sing)
-      const haloPos = [];
-      lamps.forEach(l => haloPos.push(l.x + Math.sin(l.ang) * 0.6, 6.85, l.z + Math.cos(l.ang) * 0.6));
-      const haloGeo = new THREE.BufferGeometry();
-      haloGeo.setAttribute('position', new THREE.Float32BufferAttribute(haloPos, 3));
-      scene.add(new THREE.Points(haloGeo, new THREE.PointsMaterial({
-        map: makeGlowTexture('rgba(255,240,210,1)', 'rgba(255,170,90,0.22)'), size: 3.4, sizeAttenuation: true,
-        transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
-      })));
-
-      // Pools of warm light on the ground under EVERY lamp. Only ~8 real lights
-      // exist, so these fake the rest of the street at near-zero cost.
-      const poolGeo = new THREE.PlaneGeometry(1, 1);
-      poolGeo.rotateX(-Math.PI / 2);
-      const pools = new THREE.InstancedMesh(poolGeo, new THREE.MeshBasicMaterial({
-        map: makeGlowTexture('rgba(255,190,120,0.5)', 'rgba(255,140,60,0.16)'), transparent: true, depthWrite: false,
-        blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4
-      }), lamps.length);
-      const pq = new THREE.Quaternion(), ps = new THREE.Vector3(16, 1, 16), pv = new THREE.Vector3();
-      lamps.forEach((l, i) => {
-        m.compose(pv.set(l.x + Math.sin(l.ang) * 1.6, 0.1, l.z + Math.cos(l.ang) * 1.6), pq, ps);
-        pools.setMatrixAt(i, m);
-      });
-      scene.add(pools);
-    }
-
-    // Pooled real point lights: re-assigned to the nearest lamps, faded in/out
-    // instead of teleporting (no more lighting "pops" as you walk)
-    const LAMP_INTENSITY = 1.9;
-    const lightPool = [];
-    for (let i = 0; i < 8; i++) {
-      const pl = new THREE.PointLight(0xffb066, 0, 28, 1.6);
-      pl.position.set(0, -100, 0);
-      scene.add(pl);
-      lightPool.push({ light: pl, lamp: -1, next: -1, level: 0 });
-    }
-
-    // ---------- Street trees (instanced, with per-tree colour + size variation) ----------
-    {
-      const trees = treeSpots.filter(t => canMoveTo(t.x, t.z, 1.4) && !onRoad(t.x, t.z, -0.8, -1)).slice(0, 900);
-      if (trees.length) {
-        const trunkGeo = new THREE.CylinderGeometry(0.11, 0.17, 3.2, 7);
-        trunkGeo.translate(0, 1.6, 0);
-        // lumpy canopy: three merged, noise-displaced icospheres with smooth normals
-        const blobs = [[0, 4.6, 0, 1.9], [0.9, 4.1, 0.4, 1.4], [-0.8, 4.3, -0.5, 1.5]];
-        const cPos = [], cNrm = [];
-        blobs.forEach(([bx, by, bz, br], bi2) => {
-          const ico = new THREE.IcosahedronGeometry(br, 2);
-          const pa = ico.attributes.position;
-          for (let i = 0; i < pa.count; i++) {
-            const x = pa.getX(i), y = pa.getY(i), z = pa.getZ(i);
-            const l = Math.hypot(x, y, z) || 1;
-            const k = 1 + (hash(Math.round(x * 50) * 7 + Math.round(y * 50) * 13 + Math.round(z * 50) * 17 + bi2) - 0.5) * 0.35;
-            cPos.push(bx + x * k, by + y * k * 0.85, bz + z * k);
-            cNrm.push(x / l, y / l, z / l);
-          }
-        });
-        const canopyGeo = new THREE.BufferGeometry();
-        canopyGeo.setAttribute('position', new THREE.Float32BufferAttribute(cPos, 3));
-        canopyGeo.setAttribute('normal', new THREE.Float32BufferAttribute(cNrm, 3));
-        const trunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshStandardMaterial({ color: 0x3b2c22, roughness: 0.95, envMapIntensity: 0.2 }), trees.length);
-        const canopies = new THREE.InstancedMesh(canopyGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, envMapIntensity: 0.2 }), trees.length);
-        const m = new THREE.Matrix4();
-        const tq = new THREE.Quaternion(), ts = new THREE.Vector3(), tv = new THREE.Vector3(), up2 = new THREE.Vector3(0, 1, 0), tc = new THREE.Color();
-        trees.forEach((t, i) => {
-          const sc = 0.8 + t.s * 0.5;
-          tq.setFromAxisAngle(up2, t.s * 6.28);
-          m.compose(tv.set(t.x, 0, t.z), tq, ts.set(sc, sc, sc));
-          trunks.setMatrixAt(i, m);
-          canopies.setMatrixAt(i, m);
-          tc.setHSL(0.24 + t.s * 0.08, 0.35 + t.s * 0.2, 0.16 + hash(t.x) * 0.08);
-          canopies.setColorAt(i, tc);
-          addCircle(t.x, t.z, 0.3);
-        });
-        trunks.castShadow = canopies.castShadow = true;
-        canopies.receiveShadow = true;
-        scene.add(trunks);
-        scene.add(canopies);
-      }
-    }
-
-    // ---------- Street signs ----------
-    const usedNames = {};
-    const signs = [];
-    signCandidates.forEach(c => {
-      if (signs.length > 36) return;
-      const prev = usedNames[c.name] || [];
-      if (prev.some(p => Math.hypot(p.x - c.x, p.z - c.z) < 150)) return;
-      if (!canMoveTo(c.x, c.z, 0.4)) return;
-      prev.push(c);
-      usedNames[c.name] = prev;
-      signs.push(c);
-    });
-    const signPoleMat = new THREE.MeshLambertMaterial({ color: 0x3a3d44 });
-    signs.forEach(c => {
-      const g = new THREE.Group();
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 3.4, 6), signPoleMat);
-      pole.position.y = 1.7;
-      g.add(pole);
-      const label = c.name.toUpperCase().replace(' STREET', ' ST').replace(' AVENUE', ' AVE').replace(' BOULEVARD', ' BLVD').replace(' EXPRESSWAY', ' EXPY');
-      const plate = new THREE.Mesh(
-        new THREE.PlaneGeometry(2.6, 0.62),
-        new THREE.MeshBasicMaterial({ map: makeLabelTexture(['TORONTO', label], { size: 54 }), side: THREE.DoubleSide })
-      );
-      plate.position.y = 3.2;
-      g.add(plate);
-      g.position.set(c.x, 0, c.z);
-      g.rotation.y = c.ang;
-      scene.add(g);
-      addCircle(c.x, c.z, 0.2);
-    });
-
     // ---------- 1. Streetcar Tracks along King St, Queen St & Spadina Ave (1 merged GeoBuilder draw call) ----------
     const streetcarRoads = groundRoads.filter(r => {
       const n = (MAP.roads[r.id] || {}).n || '';
@@ -9143,10 +9025,20 @@
             }));
             return best ? best.s : null;
           };
-          const crossings = [['King Street West'], ['Front Street West'], ['Bremner Boulevard', 'Fort York Boulevard'], ['Lake Shore Boulevard West']]
-            .map(crossAt).filter(s2 => s2 !== null && s2 < sJunction - 40);
+          const crossings = [
+            ['Queen Street West'],
+            ['Richmond Street West'],
+            ['Adelaide Street West'],
+            ['King Street West'],
+            ['Wellington Street West', 'Clarence Square'],
+            ['Front Street West'],
+            ['Bremner Boulevard', 'Fort York Boulevard'],
+            ['Lake Shore Boulevard West']
+          ].map(crossAt).filter(s2 => s2 !== null && s2 < sJunction - 40);
           const stops = [];
-          crossings.forEach(s2 => stops.push({ d: s2 - 26, dir: 1 }, { d: s2 + 26, dir: -1 }));   // near-side platforms
+          [['Queen Street West'], ['King Street West'], ['Front Street West'], ['Bremner Boulevard', 'Fort York Boulevard'], ['Lake Shore Boulevard West']]
+            .map(crossAt).filter(s2 => s2 !== null && s2 < sJunction - 40)
+            .forEach(s2 => stops.push({ d: s2 - 26, dir: 1 }, { d: s2 + 26, dir: -1 }));   // near-side platforms
           for (let d = sJunction + 120; d < cum[cum.length - 1] - 60; d += 240) stops.push({ d, dir: 0 });  // Queens Quay stops
           const route510 = {
             id: '510', name: '510 Spadina', pts, limit: 11, cars: 3,
@@ -9202,6 +9094,20 @@
       });
       scene.add(new THREE.Mesh(tGB.build(), new THREE.MeshStandardMaterial({ color: 0xa8b0ba, roughness: 0.3, metalness: 0.9 })));
 
+      // Check if a point on the Spadina median crosses any non-Spadina street
+      const spadinaRoadIds = new Set();
+      MAP.roads.forEach((r, ri) => { if ((r.n || '') === 'Spadina Avenue') spadinaRoadIds.add(ri); });
+      const onCrossStreet = (x, z, pad) => {
+        const arr = roadGrid.get(cellKey(Math.floor(x / RCELL), Math.floor(z / RCELL)));
+        if (!arr) return false;
+        for (const sg of arr) {
+          if (spadinaRoadIds.has(sg.id) || sg.id >= 9990) continue;
+          const lim = sg.hw + (pad || 1.2);
+          if (distToSegSq(x, z, sg.ax, sg.az, sg.bx, sg.bz) < lim * lim) return true;
+        }
+        return false;
+      };
+
       const nearCross = s2 => crossings.some(c3 => Math.abs(s2 - c3) < 16);
       const nearStop = (s2, side) => route.stops.some(st => st.dir === side && Math.abs(s2 - st.d) < 17);
       // bollards both edges, every 2.5 m, gaps at intersections and platforms
@@ -9209,9 +9115,13 @@
       for (let s2 = 2; s2 < sJunction - 2; s2 += 2.5) {
         if (nearCross(s2)) continue;
         const p = at(s2);
+        if (onCrossStreet(p.x, p.z, 2.0)) continue;
         [-1, 1].forEach(side => {
           if (nearStop(s2, side)) return;   // side +1 = right of southbound
-          bol.push([p.x - p.tz * side * (ROW_HW - 0.25), p.z + p.tx * side * (ROW_HW - 0.25)]);
+          const bx = p.x - p.tz * side * (ROW_HW - 0.25);
+          const bz = p.z + p.tx * side * (ROW_HW - 0.25);
+          if (onCrossStreet(bx, bz, 1.5)) return;
+          bol.push([bx, bz]);
         });
       }
       const m4 = new THREE.Matrix4();
@@ -9228,6 +9138,7 @@
       for (let s2 = 10; s2 < sJunction - 5; s2 += 34) {
         if (nearCross(s2)) continue;
         const p = at(s2);
+        if (onCrossStreet(p.x, p.z, 2.5)) continue;
         const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.17, 6.4, 10), poleMat);
         pole.position.set(p.x, 3.3, p.z); scene.add(pole);
         const arm = new THREE.Mesh(new THREE.BoxGeometry(TRACK * 2 + 0.6, 0.1, 0.1), poleMat);
@@ -9269,7 +9180,156 @@
         g.rotation.y = Math.atan2(p.tx * side, p.tz * side);
         scene.add(g);
       });
+
+      // Register Spadina right-of-way and northern extension carriageways in roadGrid so no street lamps, trees or signs spawn inside Spadina!
+      for (let i = 0; i < spPts.length - 1; i++) {
+        addRoadSeg(spPts[i][0], spPts[i][1], spPts[i + 1][0], spPts[i + 1][1], ROW_HW + 0.6, 9991);
+      }
+      [-11.5, 11.5].forEach(o => {
+        const l = offsetLine(ext, o);
+        for (let i = 0; i < l.length - 1; i++) {
+          addRoadSeg(l[i][0], l[i][1], l[i + 1][0], l[i + 1][1], 6.5, 9992);
+        }
+      });
     }
+
+    // ---------- Street lamps (instanced, strictly outside all roads & intersections) + pooled real lights ----------
+    const lamps = lampSpots.filter(l =>
+      canMoveTo(l.x, l.z, 0.5) &&
+      !onRoad(l.x, l.z, -0.9, -1) &&
+      !onRoad(l.x + Math.sin(l.ang) * 0.6, l.z + Math.cos(l.ang) * 0.6, -0.3, -1)
+    ).slice(0, 700);
+    if (lamps.length) {
+      const poleGeo = new THREE.CylinderGeometry(0.09, 0.14, 7, 6);
+      poleGeo.translate(0, 3.5, 0);
+      const headGeo = new THREE.BoxGeometry(0.5, 0.18, 1.1);
+      const poles = new THREE.InstancedMesh(poleGeo, new THREE.MeshLambertMaterial({ color: 0x2a2d33 }), lamps.length);
+      const heads = new THREE.InstancedMesh(headGeo, new THREE.MeshBasicMaterial({ color: 0xffe2b0 }), lamps.length);
+      const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(1, 1, 1), up = new THREE.Vector3(0, 1, 0);
+      lamps.forEach((l, i) => {
+        m.makeTranslation(l.x, 0, l.z);
+        poles.setMatrixAt(i, m);
+        q.setFromAxisAngle(up, l.ang);
+        const hx = l.x + Math.sin(l.ang) * 0.6, hz = l.z + Math.cos(l.ang) * 0.6;
+        m.compose(new THREE.Vector3(hx, 7, hz), q, s);
+        heads.setMatrixAt(i, m);
+        addCircle(l.x, l.z, 0.25);
+      });
+      poles.castShadow = true;
+      scene.add(poles);
+      scene.add(heads);
+
+      // Glow halos around every lamp head (bloom makes these sing)
+      const haloPos = [];
+      lamps.forEach(l => haloPos.push(l.x + Math.sin(l.ang) * 0.6, 6.85, l.z + Math.cos(l.ang) * 0.6));
+      const haloGeo = new THREE.BufferGeometry();
+      haloGeo.setAttribute('position', new THREE.Float32BufferAttribute(haloPos, 3));
+      scene.add(new THREE.Points(haloGeo, new THREE.PointsMaterial({
+        map: makeGlowTexture('rgba(255,240,210,1)', 'rgba(255,170,90,0.22)'), size: 3.4, sizeAttenuation: true,
+        transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
+      })));
+
+      // Pools of warm light on the ground under EVERY lamp. Only ~8 real lights
+      // exist, so these fake the rest of the street at near-zero cost.
+      const poolGeo = new THREE.PlaneGeometry(1, 1);
+      poolGeo.rotateX(-Math.PI / 2);
+      const pools = new THREE.InstancedMesh(poolGeo, new THREE.MeshBasicMaterial({
+        map: makeGlowTexture('rgba(255,190,120,0.5)', 'rgba(255,140,60,0.16)'), transparent: true, depthWrite: false,
+        blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4
+      }), lamps.length);
+      const pq = new THREE.Quaternion(), ps = new THREE.Vector3(16, 1, 16), pv = new THREE.Vector3();
+      lamps.forEach((l, i) => {
+        m.compose(pv.set(l.x + Math.sin(l.ang) * 1.6, 0.1, l.z + Math.cos(l.ang) * 1.6), pq, ps);
+        pools.setMatrixAt(i, m);
+      });
+      scene.add(pools);
+    }
+
+    // Pooled real point lights: re-assigned to the nearest lamps, faded in/out
+    // instead of teleporting (no more lighting "pops" as you walk)
+    const LAMP_INTENSITY = 1.9;
+    const lightPool = [];
+    for (let i = 0; i < 8; i++) {
+      const pl = new THREE.PointLight(0xffb066, 0, 28, 1.6);
+      pl.position.set(0, -100, 0);
+      scene.add(pl);
+      lightPool.push({ light: pl, lamp: -1, next: -1, level: 0 });
+    }
+
+    // ---------- Street trees (instanced, with per-tree colour + size variation) ----------
+    const trees = treeSpots.filter(t => canMoveTo(t.x, t.z, 1.4) && !onRoad(t.x, t.z, -1.2, -1)).slice(0, 900);
+    {
+      if (trees.length) {
+        const trunkGeo = new THREE.CylinderGeometry(0.11, 0.17, 3.2, 7);
+        trunkGeo.translate(0, 1.6, 0);
+        // lumpy canopy: three merged, noise-displaced icospheres with smooth normals
+        const blobs = [[0, 4.6, 0, 1.9], [0.9, 4.1, 0.4, 1.4], [-0.8, 4.3, -0.5, 1.5]];
+        const cPos = [], cNrm = [];
+        blobs.forEach(([bx, by, bz, br], bi2) => {
+          const ico = new THREE.IcosahedronGeometry(br, 2);
+          const pa = ico.attributes.position;
+          for (let i = 0; i < pa.count; i++) {
+            const x = pa.getX(i), y = pa.getY(i), z = pa.getZ(i);
+            const l = Math.hypot(x, y, z) || 1;
+            const k = 1 + (hash(Math.round(x * 50) * 7 + Math.round(y * 50) * 13 + Math.round(z * 50) * 17 + bi2) - 0.5) * 0.35;
+            cPos.push(bx + x * k, by + y * k * 0.85, bz + z * k);
+            cNrm.push(x / l, y / l, z / l);
+          }
+        });
+        const canopyGeo = new THREE.BufferGeometry();
+        canopyGeo.setAttribute('position', new THREE.Float32BufferAttribute(cPos, 3));
+        canopyGeo.setAttribute('normal', new THREE.Float32BufferAttribute(cNrm, 3));
+        const trunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshStandardMaterial({ color: 0x3b2c22, roughness: 0.95, envMapIntensity: 0.2 }), trees.length);
+        const canopies = new THREE.InstancedMesh(canopyGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, envMapIntensity: 0.2 }), trees.length);
+        const m = new THREE.Matrix4();
+        const tq = new THREE.Quaternion(), ts = new THREE.Vector3(), tv = new THREE.Vector3(), up2 = new THREE.Vector3(0, 1, 0), tc = new THREE.Color();
+        trees.forEach((t, i) => {
+          const sc = 0.8 + t.s * 0.5;
+          tq.setFromAxisAngle(up2, t.s * 6.28);
+          m.compose(tv.set(t.x, 0, t.z), tq, ts.set(sc, sc, sc));
+          trunks.setMatrixAt(i, m);
+          canopies.setMatrixAt(i, m);
+          tc.setHSL(0.24 + t.s * 0.08, 0.35 + t.s * 0.2, 0.16 + hash(t.x) * 0.08);
+          canopies.setColorAt(i, tc);
+          addCircle(t.x, t.z, 0.3);
+        });
+        trunks.castShadow = canopies.castShadow = true;
+        canopies.receiveShadow = true;
+        scene.add(trunks);
+        scene.add(canopies);
+      }
+    }
+
+    // ---------- Street signs (strictly outside all roads & intersections) ----------
+    const usedNames = {};
+    const signs = [];
+    signCandidates.forEach(c => {
+      if (signs.length > 36) return;
+      const prev = usedNames[c.name] || [];
+      if (prev.some(p => Math.hypot(p.x - c.x, p.z - c.z) < 150)) return;
+      if (!canMoveTo(c.x, c.z, 0.5) || onRoad(c.x, c.z, -1.0, -1)) return;
+      prev.push(c);
+      usedNames[c.name] = prev;
+      signs.push(c);
+    });
+    const signPoleMat = new THREE.MeshLambertMaterial({ color: 0x3a3d44 });
+    signs.forEach(c => {
+      const g = new THREE.Group();
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 3.4, 6), signPoleMat);
+      pole.position.y = 1.7;
+      g.add(pole);
+      const label = c.name.toUpperCase().replace(' STREET', ' ST').replace(' AVENUE', ' AVE').replace(' BOULEVARD', ' BLVD').replace(' EXPRESSWAY', ' EXPY');
+      const plate = new THREE.Mesh(
+        new THREE.PlaneGeometry(2.6, 0.62),
+        new THREE.MeshBasicMaterial({ map: makeLabelTexture(['TORONTO', label], { size: 54 }), side: THREE.DoubleSide })
+      );
+      plate.position.y = 3.2;
+      g.add(plate);
+      g.position.set(c.x, 0, c.z);
+      g.rotation.y = c.ang;
+      scene.add(g);
+      addCircle(c.x, c.z, 0.2);
+    });
 
     // 28 m, 2.54 m wide, 3.84 m high, five articulated sections (A-B-C-D-E). A, C and E sit on
     // skirted bogies; B and D are suspended between them. Single-ended: driver's cab at the
@@ -9767,7 +9827,8 @@
       [110, -240, 1.9], [-160, -80, 0.6], [-380, -20, 1.5], [680, -560, 0.2],
       [-520, -230, 2.4], [180, 120, 1.1]
     ];
-    greenPSpots.forEach(([gx, gz, gang]) => {
+    greenPSpots.forEach(([rawX, rawZ, gang]) => {
+      const [gx, gz] = snapOffRoad(rawX, rawZ, 1.2, 0.5);
       const g = new THREE.Group();
       const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 3.4, 8), new THREE.MeshLambertMaterial({ color: 0x1f2937 }));
       post.position.y = 1.7; g.add(post);
@@ -9787,7 +9848,8 @@
     const dockWheelGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.06, 12);
     dockWheelGeo.rotateZ(Math.PI / 2);
 
-    function buildBikeShareDock(x, z, rotY) {
+    function buildBikeShareDock(rawX, rawZ, rotY) {
+      const [x, z] = snapOffRoad(rawX, rawZ, 2.0, 1.2);
       const group = new THREE.Group();
 
       // Ground dock station plate
@@ -9822,7 +9884,6 @@
 
       // Rotate oriented bounding box [-0.9, -5.0] to [0.9, 5.0] by rotY
       const cosD = Math.cos(rotY), sinD = Math.sin(rotY);
-      const rotDL = (lx, lz) => [x + lx * cosD + lz * sinD, z - lx * sinR ? (z - lx * sinD + lz * cosD) : (z - lx * sinD + lz * cosD)];
       const pts = [
         [x + (-0.9) * cosD + (-5.0) * sinD, z - (-0.9) * sinD + (-5.0) * cosD],
         [x + (0.9) * cosD + (-5.0) * sinD, z - (0.9) * sinD + (-5.0) * cosD],
@@ -9837,7 +9898,8 @@
     buildBikeShareDock(715, -485, 0.4); // Berczy Park
 
     // ---------- 6. PATH Underground Entrance Pavilions (Iconic 4-colour sign) ----------
-    function buildPathEntrance(x, z, rotY) {
+    function buildPathEntrance(rawX, rawZ, rotY) {
+      const [x, z] = snapOffRoad(rawX, rawZ, 2.5, 2.2);
       const pGroup = new THREE.Group();
       const frameMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.5, metalness: 0.6 });
       const glassMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.45, roughness: 0.1, metalness: 0.5 });
@@ -9903,7 +9965,8 @@
     ];
     const binBlue = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.5 });
     const binGrey = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.6 });
-    binSpots.forEach(([bx, bz]) => {
+    binSpots.forEach(([rawX, rawZ]) => {
+      const [bx, bz] = snapOffRoad(rawX, rawZ, 1.2, 0.6);
       const g = new THREE.Group();
       const bSide = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.1, 0.5), binBlue);
       bSide.position.set(-0.36, 0.55, 0); g.add(bSide);
@@ -9921,7 +9984,8 @@
       [-50, -420], [-48, -418], [-46, -416],
       [120, -110], [122, -108]
     ];
-    pylonSpots.forEach(([px, pz]) => {
+    pylonSpots.forEach(([rawX, rawZ]) => {
+      const [px, pz] = snapOffRoad(rawX, rawZ, 0.8, 0.4);
       const pGroup = new THREE.Group();
       const base = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.05, 0.4), pylonBlack);
       base.position.y = 0.025; pGroup.add(base);
@@ -12571,6 +12635,12 @@
       isInsidePeaceZone,
       isInsideTrench,
       isOnBridge,
+      isOnRoad: (x, z, pad = 0.8) => onRoad(x, z, -pad, -1),
+      streetFurniture: {
+        lamps,
+        trees,
+        signs
+      },
       pushOutOfTrench,
       trenchY: TRENCH_Y,
       getUsrcZ,
@@ -12583,12 +12653,12 @@
       islandFerry: {
         ferryMesh: cruisingFerry,
         airportFerryMesh: airportFerryMesh,
-        mainlandDock: { x: 726, y: 0.5, z: 330, yaw: 0.05, boardX: 712, boardZ: 318 },
-        islandDock: { x: 0, y: 0.55, z: 1175, yaw: 0, boardX: 0, boardZ: 1200 },
-        hanlansDock: { x: -720, y: 0.55, z: 1062, yaw: 0, boardX: -720, boardZ: 1090 },
-        wardsDock: { x: 1140, y: 0.55, z: 1148, yaw: 0, boardX: 1140, boardZ: 1180 },
+        mainlandDock: { x: 726, y: 0.5, z: 330, yaw: 0, boardX: 712, boardZ: 318 },
+        islandDock: { x: 0, y: 0.55, z: 1146, yaw: Math.PI, boardX: 0, boardZ: 1192 },
+        hanlansDock: { x: -720, y: 0.55, z: 1036, yaw: Math.PI, boardX: -720, boardZ: 1090 },
+        wardsDock: { x: 1140, y: 0.55, z: 1126, yaw: Math.PI, boardX: 1140, boardZ: 1180 },
         airportMainlandDock: { x: -1060, y: 0.55, z: 720, yaw: 0, boardX: -1060, boardZ: 702 },
-        airportIslandDock: { x: -1060, y: 0.55, z: 842, yaw: 0, boardX: -1060, boardZ: 870 }
+        airportIslandDock: { x: -1060, y: 0.55, z: 842, yaw: Math.PI, boardX: -1060, boardZ: 870 }
       },
       islandLocations,
       centreIslandLandmarks: {

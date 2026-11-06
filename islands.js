@@ -52,6 +52,7 @@
     const GROUND_Y = 0.55; // walking height on the islands
     const WATER_Y = -0.65; // matches city.js Toronto Inner Harbour water level
     let renderedOsmTowers = 0;
+    const flowerBeds = [];
 
     // ------------------------------------------------------------------------
     // Deterministic noise for procedural terrain and vegetation
@@ -911,9 +912,9 @@
           const nx = -(b[1] - a[1]) / L, nz = (b[0] - a[0]) / L;
           let t = carry;
           while (t < L) {
-            const x = a[0] + (b[0] - a[0]) * t / L + nx * side * (p.w / 2 + 0.8);
-            const z = a[1] + (b[1] - a[1]) * t / L + nz * side * (p.w / 2 + 0.8);
-            if (landField(x, z) > 2 && !getIslandBridgeAt(x, z, 2)) lamps.push([x, z]);
+            const x = a[0] + (b[0] - a[0]) * t / L + nx * side * (p.w / 2 + 1.2);
+            const z = a[1] + (b[1] - a[1]) * t / L + nz * side * (p.w / 2 + 1.2);
+            if (landField(x, z) > 2 && !getIslandBridgeAt(x, z, 2) && !nearPath(x, z, 0.8)) lamps.push([x, z]);
             side = -side;
             t += 34;
           }
@@ -1008,21 +1009,21 @@
     {
       const conGrp = new THREE.Group();
 
-      // --- 1. PIZZA PIZZA KIOSK at (12, Z(48)) ---
+      // --- 1. PIZZA PIZZA KIOSK at (7, Z(48)) ---
       const ppBuilding = new THREE.Mesh(
         new THREE.BoxGeometry(8.5, 3.8, 6.0),
         new THREE.MeshStandardMaterial({ color: 0x9a3412, roughness: 0.6 })
       );
-      ppBuilding.position.set(12, 1.9, Z(48));
+      ppBuilding.position.set(7, 1.9, Z(48));
       conGrp.add(ppBuilding);
-      rectOb(7.5, 16.5, Z(45), Z(51)); // solid interior
+      rectOb(2.5, 11.5, Z(45), Z(51)); // solid interior
 
       // Service counter & canopy awning
       const ppAwning = new THREE.Mesh(
         new THREE.BoxGeometry(9.0, 0.4, 2.2),
         new THREE.MeshStandardMaterial({ color: 0xea580c, roughness: 0.4 })
       );
-      ppAwning.position.set(12, 3.4, Z(44.8));
+      ppAwning.position.set(7, 3.4, Z(44.8));
       conGrp.add(ppAwning);
 
       const ppSign = makeSign(
@@ -1030,37 +1031,37 @@
         8.2, 1.8,
         { bg: '#ea580c', fg: '#ffffff', borderColor: '#facc15' }
       );
-      ppSign.position.set(12, 4.4, Z(44.8));
+      ppSign.position.set(7, 4.4, Z(44.8));
       conGrp.add(ppSign);
 
-      // Outdoor dining patio tables with orange umbrellas
-      [Z(44), Z(52)].forEach((oz, ti) => {
+      // Outdoor dining patio tables with orange umbrellas (clear of curving path)
+      [[11.8, Z(43)], [12.8, Z(52)]].forEach(([tx, oz], ti) => {
         const tbl = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.8, 12), woodMat);
-        tbl.position.set(20, GROUND_Y + 0.4, oz);
+        tbl.position.set(tx, GROUND_Y + 0.4, oz);
         conGrp.add(tbl);
-        circOb(20, oz, 1.1);
+        circOb(tx, oz, 1.1);
         const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.4, 6), metalMat);
-        pole.position.set(20, GROUND_Y + 1.2, oz);
+        pole.position.set(tx, GROUND_Y + 1.2, oz);
         conGrp.add(pole);
         const umb = new THREE.Mesh(new THREE.ConeGeometry(1.5, 0.6, 10), new THREE.MeshStandardMaterial({ color: 0xf97316, roughness: 0.5 }));
-        umb.position.set(20, GROUND_Y + 2.3, oz);
+        umb.position.set(tx, GROUND_Y + 2.3, oz);
         conGrp.add(umb);
       });
 
-      // --- 2. SUBWAY KIOSK at (12, Z(66)) ---
+      // --- 2. SUBWAY KIOSK at (10, Z(66)) ---
       const subBuilding = new THREE.Mesh(
         new THREE.BoxGeometry(8.5, 3.8, 6.0),
         new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.6 })
       );
-      subBuilding.position.set(12, 1.9, Z(66));
+      subBuilding.position.set(10, 1.9, Z(66));
       conGrp.add(subBuilding);
-      rectOb(7.5, 16.5, Z(63), Z(69)); // solid interior
+      rectOb(5.5, 14.5, Z(63), Z(69)); // solid interior
 
       const subAwning = new THREE.Mesh(
         new THREE.BoxGeometry(9.0, 0.4, 2.2),
         new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.4 })
       );
-      subAwning.position.set(12, 3.4, Z(62.8));
+      subAwning.position.set(10, 3.4, Z(62.8));
       conGrp.add(subAwning);
 
       const subSign = makeSign(
@@ -1068,20 +1069,20 @@
         8.2, 1.8,
         { bg: '#15803d', fg: '#facc15', borderColor: '#ffffff' }
       );
-      subSign.position.set(12, 4.4, Z(62.8));
+      subSign.position.set(10, 4.4, Z(62.8));
       conGrp.add(subSign);
 
-      // Outdoor dining patio tables with yellow & green umbrellas
-      [Z(62), Z(70)].forEach((oz, ti) => {
+      // Outdoor dining patio tables with yellow & green umbrellas (clear of curving path)
+      [[16.5, Z(62)], [17.2, Z(70)]].forEach(([tx, oz], ti) => {
         const tbl = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.8, 12), woodMat);
-        tbl.position.set(20, GROUND_Y + 0.4, oz);
+        tbl.position.set(tx, GROUND_Y + 0.4, oz);
         conGrp.add(tbl);
-        circOb(20, oz, 1.1);
+        circOb(tx, oz, 1.1);
         const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.4, 6), metalMat);
-        pole.position.set(20, GROUND_Y + 1.2, oz);
+        pole.position.set(tx, GROUND_Y + 1.2, oz);
         conGrp.add(pole);
         const umb = new THREE.Mesh(new THREE.ConeGeometry(1.5, 0.6, 10), new THREE.MeshStandardMaterial({ color: ti === 0 ? 0xfacc15 : 0x16a34a, roughness: 0.5 }));
-        umb.position.set(20, GROUND_Y + 2.3, oz);
+        umb.position.set(tx, GROUND_Y + 2.3, oz);
         conGrp.add(umb);
       });
 
@@ -1242,20 +1243,71 @@
       const flowerCols = [0xef4444, 0xfacc15, 0xa855f7, 0xf472b6, 0xffffff, 0xfb923c, 0x3b82f6];
       const blooms = [];
 
-      // 1. North Avenue of the Islands (from Dock z=Z(24) to Manitou Bridge z=Z(216))
-      // Flanked by park flowerbeds, benches, and Victorian cast-iron lampposts
-      for (let fz = Z(24); fz <= Z(216); fz += 24) {
-        [-8.5, 8.5].forEach((fx, fi) => {
-          const bed = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.45, 12), stoneMat);
-          bed.position.set(fx, GROUND_Y + 0.1, fz);
-          avg.add(bed);
-          rectOb(fx - 1.6, fx + 1.6, fz - 6, fz + 6);
-          const col = flowerCols[(fi + Math.round(fz / 24)) % flowerCols.length];
-          for (let fl = -5; fl <= 5; fl += 0.9) {
-            for (let w = -1.0; w <= 1.0; w += 0.7) blooms.push([fx + w, fz + fl, col]);
+      // 1. North Island Promenade & Avenue of the Islands Flowerbeds (aligned parallel to curving paths)
+      function placeAlignedBedsAlongPath(pts, pathW, spacing, startPad, endPad, seedBase) {
+        let dist = 0;
+        let nextBed = startPad;
+        let bedIdx = seedBase || 0;
+        let totalLen = 0;
+        for (let i = 0; i < pts.length - 1; i++) {
+          totalLen += Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
+        }
+        for (let i = 0; i < pts.length - 1; i++) {
+          const [ax, az] = pts[i], [bx, bz] = pts[i + 1];
+          const dx = bx - ax, dz = bz - az;
+          const segLen = Math.hypot(dx, dz);
+          if (segLen < 0.5) continue;
+          const tx = dx / segLen, tz = dz / segLen;
+          const nx = -tz, nz = tx;
+          const ang = Math.atan2(tx, tz);
+          while (nextBed <= dist + segLen && nextBed <= totalLen - endPad) {
+            const s = nextBed - dist;
+            const px = ax + tx * s, pz = az + tz * s;
+            const off = pathW / 2 + 3.2;
+            [-1, 1].forEach((side, si) => {
+              const fx = px + nx * off * side;
+              const fz = pz + nz * off * side;
+              // Ensure entire 8m x 2.8m planter box is clear of all paths, bridges, water & concessions
+              if (
+                nearPath(fx, fz, 1.9) ||
+                nearPath(fx + tx * 4.0, fz + tz * 4.0, 1.9) ||
+                nearPath(fx - tx * 4.0, fz - tz * 4.0, 1.9) ||
+                nearBridge(fx, fz, 7.0) ||
+                landField(fx, fz) < 3.5 ||
+                Math.hypot(fx - 12, fz - Z(48)) < 11.5 ||
+                Math.hypot(fx - 12, fz - Z(66)) < 11.5 ||
+                Math.hypot(fx - 12, fz - Z(88)) < 12.5 ||
+                Math.hypot(fx - 65, fz - Z(65)) < 16.0 ||
+                Math.hypot(fx, fz - Z(310)) < 19.0
+              ) {
+                return;
+              }
+              const bed = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.45, 8.0), stoneMat);
+              bed.position.set(fx, GROUND_Y + 0.1, fz);
+              bed.rotation.y = ang;
+              avg.add(bed);
+              flowerBeds.push({ x: fx, z: fz, rot: ang, tx, tz, w: 2.8, d: 8.0 });
+              circOb(fx - tx * 2.4, fz - tz * 2.4, 1.45);
+              circOb(fx, fz, 1.45);
+              circOb(fx + tx * 2.4, fz + tz * 2.4, 1.45);
+              const col = flowerCols[(bedIdx + si) % flowerCols.length];
+              for (let fl = -3.3; fl <= 3.3; fl += 0.82) {
+                for (let w = -0.85; w <= 0.85; w += 0.56) {
+                  blooms.push([fx + nx * w + tx * fl, fz + nz * w + tz * fl, col]);
+                }
+              }
+            });
+            bedIdx++;
+            nextBed += spacing;
           }
-        });
+          dist += segLen;
+        }
       }
+      // North Island Promenade (Dock to North Arrival Bridge) & Avenue of the Islands (North Bridge to Manitou Bridge)
+      placeAlignedBedsAlongPath(PATHS[0].pts, PATHS[0].w, 24, 22, 12, 0);
+      placeAlignedBedsAlongPath([[28, Z(158)], [12, Z(195)], [0, Z(230)]], 10, 24, 12, 8, 5);
+      // South Avenue of the Islands flanking the Reflecting Pools (Z(345) to Z(420))
+      placeAlignedBedsAlongPath([[0, Z(345)], [0, Z(420)]], 10, 22, 8, 8, 9);
 
       // 2. Grand Fountain Plaza (Immediately south of Manitou Bridge, at x = 0, z = Z(310) = 5310)
       const fz = Z(310);
@@ -1408,34 +1460,39 @@
           }
         }
 
-        // Flanking Formal Parterre Gardens & Flowerbeds on outer side of each reflecting pool
-        const gardenOuterX = poolX + (pIdx === 0 ? -12.5 : 12.5);
-        for (let gz = pZ0 + 5; gz <= pZ1 - 5; gz += 16) {
-          const gBed = new THREE.Mesh(new THREE.BoxGeometry(4.5, 0.35, 12), stoneMat);
-          gBed.position.set(gardenOuterX, GROUND_Y + 0.1, gz);
-          avg.add(gBed);
-          rectOb(gardenOuterX - 2.25, gardenOuterX + 2.25, gz - 6, gz + 6);
+        // Flanking Formal Parterre Gardens & Flowerbeds on outer side of the East Garden Promenade (x = +36, w = 4);
+        // on the West side (pIdx === 0), the William Meany Hedge Maze occupies x = -101..-40 immediately west of the promenade
+        if (pIdx === 1) {
+          const gardenOuterX = poolX + 16.0;
+          for (let gz = pZ0 + 5; gz <= pZ1 - 5; gz += 16) {
+            if (nearPath(gardenOuterX, gz, 2.2)) continue;
+            const gBed = new THREE.Mesh(new THREE.BoxGeometry(4.0, 0.35, 11), stoneMat);
+            gBed.position.set(gardenOuterX, GROUND_Y + 0.1, gz);
+            avg.add(gBed);
+            flowerBeds.push({ x: gardenOuterX, z: gz, rot: 0, tx: 0, tz: 1, w: 4.0, d: 11.0 });
+            rectOb(gardenOuterX - 2.0, gardenOuterX + 2.0, gz - 5.5, gz + 5.5);
 
-          const col = flowerCols[Math.floor(rnd() * flowerCols.length)];
-          for (let fl = -5; fl <= 5; fl += 0.8) {
-            for (let w = -1.6; w <= 1.6; w += 0.8) blooms.push([gardenOuterX + w, gz + fl, col]);
+            const col = flowerCols[Math.floor(rnd() * flowerCols.length)];
+            for (let fl = -4.5; fl <= 4.5; fl += 0.8) {
+              for (let w = -1.4; w <= 1.4; w += 0.7) blooms.push([gardenOuterX + w, gz + fl, col]);
+            }
+
+            // Ornamental boxwood hedge borders
+            const hBorder = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.65, 12), hedgeMat);
+            hBorder.position.set(gardenOuterX + 2.35, GROUND_Y + 0.32, gz);
+            avg.add(hBorder);
           }
-
-          // Ornamental boxwood hedge borders
-          const hBorder = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.65, 13), hedgeMat);
-          hBorder.position.set(gardenOuterX + (pIdx === 0 ? -2.6 : 2.6), GROUND_Y + 0.32, gz);
-          avg.add(hBorder);
         }
 
-        // Benches along the garden promenades
+        // Benches along the garden promenades (parallel to the north-south paths and clear of the x = +/-36 walkways)
         for (let bz = pZ0 + 12; bz <= pZ1 - 12; bz += 22) {
-          // Inner bench facing pool
-          const b1 = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.45, 0.7), darkWoodMat);
-          b1.position.set(poolX + (pIdx === 0 ? 8.5 : -8.5), GROUND_Y + 0.45, bz);
+          // Inner bench facing pool (at x = +/-16.5, between Avenue path and pool rim)
+          const b1 = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.45, 2.0), darkWoodMat);
+          b1.position.set(poolX + (pIdx === 0 ? 9.5 : -9.5), GROUND_Y + 0.45, bz);
           avg.add(b1);
-          // Outer bench facing garden
-          const b2 = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.45, 0.7), darkWoodMat);
-          b2.position.set(poolX + (pIdx === 0 ? -8.5 : 8.5), GROUND_Y + 0.45, bz);
+          // Outer bench facing pool (at x = +/-38.8, just outside the x = +/-36 promenade)
+          const b2 = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.45, 2.0), darkWoodMat);
+          b2.position.set(poolX + (pIdx === 0 ? -12.8 : 12.8), GROUND_Y + 0.45, bz);
           avg.add(b2);
         }
 
@@ -1465,19 +1522,19 @@
       const hmg = new THREE.Group();
       const hx = -65, hz = Z(385);
 
-      // Earth-toned packed dirt ground so green cedar hedges stand out sharply
-      const mazeGround = new THREE.Mesh(new THREE.BoxGeometry(76, 0.08, 76), dirtMat);
-      mazeGround.position.set(hx, 0.57, hz);
+      // Earth-toned packed dirt ground so green cedar hedges stand out sharply (x = -102..-39, clear of West Garden Promenade at x = -36)
+      const mazeGround = new THREE.Mesh(new THREE.BoxGeometry(63, 0.08, 76), dirtMat);
+      mazeGround.position.set(hx - 5.5, 0.57, hz);
       mazeGround.receiveShadow = true;
       hmg.add(mazeGround);
 
-      // Entrance Gate Arch & Commemorative Plaque Sign facing east towards Avenue path
+      // Entrance Gate Arch & Commemorative Plaque Sign facing east towards West Garden Promenade & Avenue
       const mSign = makeSign(
         ['WILLIAM MEANY HEDGE MAZE', 'HISTORIC 1888 SCHOOL BELL • DONATED 2015'],
         18, 2.4,
         { bg: '#14532d', fg: '#bbf7d0', borderColor: '#22c55e' }
       );
-      mSign.position.set(hx + 37, 3.8, hz);
+      mSign.position.set(hx + 26, 3.8, hz);
       mSign.rotation.y = -Math.PI / 2;
       hmg.add(mSign);
 
@@ -1488,25 +1545,25 @@
         rectOb(hx + wx - ww / 2, hx + wx + ww / 2, hz + wz - wd / 2, hz + wz + wd / 2);
       }
 
-      // Outer perimeter hedge walls with entrance opening facing EAST towards Avenue
-      addMazeWall(36, -20, 1.4, 32);
-      addMazeWall(36, 20, 1.4, 32);
+      // Outer perimeter hedge walls with entrance opening at x = -40 (wx = +25) facing EAST towards West Garden Promenade
+      addMazeWall(25, -20, 1.4, 32);
+      addMazeWall(25, 20, 1.4, 32);
       addMazeWall(-36, 0, 1.4, 72);
-      addMazeWall(0, -36, 72, 1.4);
-      addMazeWall(0, 36, 72, 1.4);
+      addMazeWall(-5.5, -36, 61, 1.4);
+      addMazeWall(-5.5, 36, 61, 1.4);
 
       // Concentric inner hedge rings & labyrinth turns
-      addMazeWall(-18, -24, 28, 1.2);
-      addMazeWall(18, -24, 28, 1.2);
+      addMazeWall(-18, -24, 20, 1.2);
+      addMazeWall(11, -24, 16, 1.2);
       addMazeWall(-26, 0, 1.2, 46);
-      addMazeWall(26, 0, 1.2, 46);
-      addMazeWall(0, 24, 52, 1.2);
+      addMazeWall(18, 0, 1.2, 46);
+      addMazeWall(-4, 24, 44, 1.2);
 
-      addMazeWall(-12, -12, 18, 1.2);
-      addMazeWall(12, -12, 18, 1.2);
+      addMazeWall(-12, -12, 14, 1.2);
+      addMazeWall(8, -12, 12, 1.2);
       addMazeWall(-16, 6, 1.2, 28);
-      addMazeWall(16, 6, 1.2, 28);
-      addMazeWall(0, 14, 32, 1.2);
+      addMazeWall(13, 6, 1.2, 28);
+      addMazeWall(-1.5, 14, 29, 1.2);
 
       // Centerpiece: Historic 1888 Toronto Island School Bell Arbor & Bell
       const bellArbor = new THREE.Group();
@@ -3549,9 +3606,9 @@
       });
     }
 
-    // Animated Toronto Harbour Ferry
+    // Animated Toronto Harbour Ferry (only in standalone island viewer; main game uses city.islandFerry.ferryMesh)
     let ferry = null;
-    {
+    if (!(typeof window !== 'undefined' && window.buildTorontoCity)) {
       ferry = new THREE.Group();
       const hull = new THREE.Mesh(new THREE.BoxGeometry(10, 3.2, 36), new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.4 }));
       hull.position.y = 1.2;
@@ -4064,6 +4121,8 @@
       canMoveTo,
       floorAt,
       getNeighborhood,
+      nearPath,
+      flowerBeds,
       drawMinimap,
       update,
       landmarks: {

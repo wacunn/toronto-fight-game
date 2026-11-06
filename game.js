@@ -3405,7 +3405,7 @@ const FERRY_DOCKS = [
     boardZ: 318,
     slipX: 726,
     slipZ: 330,
-    yaw: Math.PI,
+    yaw: 0,
     onIsland: false
   },
   {
@@ -3414,10 +3414,10 @@ const FERRY_DOCKS = [
     name: 'Centre Island Dock',
     sub: 'Avenue of the Islands · Centreville & Maze',
     boardX: 0,
-    boardZ: 1200,
+    boardZ: 1192,
     slipX: 0,
-    slipZ: 1175,
-    yaw: 0,
+    slipZ: 1146,
+    yaw: Math.PI,
     onIsland: true
   },
   {
@@ -3428,8 +3428,8 @@ const FERRY_DOCKS = [
     boardX: -720,
     boardZ: 1090,
     slipX: -720,
-    slipZ: 1062,
-    yaw: 0,
+    slipZ: 1036,
+    yaw: Math.PI,
     onIsland: true
   },
   {
@@ -3440,8 +3440,8 @@ const FERRY_DOCKS = [
     boardX: 1140,
     boardZ: 1180,
     slipX: 1140,
-    slipZ: 1148,
-    yaw: 0,
+    slipZ: 1126,
+    yaw: Math.PI,
     onIsland: true
   }
 ];
@@ -3545,10 +3545,10 @@ const FERRY_WATER_Y = -0.65;
 // Default Mainland <-> Centre Island route
 const FERRY_WAYPOINTS = [
   { x: 726, z: 330 },
-  { x: 710, z: 520 },
-  { x: 420, z: 760 },
-  { x: 140, z: 980 },
-  { x: 0, z: 1175 }
+  { x: 550, z: 530 },
+  { x: 360, z: 740 },
+  { x: 170, z: 950 },
+  { x: 0, z: 1146 }
 ];
 
 function getFerryRouteWaypoints(fromId, toId) {
@@ -3571,24 +3571,24 @@ function getFerryRouteWaypoints(fromId, toId) {
   const routesFromMainland = {
     centre: [
       { x: 726, z: 330 },
-      { x: 710, z: 520 },
-      { x: 420, z: 760 },
-      { x: 140, z: 980 },
-      { x: 0, z: 1175 }
+      { x: 550, z: 530 },
+      { x: 360, z: 740 },
+      { x: 170, z: 950 },
+      { x: 0, z: 1146 }
     ],
     hanlans: [
       { x: 726, z: 330 },
-      { x: 660, z: 540 },
-      { x: 160, z: 760 },
-      { x: -340, z: 920 },
-      { x: -720, z: 1062 }
+      { x: 380, z: 490 },
+      { x: -40, z: 675 },
+      { x: -430, z: 865 },
+      { x: -720, z: 1036 }
     ],
     wards: [
       { x: 726, z: 330 },
-      { x: 760, z: 520 },
-      { x: 910, z: 740 },
-      { x: 1055, z: 955 },
-      { x: 1140, z: 1148 }
+      { x: 840, z: 520 },
+      { x: 960, z: 725 },
+      { x: 1065, z: 930 },
+      { x: 1140, z: 1126 }
     ]
   };
   if (fromId === 'mainland' && routesFromMainland[toId]) {
@@ -3603,9 +3603,9 @@ function getFerryRouteWaypoints(fromId, toId) {
   const midX = (fromDock.slipX + toDock.slipX) / 2;
   return [
     { x: fromDock.slipX, z: fromDock.slipZ },
-    { x: fromDock.slipX * 0.7 + midX * 0.3, z: 980 },
-    { x: midX, z: 950 },
-    { x: toDock.slipX * 0.7 + midX * 0.3, z: 980 },
+    { x: fromDock.slipX * 0.72 + midX * 0.28, z: 990 },
+    { x: midX, z: 955 },
+    { x: toDock.slipX * 0.72 + midX * 0.28, z: 990 },
     { x: toDock.slipX, z: toDock.slipZ }
   ];
 }
@@ -3690,15 +3690,19 @@ function startFerryRide(dir, explicitFromId) {
   if (scene.fog) scene.fog.density = 0.00065;
   audio.playFerryHorn();
 
-  // Face forward at initial boarding, but player can freely look around in 360° during the entire voyage!
+  // Face forward over the bow at initial boarding, while allowing full 360° free look during the voyage!
   const curPos = evalFerrySpline(0, dir);
-  const nxtPos = evalFerrySpline(0.015, dir);
+  const nxtPos = evalFerrySpline(0.02, dir);
   const initialHeading = Math.atan2(nxtPos.x - curPos.x, nxtPos.z - curPos.z);
-  player.yaw = initialHeading;
-  player.pitch = 0;
+  ferryController.lastHeading = initialHeading;
+  ferryController.heading = initialHeading;
+  // Camera forward vector at yaw is (-sin(yaw), 0, -cos(yaw)), so yaw = heading + Math.PI faces forward along (dx, dz)!
+  const forwardYaw = initialHeading + Math.PI;
+  player.yaw = forwardYaw;
+  player.pitch = -0.04;
   camera.rotation.order = 'YXZ';
-  camera.rotation.y = initialHeading;
-  camera.rotation.x = 0;
+  camera.rotation.y = forwardYaw;
+  camera.rotation.x = player.pitch;
 
   let msg = '🚢 TORONTO ISLAND FERRY: DEPARTING...';
   if (isAirport) {
@@ -3731,8 +3735,18 @@ function updateFerry(dt) {
   const easeProg = prog * prog * (3 - 2 * prog);
 
   const curPos = evalFerrySpline(easeProg, ferryController.dir);
-  const nextPos = evalFerrySpline(Math.min(1, easeProg + 0.01), ferryController.dir);
-  const heading = Math.atan2(nextPos.x - curPos.x, nextPos.z - curPos.z);
+  const nextPos = evalFerrySpline(Math.min(1, easeProg + 0.015), ferryController.dir);
+  const prevPos = evalFerrySpline(Math.max(0, easeProg - 0.015), ferryController.dir);
+  const heading = Math.atan2(nextPos.x - prevPos.x, nextPos.z - prevPos.z);
+
+  if (ferryController.lastHeading !== undefined) {
+    let dHeading = heading - ferryController.lastHeading;
+    while (dHeading > Math.PI) dHeading -= Math.PI * 2;
+    while (dHeading < -Math.PI) dHeading += Math.PI * 2;
+    player.yaw += dHeading;
+  }
+  ferryController.lastHeading = heading;
+  ferryController.heading = heading;
 
   const fx = curPos.x;
   const fz = curPos.z;
@@ -3742,9 +3756,8 @@ function updateFerry(dt) {
   ferry.position.set(fx, waterY + bob, fz);
   ferry.rotation.y = heading;
 
-  // Keep player on the forward observation deck
-  // Notice: do NOT overwrite player.yaw or player.pitch so the player can freely look around in 360° at the skyline, islands & water!
-  const fwdDist = ferryController.isAirportFerry ? 4.5 : 6.0;
+  // Keep player on the forward upper sun deck overlooking the bow as the vessel glides into the destination slip!
+  const fwdDist = ferryController.isAirportFerry ? 4.5 : 11.0;
   const deckH = ferryController.isAirportFerry ? 2.1 : 6.75;
   const fwdX = fx + Math.sin(heading) * fwdDist;
   const fwdZ = fz + Math.cos(heading) * fwdDist;
@@ -3771,11 +3784,11 @@ function arriveFerry(dir) {
       if (scene.fog) scene.fog.density = 0.00065;
       const islFloor = (city && city.floorAt) ? city.floorAt(-1060, 870) : 0.55;
       player.pos.set(-1060, islFloor + EYE_HEIGHT, 870);
-      player.yaw = 0; // facing south toward Billy Bishop Terminal & Porter Q400s
+      player.yaw = Math.PI; // facing south (+Z) toward Billy Bishop Terminal & Porter Q400s
       player.velocity.set(0, 0, 0);
       player.isGrounded = true;
       camera.rotation.order = 'YXZ';
-      camera.rotation.y = 0;
+      camera.rotation.y = Math.PI;
       if (aFerry) {
         aFerry.position.set(-1060, waterY, 842);
         aFerry.rotation.y = 0;
@@ -3787,11 +3800,11 @@ function arriveFerry(dir) {
       if (scene.fog) scene.fog.density = 0.0021;
       const mainFloor = (city && city.floorAt) ? city.floorAt(-1060, 702) : 0.55;
       player.pos.set(-1060, mainFloor + EYE_HEIGHT, 702);
-      player.yaw = Math.PI; // facing north toward Bathurst Quay & downtown
+      player.yaw = 0; // facing north (-Z) toward Bathurst Quay & downtown
       player.velocity.set(0, 0, 0);
       player.isGrounded = true;
       camera.rotation.order = 'YXZ';
-      camera.rotation.y = Math.PI;
+      camera.rotation.y = 0;
       if (aFerry) {
         aFerry.position.set(-1060, waterY, 720);
         aFerry.rotation.y = Math.PI;
@@ -3832,11 +3845,11 @@ function arriveFerry(dir) {
     if (scene.fog) scene.fog.density = 0.0021;
     const mainFloor = (city && city.floorAt) ? city.floorAt(712, 318) : 0.5;
     player.pos.set(712, mainFloor + EYE_HEIGHT, 318);
-    player.yaw = Math.PI; // facing north towards Queens Quay & downtown
+    player.yaw = 0; // facing north (-Z) towards Queens Quay & downtown
     player.velocity.set(0, 0, 0);
     player.isGrounded = true;
     camera.rotation.order = 'YXZ';
-    camera.rotation.y = Math.PI;
+    camera.rotation.y = 0;
 
     if (ferry) {
       ferry.position.set(726, waterY, 330);

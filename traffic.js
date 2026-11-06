@@ -300,12 +300,26 @@
     const CYCLE = 42.0;
 
     signalIntersections.forEach((inter, interIdx) => {
+      // Only signalize true intersections (3+ approaches or perpendicular East-West & North-South streets meeting)
+      const hasEW = inter.approaches.some(a => Math.abs(a.fx) > Math.abs(a.fz));
+      const hasNS = inter.approaches.some(a => Math.abs(a.fx) <= Math.abs(a.fz));
+      if (inter.approaches.length < 3 && !(hasEW && hasNS)) return;
+
       const offset = (Math.abs(inter.x * 0.08 + inter.z * 0.12) % CYCLE);
       inter.offset = offset;
       inter.approaches.forEach(a => {
         // Phase 0 = East-West, Phase 1 = North-South
         const isEastWest = Math.abs(a.fx) > Math.abs(a.fz);
         const phase = isEastWest ? 0 : 1;
+        let crossHalfW = 5.5;
+        inter.approaches.forEach(b => {
+          if (b !== a && (Math.abs(b.fx) > Math.abs(b.fz)) !== isEastWest) {
+            crossHalfW = Math.max(crossHalfW, (b.w || 10) / 2);
+          }
+        });
+        const cwDist = Math.max(4.5, crossHalfW + 1.8);
+        const stopDist = cwDist + 2.6;
+
         const sig = {
           id: signals.length,
           interIdx,
@@ -314,23 +328,26 @@
           isEastWest,
           x: a.x, z: a.z,
           fx: a.fx, fz: a.fz,
+          approach: a,
+          cwDist,
+          stopDist,
           state: 'red',
           ped: 'dontwalk',
           streetName: a.name
         };
         signals.push(sig);
         a.signal = sig;
-        a.stopDist = 5.2;
+        a.stopDist = stopDist;
         roadApproachMap.set(a.r.id + ':' + a.atStart, a);
 
-        // Draw Solid Stop Bar across approaching roadway
+        // Draw Solid Stop Bar across approaching roadway outside the cross-street
         const y = (a.r.y || 0.05) + 0.02;
         const rx = -a.fz, rz = a.fx;
-        const stopCx = a.x - a.fx * 5.2, stopCz = a.z - a.fz * 5.2;
+        const stopCx = a.x - a.fx * stopDist, stopCz = a.z - a.fz * stopDist;
         addOrientedBar(stopCx, stopCz, y, a.w * 0.9, 0.55, a.fx, a.fz);
 
         // Draw Continental Zebra Crosswalk Stripes
-        const cwCx = a.x - a.fx * 2.8, cwCz = a.z - a.fz * 2.8;
+        const cwCx = a.x - a.fx * cwDist, cwCz = a.z - a.fz * cwDist;
         const halfRoad = a.w / 2;
         for (let s = -halfRoad + 0.6; s <= halfRoad - 0.6; s += 0.85) {
           addOrientedBar(cwCx + rx * s, cwCz + rz * s, y, 0.48, 3.2, a.fx, a.fz);
@@ -391,25 +408,48 @@
     const pedGeo = new THREE.PlaneGeometry(0.36, 0.36);
     const pedLensMesh = new THREE.InstancedMesh(pedGeo, new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false, side: THREE.DoubleSide }), Math.max(1, signals.length));
 
-    const pMat4 = new THREE.Matrix4(), pQuat = new THREE.Quaternion(), pPos = new THREE.Vector3(), pScale = new THREE.Vector3(1, 1, 1);
+    const pMat4 = new THREE.Matrix4(), pQuat = new THREE.Quaternion(), pPos = new THREE.Vector3(), pScale = new THREE.Vector3(1, 1, 1), zeroScale = new THREE.Vector3(0, 0, 0);
     const upVec = new THREE.Vector3(0, 1, 0);
 
     signals.forEach((sig, i) => {
       const rx = -sig.fz, rz = sig.fx;
-      const poleX = sig.x - sig.fx * 5.2 + rx * (sig.approach ? (sig.approach.w / 2 + 1.8) : 6.2);
-      const poleZ = sig.z - sig.fz * 5.2 + rz * (sig.approach ? (sig.approach.w / 2 + 1.8) : 6.2);
+      const baseBack = (sig.stopDist || 7.5) - 1.2;
+      const baseSide = (sig.approach ? (sig.approach.w / 2 + 1.8) : 7.5);
+      let poleX = sig.x - sig.fx * baseBack + rx * baseSide;
+      let poleZ = sig.z - sig.fz * baseBack + rz * baseSide;
+      let validPole = true;
+
+      if (city && city.isOnRoad) {
+        const isBad = (x, z) => city.isOnRoad(x, z, 0.9) || (city.canMoveTo && !city.canMoveTo(x, z, 0.35));
+        if (isBad(poleX, poleZ)) {
+          validPole = false;
+          for (let bOff = 0; bOff <= 14 && !validPole; bOff += 1.6) {
+            for (let sOff = 0; sOff <= 7.2 && !validPole; sOff += 1.2) {
+              const cx = sig.x - sig.fx * (baseBack + bOff) + rx * (baseSide + sOff);
+              const cz = sig.z - sig.fz * (baseBack + bOff) + rz * (baseSide + sOff);
+              if (!isBad(cx, cz)) {
+                poleX = cx;
+                poleZ = cz;
+                validPole = true;
+              }
+            }
+          }
+        }
+      }
+
       const heading = Math.atan2(sig.fx, sig.fz);
       pQuat.setFromAxisAngle(upVec, heading);
+      const useScale = validPole ? pScale : zeroScale;
 
-      pMat4.compose(pPos.set(poleX, 0, poleZ), pQuat, pScale);
+      pMat4.compose(pPos.set(poleX, 0, poleZ), pQuat, useScale);
       polesMesh.setMatrixAt(i, pMat4);
 
       const hx = poleX - rx * 5.4, hz = poleZ - rz * 5.4;
-      pMat4.compose(pPos.set(hx, 6.4, hz), pQuat, pScale); redLensMesh.setMatrixAt(i, pMat4);
-      pMat4.compose(pPos.set(hx, 5.8, hz), pQuat, pScale); yellowLensMesh.setMatrixAt(i, pMat4);
-      pMat4.compose(pPos.set(hx, 5.2, hz), pQuat, pScale); greenLensMesh.setMatrixAt(i, pMat4);
+      pMat4.compose(pPos.set(hx, 6.4, hz), pQuat, useScale); redLensMesh.setMatrixAt(i, pMat4);
+      pMat4.compose(pPos.set(hx, 5.8, hz), pQuat, useScale); yellowLensMesh.setMatrixAt(i, pMat4);
+      pMat4.compose(pPos.set(hx, 5.2, hz), pQuat, useScale); greenLensMesh.setMatrixAt(i, pMat4);
 
-      pMat4.compose(pPos.set(poleX, 2.7, poleZ - 0.1), pQuat, pScale);
+      pMat4.compose(pPos.set(poleX, 2.7, poleZ - 0.1), pQuat, useScale);
       pedLensMesh.setMatrixAt(i, pMat4);
     });
 

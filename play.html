@@ -4172,8 +4172,9 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     const RCELL = 24;
     const roadGrid = new Map();
     function addRoadSeg(ax, az, bx, bz, hw, id) {
-      const x0 = Math.floor((Math.min(ax, bx) - hw) / RCELL), x1 = Math.floor((Math.max(ax, bx) + hw) / RCELL);
-      const z0 = Math.floor((Math.min(az, bz) - hw) / RCELL), z1 = Math.floor((Math.max(az, bz) + hw) / RCELL);
+      const pad = hw + 5;
+      const x0 = Math.floor((Math.min(ax, bx) - pad) / RCELL), x1 = Math.floor((Math.max(ax, bx) + pad) / RCELL);
+      const z0 = Math.floor((Math.min(az, bz) - pad) / RCELL), z1 = Math.floor((Math.max(az, bz) + pad) / RCELL);
       for (let cx = x0; cx <= x1; cx++) for (let cz = z0; cz <= z1; cz++) {
         const k = cellKey(cx, cz);
         let arr = roadGrid.get(k);
@@ -4190,6 +4191,20 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         if (lim > 0 && distToSegSq(x, z, sg.ax, sg.az, sg.bx, sg.bz) < lim * lim) return true;
       }
       return false;
+    }
+    function snapOffRoad(x, z, pad, radius) {
+      const m = -(pad !== undefined ? pad : 1.0);
+      const r = radius !== undefined ? radius : 0.6;
+      if (!onRoad(x, z, m, -1) && canMoveTo(x, z, r)) return [x, z];
+      for (let dist = 1.5; dist <= 18; dist += 1.5) {
+        for (let a = 0; a < 16; a++) {
+          const ang = (a / 16) * Math.PI * 2;
+          const nx = x + Math.cos(ang) * dist;
+          const nz = z + Math.sin(ang) * dist;
+          if (!onRoad(nx, nz, m, -1) && canMoveTo(nx, nz, r)) return [nx, nz];
+        }
+      }
+      return [x, z];
     }
     function offsetLine(pts, d) {
       const out = [];
@@ -4429,13 +4444,14 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     const concreteMat = new THREE.MeshLambertMaterial({ color: 0x55575c, side: THREE.DoubleSide });
     if (deckGB.pos.length) scene.add(new THREE.Mesh(deckGB.build(), concreteMat));
 
-    // Gardiner pillars (instanced)
-    if (pillarSpots.length) {
+    // Gardiner pillars (instanced, filtered so pillars never stand inside ground road lanes)
+    const validPillars = pillarSpots.filter(p => !onRoad(p.x, p.z, -1.5, -1) && !isInsideTrench(p.x, p.z));
+    if (validPillars.length) {
       const pGeo = new THREE.CylinderGeometry(0.9, 1.1, 1, 10);
       pGeo.translate(0, 0.5, 0);
-      const pillars = new THREE.InstancedMesh(pGeo, concreteMat, pillarSpots.length);
+      const pillars = new THREE.InstancedMesh(pGeo, concreteMat, validPillars.length);
       const m = new THREE.Matrix4();
-      pillarSpots.forEach((p, i) => {
+      validPillars.forEach((p, i) => {
         m.makeScale(1, p.h, 1);
         m.setPosition(p.x, 0, p.z);
         pillars.setMatrixAt(i, m);
@@ -11456,140 +11472,6 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       }
     }
 
-    // ---------- Street lamps (instanced) + pooled real lights ----------
-    const lamps = lampSpots.filter(l => canMoveTo(l.x, l.z, 0.3)).slice(0, 700);
-    if (lamps.length) {
-      const poleGeo = new THREE.CylinderGeometry(0.09, 0.14, 7, 6);
-      poleGeo.translate(0, 3.5, 0);
-      const headGeo = new THREE.BoxGeometry(0.5, 0.18, 1.1);
-      const poles = new THREE.InstancedMesh(poleGeo, new THREE.MeshLambertMaterial({ color: 0x2a2d33 }), lamps.length);
-      const heads = new THREE.InstancedMesh(headGeo, new THREE.MeshBasicMaterial({ color: 0xffe2b0 }), lamps.length);
-      const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(1, 1, 1), up = new THREE.Vector3(0, 1, 0);
-      lamps.forEach((l, i) => {
-        m.makeTranslation(l.x, 0, l.z);
-        poles.setMatrixAt(i, m);
-        q.setFromAxisAngle(up, l.ang);
-        const hx = l.x + Math.sin(l.ang) * 0.6, hz = l.z + Math.cos(l.ang) * 0.6;
-        m.compose(new THREE.Vector3(hx, 7, hz), q, s);
-        heads.setMatrixAt(i, m);
-        addCircle(l.x, l.z, 0.25);
-      });
-      poles.castShadow = true;
-      scene.add(poles);
-      scene.add(heads);
-
-      // Glow halos around every lamp head (bloom makes these sing)
-      const haloPos = [];
-      lamps.forEach(l => haloPos.push(l.x + Math.sin(l.ang) * 0.6, 6.85, l.z + Math.cos(l.ang) * 0.6));
-      const haloGeo = new THREE.BufferGeometry();
-      haloGeo.setAttribute('position', new THREE.Float32BufferAttribute(haloPos, 3));
-      scene.add(new THREE.Points(haloGeo, new THREE.PointsMaterial({
-        map: makeGlowTexture('rgba(255,240,210,1)', 'rgba(255,170,90,0.22)'), size: 3.4, sizeAttenuation: true,
-        transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
-      })));
-
-      // Pools of warm light on the ground under EVERY lamp. Only ~8 real lights
-      // exist, so these fake the rest of the street at near-zero cost.
-      const poolGeo = new THREE.PlaneGeometry(1, 1);
-      poolGeo.rotateX(-Math.PI / 2);
-      const pools = new THREE.InstancedMesh(poolGeo, new THREE.MeshBasicMaterial({
-        map: makeGlowTexture('rgba(255,190,120,0.5)', 'rgba(255,140,60,0.16)'), transparent: true, depthWrite: false,
-        blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4
-      }), lamps.length);
-      const pq = new THREE.Quaternion(), ps = new THREE.Vector3(16, 1, 16), pv = new THREE.Vector3();
-      lamps.forEach((l, i) => {
-        m.compose(pv.set(l.x + Math.sin(l.ang) * 1.6, 0.1, l.z + Math.cos(l.ang) * 1.6), pq, ps);
-        pools.setMatrixAt(i, m);
-      });
-      scene.add(pools);
-    }
-
-    // Pooled real point lights: re-assigned to the nearest lamps, faded in/out
-    // instead of teleporting (no more lighting "pops" as you walk)
-    const LAMP_INTENSITY = 1.9;
-    const lightPool = [];
-    for (let i = 0; i < 8; i++) {
-      const pl = new THREE.PointLight(0xffb066, 0, 28, 1.6);
-      pl.position.set(0, -100, 0);
-      scene.add(pl);
-      lightPool.push({ light: pl, lamp: -1, next: -1, level: 0 });
-    }
-
-    // ---------- Street trees (instanced, with per-tree colour + size variation) ----------
-    {
-      const trees = treeSpots.filter(t => canMoveTo(t.x, t.z, 1.4) && !onRoad(t.x, t.z, -0.8, -1)).slice(0, 900);
-      if (trees.length) {
-        const trunkGeo = new THREE.CylinderGeometry(0.11, 0.17, 3.2, 7);
-        trunkGeo.translate(0, 1.6, 0);
-        // lumpy canopy: three merged, noise-displaced icospheres with smooth normals
-        const blobs = [[0, 4.6, 0, 1.9], [0.9, 4.1, 0.4, 1.4], [-0.8, 4.3, -0.5, 1.5]];
-        const cPos = [], cNrm = [];
-        blobs.forEach(([bx, by, bz, br], bi2) => {
-          const ico = new THREE.IcosahedronGeometry(br, 2);
-          const pa = ico.attributes.position;
-          for (let i = 0; i < pa.count; i++) {
-            const x = pa.getX(i), y = pa.getY(i), z = pa.getZ(i);
-            const l = Math.hypot(x, y, z) || 1;
-            const k = 1 + (hash(Math.round(x * 50) * 7 + Math.round(y * 50) * 13 + Math.round(z * 50) * 17 + bi2) - 0.5) * 0.35;
-            cPos.push(bx + x * k, by + y * k * 0.85, bz + z * k);
-            cNrm.push(x / l, y / l, z / l);
-          }
-        });
-        const canopyGeo = new THREE.BufferGeometry();
-        canopyGeo.setAttribute('position', new THREE.Float32BufferAttribute(cPos, 3));
-        canopyGeo.setAttribute('normal', new THREE.Float32BufferAttribute(cNrm, 3));
-        const trunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshStandardMaterial({ color: 0x3b2c22, roughness: 0.95, envMapIntensity: 0.2 }), trees.length);
-        const canopies = new THREE.InstancedMesh(canopyGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, envMapIntensity: 0.2 }), trees.length);
-        const m = new THREE.Matrix4();
-        const tq = new THREE.Quaternion(), ts = new THREE.Vector3(), tv = new THREE.Vector3(), up2 = new THREE.Vector3(0, 1, 0), tc = new THREE.Color();
-        trees.forEach((t, i) => {
-          const sc = 0.8 + t.s * 0.5;
-          tq.setFromAxisAngle(up2, t.s * 6.28);
-          m.compose(tv.set(t.x, 0, t.z), tq, ts.set(sc, sc, sc));
-          trunks.setMatrixAt(i, m);
-          canopies.setMatrixAt(i, m);
-          tc.setHSL(0.24 + t.s * 0.08, 0.35 + t.s * 0.2, 0.16 + hash(t.x) * 0.08);
-          canopies.setColorAt(i, tc);
-          addCircle(t.x, t.z, 0.3);
-        });
-        trunks.castShadow = canopies.castShadow = true;
-        canopies.receiveShadow = true;
-        scene.add(trunks);
-        scene.add(canopies);
-      }
-    }
-
-    // ---------- Street signs ----------
-    const usedNames = {};
-    const signs = [];
-    signCandidates.forEach(c => {
-      if (signs.length > 36) return;
-      const prev = usedNames[c.name] || [];
-      if (prev.some(p => Math.hypot(p.x - c.x, p.z - c.z) < 150)) return;
-      if (!canMoveTo(c.x, c.z, 0.4)) return;
-      prev.push(c);
-      usedNames[c.name] = prev;
-      signs.push(c);
-    });
-    const signPoleMat = new THREE.MeshLambertMaterial({ color: 0x3a3d44 });
-    signs.forEach(c => {
-      const g = new THREE.Group();
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 3.4, 6), signPoleMat);
-      pole.position.y = 1.7;
-      g.add(pole);
-      const label = c.name.toUpperCase().replace(' STREET', ' ST').replace(' AVENUE', ' AVE').replace(' BOULEVARD', ' BLVD').replace(' EXPRESSWAY', ' EXPY');
-      const plate = new THREE.Mesh(
-        new THREE.PlaneGeometry(2.6, 0.62),
-        new THREE.MeshBasicMaterial({ map: makeLabelTexture(['TORONTO', label], { size: 54 }), side: THREE.DoubleSide })
-      );
-      plate.position.y = 3.2;
-      g.add(plate);
-      g.position.set(c.x, 0, c.z);
-      g.rotation.y = c.ang;
-      scene.add(g);
-      addCircle(c.x, c.z, 0.2);
-    });
-
     // ---------- 1. Streetcar Tracks along King St, Queen St & Spadina Ave (1 merged GeoBuilder draw call) ----------
     const streetcarRoads = groundRoads.filter(r => {
       const n = (MAP.roads[r.id] || {}).n || '';
@@ -11790,10 +11672,20 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
             }));
             return best ? best.s : null;
           };
-          const crossings = [['King Street West'], ['Front Street West'], ['Bremner Boulevard', 'Fort York Boulevard'], ['Lake Shore Boulevard West']]
-            .map(crossAt).filter(s2 => s2 !== null && s2 < sJunction - 40);
+          const crossings = [
+            ['Queen Street West'],
+            ['Richmond Street West'],
+            ['Adelaide Street West'],
+            ['King Street West'],
+            ['Wellington Street West', 'Clarence Square'],
+            ['Front Street West'],
+            ['Bremner Boulevard', 'Fort York Boulevard'],
+            ['Lake Shore Boulevard West']
+          ].map(crossAt).filter(s2 => s2 !== null && s2 < sJunction - 40);
           const stops = [];
-          crossings.forEach(s2 => stops.push({ d: s2 - 26, dir: 1 }, { d: s2 + 26, dir: -1 }));   // near-side platforms
+          [['Queen Street West'], ['King Street West'], ['Front Street West'], ['Bremner Boulevard', 'Fort York Boulevard'], ['Lake Shore Boulevard West']]
+            .map(crossAt).filter(s2 => s2 !== null && s2 < sJunction - 40)
+            .forEach(s2 => stops.push({ d: s2 - 26, dir: 1 }, { d: s2 + 26, dir: -1 }));   // near-side platforms
           for (let d = sJunction + 120; d < cum[cum.length - 1] - 60; d += 240) stops.push({ d, dir: 0 });  // Queens Quay stops
           const route510 = {
             id: '510', name: '510 Spadina', pts, limit: 11, cars: 3,
@@ -11849,6 +11741,20 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       });
       scene.add(new THREE.Mesh(tGB.build(), new THREE.MeshStandardMaterial({ color: 0xa8b0ba, roughness: 0.3, metalness: 0.9 })));
 
+      // Check if a point on the Spadina median crosses any non-Spadina street
+      const spadinaRoadIds = new Set();
+      MAP.roads.forEach((r, ri) => { if ((r.n || '') === 'Spadina Avenue') spadinaRoadIds.add(ri); });
+      const onCrossStreet = (x, z, pad) => {
+        const arr = roadGrid.get(cellKey(Math.floor(x / RCELL), Math.floor(z / RCELL)));
+        if (!arr) return false;
+        for (const sg of arr) {
+          if (spadinaRoadIds.has(sg.id) || sg.id >= 9990) continue;
+          const lim = sg.hw + (pad || 1.2);
+          if (distToSegSq(x, z, sg.ax, sg.az, sg.bx, sg.bz) < lim * lim) return true;
+        }
+        return false;
+      };
+
       const nearCross = s2 => crossings.some(c3 => Math.abs(s2 - c3) < 16);
       const nearStop = (s2, side) => route.stops.some(st => st.dir === side && Math.abs(s2 - st.d) < 17);
       // bollards both edges, every 2.5 m, gaps at intersections and platforms
@@ -11856,9 +11762,13 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       for (let s2 = 2; s2 < sJunction - 2; s2 += 2.5) {
         if (nearCross(s2)) continue;
         const p = at(s2);
+        if (onCrossStreet(p.x, p.z, 2.0)) continue;
         [-1, 1].forEach(side => {
           if (nearStop(s2, side)) return;   // side +1 = right of southbound
-          bol.push([p.x - p.tz * side * (ROW_HW - 0.25), p.z + p.tx * side * (ROW_HW - 0.25)]);
+          const bx = p.x - p.tz * side * (ROW_HW - 0.25);
+          const bz = p.z + p.tx * side * (ROW_HW - 0.25);
+          if (onCrossStreet(bx, bz, 1.5)) return;
+          bol.push([bx, bz]);
         });
       }
       const m4 = new THREE.Matrix4();
@@ -11875,6 +11785,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       for (let s2 = 10; s2 < sJunction - 5; s2 += 34) {
         if (nearCross(s2)) continue;
         const p = at(s2);
+        if (onCrossStreet(p.x, p.z, 2.5)) continue;
         const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.17, 6.4, 10), poleMat);
         pole.position.set(p.x, 3.3, p.z); scene.add(pole);
         const arm = new THREE.Mesh(new THREE.BoxGeometry(TRACK * 2 + 0.6, 0.1, 0.1), poleMat);
@@ -11916,7 +11827,156 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         g.rotation.y = Math.atan2(p.tx * side, p.tz * side);
         scene.add(g);
       });
+
+      // Register Spadina right-of-way and northern extension carriageways in roadGrid so no street lamps, trees or signs spawn inside Spadina!
+      for (let i = 0; i < spPts.length - 1; i++) {
+        addRoadSeg(spPts[i][0], spPts[i][1], spPts[i + 1][0], spPts[i + 1][1], ROW_HW + 0.6, 9991);
+      }
+      [-11.5, 11.5].forEach(o => {
+        const l = offsetLine(ext, o);
+        for (let i = 0; i < l.length - 1; i++) {
+          addRoadSeg(l[i][0], l[i][1], l[i + 1][0], l[i + 1][1], 6.5, 9992);
+        }
+      });
     }
+
+    // ---------- Street lamps (instanced, strictly outside all roads & intersections) + pooled real lights ----------
+    const lamps = lampSpots.filter(l =>
+      canMoveTo(l.x, l.z, 0.5) &&
+      !onRoad(l.x, l.z, -0.9, -1) &&
+      !onRoad(l.x + Math.sin(l.ang) * 0.6, l.z + Math.cos(l.ang) * 0.6, -0.3, -1)
+    ).slice(0, 700);
+    if (lamps.length) {
+      const poleGeo = new THREE.CylinderGeometry(0.09, 0.14, 7, 6);
+      poleGeo.translate(0, 3.5, 0);
+      const headGeo = new THREE.BoxGeometry(0.5, 0.18, 1.1);
+      const poles = new THREE.InstancedMesh(poleGeo, new THREE.MeshLambertMaterial({ color: 0x2a2d33 }), lamps.length);
+      const heads = new THREE.InstancedMesh(headGeo, new THREE.MeshBasicMaterial({ color: 0xffe2b0 }), lamps.length);
+      const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(1, 1, 1), up = new THREE.Vector3(0, 1, 0);
+      lamps.forEach((l, i) => {
+        m.makeTranslation(l.x, 0, l.z);
+        poles.setMatrixAt(i, m);
+        q.setFromAxisAngle(up, l.ang);
+        const hx = l.x + Math.sin(l.ang) * 0.6, hz = l.z + Math.cos(l.ang) * 0.6;
+        m.compose(new THREE.Vector3(hx, 7, hz), q, s);
+        heads.setMatrixAt(i, m);
+        addCircle(l.x, l.z, 0.25);
+      });
+      poles.castShadow = true;
+      scene.add(poles);
+      scene.add(heads);
+
+      // Glow halos around every lamp head (bloom makes these sing)
+      const haloPos = [];
+      lamps.forEach(l => haloPos.push(l.x + Math.sin(l.ang) * 0.6, 6.85, l.z + Math.cos(l.ang) * 0.6));
+      const haloGeo = new THREE.BufferGeometry();
+      haloGeo.setAttribute('position', new THREE.Float32BufferAttribute(haloPos, 3));
+      scene.add(new THREE.Points(haloGeo, new THREE.PointsMaterial({
+        map: makeGlowTexture('rgba(255,240,210,1)', 'rgba(255,170,90,0.22)'), size: 3.4, sizeAttenuation: true,
+        transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
+      })));
+
+      // Pools of warm light on the ground under EVERY lamp. Only ~8 real lights
+      // exist, so these fake the rest of the street at near-zero cost.
+      const poolGeo = new THREE.PlaneGeometry(1, 1);
+      poolGeo.rotateX(-Math.PI / 2);
+      const pools = new THREE.InstancedMesh(poolGeo, new THREE.MeshBasicMaterial({
+        map: makeGlowTexture('rgba(255,190,120,0.5)', 'rgba(255,140,60,0.16)'), transparent: true, depthWrite: false,
+        blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4
+      }), lamps.length);
+      const pq = new THREE.Quaternion(), ps = new THREE.Vector3(16, 1, 16), pv = new THREE.Vector3();
+      lamps.forEach((l, i) => {
+        m.compose(pv.set(l.x + Math.sin(l.ang) * 1.6, 0.1, l.z + Math.cos(l.ang) * 1.6), pq, ps);
+        pools.setMatrixAt(i, m);
+      });
+      scene.add(pools);
+    }
+
+    // Pooled real point lights: re-assigned to the nearest lamps, faded in/out
+    // instead of teleporting (no more lighting "pops" as you walk)
+    const LAMP_INTENSITY = 1.9;
+    const lightPool = [];
+    for (let i = 0; i < 8; i++) {
+      const pl = new THREE.PointLight(0xffb066, 0, 28, 1.6);
+      pl.position.set(0, -100, 0);
+      scene.add(pl);
+      lightPool.push({ light: pl, lamp: -1, next: -1, level: 0 });
+    }
+
+    // ---------- Street trees (instanced, with per-tree colour + size variation) ----------
+    const trees = treeSpots.filter(t => canMoveTo(t.x, t.z, 1.4) && !onRoad(t.x, t.z, -1.2, -1)).slice(0, 900);
+    {
+      if (trees.length) {
+        const trunkGeo = new THREE.CylinderGeometry(0.11, 0.17, 3.2, 7);
+        trunkGeo.translate(0, 1.6, 0);
+        // lumpy canopy: three merged, noise-displaced icospheres with smooth normals
+        const blobs = [[0, 4.6, 0, 1.9], [0.9, 4.1, 0.4, 1.4], [-0.8, 4.3, -0.5, 1.5]];
+        const cPos = [], cNrm = [];
+        blobs.forEach(([bx, by, bz, br], bi2) => {
+          const ico = new THREE.IcosahedronGeometry(br, 2);
+          const pa = ico.attributes.position;
+          for (let i = 0; i < pa.count; i++) {
+            const x = pa.getX(i), y = pa.getY(i), z = pa.getZ(i);
+            const l = Math.hypot(x, y, z) || 1;
+            const k = 1 + (hash(Math.round(x * 50) * 7 + Math.round(y * 50) * 13 + Math.round(z * 50) * 17 + bi2) - 0.5) * 0.35;
+            cPos.push(bx + x * k, by + y * k * 0.85, bz + z * k);
+            cNrm.push(x / l, y / l, z / l);
+          }
+        });
+        const canopyGeo = new THREE.BufferGeometry();
+        canopyGeo.setAttribute('position', new THREE.Float32BufferAttribute(cPos, 3));
+        canopyGeo.setAttribute('normal', new THREE.Float32BufferAttribute(cNrm, 3));
+        const trunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshStandardMaterial({ color: 0x3b2c22, roughness: 0.95, envMapIntensity: 0.2 }), trees.length);
+        const canopies = new THREE.InstancedMesh(canopyGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, envMapIntensity: 0.2 }), trees.length);
+        const m = new THREE.Matrix4();
+        const tq = new THREE.Quaternion(), ts = new THREE.Vector3(), tv = new THREE.Vector3(), up2 = new THREE.Vector3(0, 1, 0), tc = new THREE.Color();
+        trees.forEach((t, i) => {
+          const sc = 0.8 + t.s * 0.5;
+          tq.setFromAxisAngle(up2, t.s * 6.28);
+          m.compose(tv.set(t.x, 0, t.z), tq, ts.set(sc, sc, sc));
+          trunks.setMatrixAt(i, m);
+          canopies.setMatrixAt(i, m);
+          tc.setHSL(0.24 + t.s * 0.08, 0.35 + t.s * 0.2, 0.16 + hash(t.x) * 0.08);
+          canopies.setColorAt(i, tc);
+          addCircle(t.x, t.z, 0.3);
+        });
+        trunks.castShadow = canopies.castShadow = true;
+        canopies.receiveShadow = true;
+        scene.add(trunks);
+        scene.add(canopies);
+      }
+    }
+
+    // ---------- Street signs (strictly outside all roads & intersections) ----------
+    const usedNames = {};
+    const signs = [];
+    signCandidates.forEach(c => {
+      if (signs.length > 36) return;
+      const prev = usedNames[c.name] || [];
+      if (prev.some(p => Math.hypot(p.x - c.x, p.z - c.z) < 150)) return;
+      if (!canMoveTo(c.x, c.z, 0.5) || onRoad(c.x, c.z, -1.0, -1)) return;
+      prev.push(c);
+      usedNames[c.name] = prev;
+      signs.push(c);
+    });
+    const signPoleMat = new THREE.MeshLambertMaterial({ color: 0x3a3d44 });
+    signs.forEach(c => {
+      const g = new THREE.Group();
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 3.4, 6), signPoleMat);
+      pole.position.y = 1.7;
+      g.add(pole);
+      const label = c.name.toUpperCase().replace(' STREET', ' ST').replace(' AVENUE', ' AVE').replace(' BOULEVARD', ' BLVD').replace(' EXPRESSWAY', ' EXPY');
+      const plate = new THREE.Mesh(
+        new THREE.PlaneGeometry(2.6, 0.62),
+        new THREE.MeshBasicMaterial({ map: makeLabelTexture(['TORONTO', label], { size: 54 }), side: THREE.DoubleSide })
+      );
+      plate.position.y = 3.2;
+      g.add(plate);
+      g.position.set(c.x, 0, c.z);
+      g.rotation.y = c.ang;
+      scene.add(g);
+      addCircle(c.x, c.z, 0.2);
+    });
 
     // 28 m, 2.54 m wide, 3.84 m high, five articulated sections (A-B-C-D-E). A, C and E sit on
     // skirted bogies; B and D are suspended between them. Single-ended: driver's cab at the
@@ -12414,7 +12474,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       [110, -240, 1.9], [-160, -80, 0.6], [-380, -20, 1.5], [680, -560, 0.2],
       [-520, -230, 2.4], [180, 120, 1.1]
     ];
-    greenPSpots.forEach(([gx, gz, gang]) => {
+    greenPSpots.forEach(([rawX, rawZ, gang]) => {
+      const [gx, gz] = snapOffRoad(rawX, rawZ, 1.2, 0.5);
       const g = new THREE.Group();
       const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 3.4, 8), new THREE.MeshLambertMaterial({ color: 0x1f2937 }));
       post.position.y = 1.7; g.add(post);
@@ -12434,7 +12495,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     const dockWheelGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.06, 12);
     dockWheelGeo.rotateZ(Math.PI / 2);
 
-    function buildBikeShareDock(x, z, rotY) {
+    function buildBikeShareDock(rawX, rawZ, rotY) {
+      const [x, z] = snapOffRoad(rawX, rawZ, 2.0, 1.2);
       const group = new THREE.Group();
 
       // Ground dock station plate
@@ -12469,7 +12531,6 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
 
       // Rotate oriented bounding box [-0.9, -5.0] to [0.9, 5.0] by rotY
       const cosD = Math.cos(rotY), sinD = Math.sin(rotY);
-      const rotDL = (lx, lz) => [x + lx * cosD + lz * sinD, z - lx * sinR ? (z - lx * sinD + lz * cosD) : (z - lx * sinD + lz * cosD)];
       const pts = [
         [x + (-0.9) * cosD + (-5.0) * sinD, z - (-0.9) * sinD + (-5.0) * cosD],
         [x + (0.9) * cosD + (-5.0) * sinD, z - (0.9) * sinD + (-5.0) * cosD],
@@ -12484,7 +12545,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     buildBikeShareDock(715, -485, 0.4); // Berczy Park
 
     // ---------- 6. PATH Underground Entrance Pavilions (Iconic 4-colour sign) ----------
-    function buildPathEntrance(x, z, rotY) {
+    function buildPathEntrance(rawX, rawZ, rotY) {
+      const [x, z] = snapOffRoad(rawX, rawZ, 2.5, 2.2);
       const pGroup = new THREE.Group();
       const frameMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.5, metalness: 0.6 });
       const glassMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.45, roughness: 0.1, metalness: 0.5 });
@@ -12550,7 +12612,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     ];
     const binBlue = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.5 });
     const binGrey = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.6 });
-    binSpots.forEach(([bx, bz]) => {
+    binSpots.forEach(([rawX, rawZ]) => {
+      const [bx, bz] = snapOffRoad(rawX, rawZ, 1.2, 0.6);
       const g = new THREE.Group();
       const bSide = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.1, 0.5), binBlue);
       bSide.position.set(-0.36, 0.55, 0); g.add(bSide);
@@ -12568,7 +12631,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       [-50, -420], [-48, -418], [-46, -416],
       [120, -110], [122, -108]
     ];
-    pylonSpots.forEach(([px, pz]) => {
+    pylonSpots.forEach(([rawX, rawZ]) => {
+      const [px, pz] = snapOffRoad(rawX, rawZ, 0.8, 0.4);
       const pGroup = new THREE.Group();
       const base = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.05, 0.4), pylonBlack);
       base.position.y = 0.025; pGroup.add(base);
@@ -15218,6 +15282,12 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       isInsidePeaceZone,
       isInsideTrench,
       isOnBridge,
+      isOnRoad: (x, z, pad = 0.8) => onRoad(x, z, -pad, -1),
+      streetFurniture: {
+        lamps,
+        trees,
+        signs
+      },
       pushOutOfTrench,
       trenchY: TRENCH_Y,
       getUsrcZ,
@@ -15230,12 +15300,12 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       islandFerry: {
         ferryMesh: cruisingFerry,
         airportFerryMesh: airportFerryMesh,
-        mainlandDock: { x: 726, y: 0.5, z: 330, yaw: 0.05, boardX: 712, boardZ: 318 },
-        islandDock: { x: 0, y: 0.55, z: 1175, yaw: 0, boardX: 0, boardZ: 1200 },
-        hanlansDock: { x: -720, y: 0.55, z: 1062, yaw: 0, boardX: -720, boardZ: 1090 },
-        wardsDock: { x: 1140, y: 0.55, z: 1148, yaw: 0, boardX: 1140, boardZ: 1180 },
+        mainlandDock: { x: 726, y: 0.5, z: 330, yaw: 0, boardX: 712, boardZ: 318 },
+        islandDock: { x: 0, y: 0.55, z: 1146, yaw: Math.PI, boardX: 0, boardZ: 1192 },
+        hanlansDock: { x: -720, y: 0.55, z: 1036, yaw: Math.PI, boardX: -720, boardZ: 1090 },
+        wardsDock: { x: 1140, y: 0.55, z: 1126, yaw: Math.PI, boardX: 1140, boardZ: 1180 },
         airportMainlandDock: { x: -1060, y: 0.55, z: 720, yaw: 0, boardX: -1060, boardZ: 702 },
-        airportIslandDock: { x: -1060, y: 0.55, z: 842, yaw: 0, boardX: -1060, boardZ: 870 }
+        airportIslandDock: { x: -1060, y: 0.55, z: 842, yaw: Math.PI, boardX: -1060, boardZ: 870 }
       },
       islandLocations,
       centreIslandLandmarks: {
@@ -15336,6 +15406,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     const GROUND_Y = 0.55; // walking height on the islands
     const WATER_Y = -0.65; // matches city.js Toronto Inner Harbour water level
     let renderedOsmTowers = 0;
+    const flowerBeds = [];
 
     // ------------------------------------------------------------------------
     // Deterministic noise for procedural terrain and vegetation
@@ -16195,9 +16266,9 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           const nx = -(b[1] - a[1]) / L, nz = (b[0] - a[0]) / L;
           let t = carry;
           while (t < L) {
-            const x = a[0] + (b[0] - a[0]) * t / L + nx * side * (p.w / 2 + 0.8);
-            const z = a[1] + (b[1] - a[1]) * t / L + nz * side * (p.w / 2 + 0.8);
-            if (landField(x, z) > 2 && !getIslandBridgeAt(x, z, 2)) lamps.push([x, z]);
+            const x = a[0] + (b[0] - a[0]) * t / L + nx * side * (p.w / 2 + 1.2);
+            const z = a[1] + (b[1] - a[1]) * t / L + nz * side * (p.w / 2 + 1.2);
+            if (landField(x, z) > 2 && !getIslandBridgeAt(x, z, 2) && !nearPath(x, z, 0.8)) lamps.push([x, z]);
             side = -side;
             t += 34;
           }
@@ -16292,21 +16363,21 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     {
       const conGrp = new THREE.Group();
 
-      // --- 1. PIZZA PIZZA KIOSK at (12, Z(48)) ---
+      // --- 1. PIZZA PIZZA KIOSK at (7, Z(48)) ---
       const ppBuilding = new THREE.Mesh(
         new THREE.BoxGeometry(8.5, 3.8, 6.0),
         new THREE.MeshStandardMaterial({ color: 0x9a3412, roughness: 0.6 })
       );
-      ppBuilding.position.set(12, 1.9, Z(48));
+      ppBuilding.position.set(7, 1.9, Z(48));
       conGrp.add(ppBuilding);
-      rectOb(7.5, 16.5, Z(45), Z(51)); // solid interior
+      rectOb(2.5, 11.5, Z(45), Z(51)); // solid interior
 
       // Service counter & canopy awning
       const ppAwning = new THREE.Mesh(
         new THREE.BoxGeometry(9.0, 0.4, 2.2),
         new THREE.MeshStandardMaterial({ color: 0xea580c, roughness: 0.4 })
       );
-      ppAwning.position.set(12, 3.4, Z(44.8));
+      ppAwning.position.set(7, 3.4, Z(44.8));
       conGrp.add(ppAwning);
 
       const ppSign = makeSign(
@@ -16314,37 +16385,37 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         8.2, 1.8,
         { bg: '#ea580c', fg: '#ffffff', borderColor: '#facc15' }
       );
-      ppSign.position.set(12, 4.4, Z(44.8));
+      ppSign.position.set(7, 4.4, Z(44.8));
       conGrp.add(ppSign);
 
-      // Outdoor dining patio tables with orange umbrellas
-      [Z(44), Z(52)].forEach((oz, ti) => {
+      // Outdoor dining patio tables with orange umbrellas (clear of curving path)
+      [[11.8, Z(43)], [12.8, Z(52)]].forEach(([tx, oz], ti) => {
         const tbl = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.8, 12), woodMat);
-        tbl.position.set(20, GROUND_Y + 0.4, oz);
+        tbl.position.set(tx, GROUND_Y + 0.4, oz);
         conGrp.add(tbl);
-        circOb(20, oz, 1.1);
+        circOb(tx, oz, 1.1);
         const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.4, 6), metalMat);
-        pole.position.set(20, GROUND_Y + 1.2, oz);
+        pole.position.set(tx, GROUND_Y + 1.2, oz);
         conGrp.add(pole);
         const umb = new THREE.Mesh(new THREE.ConeGeometry(1.5, 0.6, 10), new THREE.MeshStandardMaterial({ color: 0xf97316, roughness: 0.5 }));
-        umb.position.set(20, GROUND_Y + 2.3, oz);
+        umb.position.set(tx, GROUND_Y + 2.3, oz);
         conGrp.add(umb);
       });
 
-      // --- 2. SUBWAY KIOSK at (12, Z(66)) ---
+      // --- 2. SUBWAY KIOSK at (10, Z(66)) ---
       const subBuilding = new THREE.Mesh(
         new THREE.BoxGeometry(8.5, 3.8, 6.0),
         new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.6 })
       );
-      subBuilding.position.set(12, 1.9, Z(66));
+      subBuilding.position.set(10, 1.9, Z(66));
       conGrp.add(subBuilding);
-      rectOb(7.5, 16.5, Z(63), Z(69)); // solid interior
+      rectOb(5.5, 14.5, Z(63), Z(69)); // solid interior
 
       const subAwning = new THREE.Mesh(
         new THREE.BoxGeometry(9.0, 0.4, 2.2),
         new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.4 })
       );
-      subAwning.position.set(12, 3.4, Z(62.8));
+      subAwning.position.set(10, 3.4, Z(62.8));
       conGrp.add(subAwning);
 
       const subSign = makeSign(
@@ -16352,20 +16423,20 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         8.2, 1.8,
         { bg: '#15803d', fg: '#facc15', borderColor: '#ffffff' }
       );
-      subSign.position.set(12, 4.4, Z(62.8));
+      subSign.position.set(10, 4.4, Z(62.8));
       conGrp.add(subSign);
 
-      // Outdoor dining patio tables with yellow & green umbrellas
-      [Z(62), Z(70)].forEach((oz, ti) => {
+      // Outdoor dining patio tables with yellow & green umbrellas (clear of curving path)
+      [[16.5, Z(62)], [17.2, Z(70)]].forEach(([tx, oz], ti) => {
         const tbl = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.8, 12), woodMat);
-        tbl.position.set(20, GROUND_Y + 0.4, oz);
+        tbl.position.set(tx, GROUND_Y + 0.4, oz);
         conGrp.add(tbl);
-        circOb(20, oz, 1.1);
+        circOb(tx, oz, 1.1);
         const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.4, 6), metalMat);
-        pole.position.set(20, GROUND_Y + 1.2, oz);
+        pole.position.set(tx, GROUND_Y + 1.2, oz);
         conGrp.add(pole);
         const umb = new THREE.Mesh(new THREE.ConeGeometry(1.5, 0.6, 10), new THREE.MeshStandardMaterial({ color: ti === 0 ? 0xfacc15 : 0x16a34a, roughness: 0.5 }));
-        umb.position.set(20, GROUND_Y + 2.3, oz);
+        umb.position.set(tx, GROUND_Y + 2.3, oz);
         conGrp.add(umb);
       });
 
@@ -16526,20 +16597,71 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       const flowerCols = [0xef4444, 0xfacc15, 0xa855f7, 0xf472b6, 0xffffff, 0xfb923c, 0x3b82f6];
       const blooms = [];
 
-      // 1. North Avenue of the Islands (from Dock z=Z(24) to Manitou Bridge z=Z(216))
-      // Flanked by park flowerbeds, benches, and Victorian cast-iron lampposts
-      for (let fz = Z(24); fz <= Z(216); fz += 24) {
-        [-8.5, 8.5].forEach((fx, fi) => {
-          const bed = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.45, 12), stoneMat);
-          bed.position.set(fx, GROUND_Y + 0.1, fz);
-          avg.add(bed);
-          rectOb(fx - 1.6, fx + 1.6, fz - 6, fz + 6);
-          const col = flowerCols[(fi + Math.round(fz / 24)) % flowerCols.length];
-          for (let fl = -5; fl <= 5; fl += 0.9) {
-            for (let w = -1.0; w <= 1.0; w += 0.7) blooms.push([fx + w, fz + fl, col]);
+      // 1. North Island Promenade & Avenue of the Islands Flowerbeds (aligned parallel to curving paths)
+      function placeAlignedBedsAlongPath(pts, pathW, spacing, startPad, endPad, seedBase) {
+        let dist = 0;
+        let nextBed = startPad;
+        let bedIdx = seedBase || 0;
+        let totalLen = 0;
+        for (let i = 0; i < pts.length - 1; i++) {
+          totalLen += Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
+        }
+        for (let i = 0; i < pts.length - 1; i++) {
+          const [ax, az] = pts[i], [bx, bz] = pts[i + 1];
+          const dx = bx - ax, dz = bz - az;
+          const segLen = Math.hypot(dx, dz);
+          if (segLen < 0.5) continue;
+          const tx = dx / segLen, tz = dz / segLen;
+          const nx = -tz, nz = tx;
+          const ang = Math.atan2(tx, tz);
+          while (nextBed <= dist + segLen && nextBed <= totalLen - endPad) {
+            const s = nextBed - dist;
+            const px = ax + tx * s, pz = az + tz * s;
+            const off = pathW / 2 + 3.2;
+            [-1, 1].forEach((side, si) => {
+              const fx = px + nx * off * side;
+              const fz = pz + nz * off * side;
+              // Ensure entire 8m x 2.8m planter box is clear of all paths, bridges, water & concessions
+              if (
+                nearPath(fx, fz, 1.9) ||
+                nearPath(fx + tx * 4.0, fz + tz * 4.0, 1.9) ||
+                nearPath(fx - tx * 4.0, fz - tz * 4.0, 1.9) ||
+                nearBridge(fx, fz, 7.0) ||
+                landField(fx, fz) < 3.5 ||
+                Math.hypot(fx - 12, fz - Z(48)) < 11.5 ||
+                Math.hypot(fx - 12, fz - Z(66)) < 11.5 ||
+                Math.hypot(fx - 12, fz - Z(88)) < 12.5 ||
+                Math.hypot(fx - 65, fz - Z(65)) < 16.0 ||
+                Math.hypot(fx, fz - Z(310)) < 19.0
+              ) {
+                return;
+              }
+              const bed = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.45, 8.0), stoneMat);
+              bed.position.set(fx, GROUND_Y + 0.1, fz);
+              bed.rotation.y = ang;
+              avg.add(bed);
+              flowerBeds.push({ x: fx, z: fz, rot: ang, tx, tz, w: 2.8, d: 8.0 });
+              circOb(fx - tx * 2.4, fz - tz * 2.4, 1.45);
+              circOb(fx, fz, 1.45);
+              circOb(fx + tx * 2.4, fz + tz * 2.4, 1.45);
+              const col = flowerCols[(bedIdx + si) % flowerCols.length];
+              for (let fl = -3.3; fl <= 3.3; fl += 0.82) {
+                for (let w = -0.85; w <= 0.85; w += 0.56) {
+                  blooms.push([fx + nx * w + tx * fl, fz + nz * w + tz * fl, col]);
+                }
+              }
+            });
+            bedIdx++;
+            nextBed += spacing;
           }
-        });
+          dist += segLen;
+        }
       }
+      // North Island Promenade (Dock to North Arrival Bridge) & Avenue of the Islands (North Bridge to Manitou Bridge)
+      placeAlignedBedsAlongPath(PATHS[0].pts, PATHS[0].w, 24, 22, 12, 0);
+      placeAlignedBedsAlongPath([[28, Z(158)], [12, Z(195)], [0, Z(230)]], 10, 24, 12, 8, 5);
+      // South Avenue of the Islands flanking the Reflecting Pools (Z(345) to Z(420))
+      placeAlignedBedsAlongPath([[0, Z(345)], [0, Z(420)]], 10, 22, 8, 8, 9);
 
       // 2. Grand Fountain Plaza (Immediately south of Manitou Bridge, at x = 0, z = Z(310) = 5310)
       const fz = Z(310);
@@ -16692,34 +16814,39 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           }
         }
 
-        // Flanking Formal Parterre Gardens & Flowerbeds on outer side of each reflecting pool
-        const gardenOuterX = poolX + (pIdx === 0 ? -12.5 : 12.5);
-        for (let gz = pZ0 + 5; gz <= pZ1 - 5; gz += 16) {
-          const gBed = new THREE.Mesh(new THREE.BoxGeometry(4.5, 0.35, 12), stoneMat);
-          gBed.position.set(gardenOuterX, GROUND_Y + 0.1, gz);
-          avg.add(gBed);
-          rectOb(gardenOuterX - 2.25, gardenOuterX + 2.25, gz - 6, gz + 6);
+        // Flanking Formal Parterre Gardens & Flowerbeds on outer side of the East Garden Promenade (x = +36, w = 4);
+        // on the West side (pIdx === 0), the William Meany Hedge Maze occupies x = -101..-40 immediately west of the promenade
+        if (pIdx === 1) {
+          const gardenOuterX = poolX + 16.0;
+          for (let gz = pZ0 + 5; gz <= pZ1 - 5; gz += 16) {
+            if (nearPath(gardenOuterX, gz, 2.2)) continue;
+            const gBed = new THREE.Mesh(new THREE.BoxGeometry(4.0, 0.35, 11), stoneMat);
+            gBed.position.set(gardenOuterX, GROUND_Y + 0.1, gz);
+            avg.add(gBed);
+            flowerBeds.push({ x: gardenOuterX, z: gz, rot: 0, tx: 0, tz: 1, w: 4.0, d: 11.0 });
+            rectOb(gardenOuterX - 2.0, gardenOuterX + 2.0, gz - 5.5, gz + 5.5);
 
-          const col = flowerCols[Math.floor(rnd() * flowerCols.length)];
-          for (let fl = -5; fl <= 5; fl += 0.8) {
-            for (let w = -1.6; w <= 1.6; w += 0.8) blooms.push([gardenOuterX + w, gz + fl, col]);
+            const col = flowerCols[Math.floor(rnd() * flowerCols.length)];
+            for (let fl = -4.5; fl <= 4.5; fl += 0.8) {
+              for (let w = -1.4; w <= 1.4; w += 0.7) blooms.push([gardenOuterX + w, gz + fl, col]);
+            }
+
+            // Ornamental boxwood hedge borders
+            const hBorder = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.65, 12), hedgeMat);
+            hBorder.position.set(gardenOuterX + 2.35, GROUND_Y + 0.32, gz);
+            avg.add(hBorder);
           }
-
-          // Ornamental boxwood hedge borders
-          const hBorder = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.65, 13), hedgeMat);
-          hBorder.position.set(gardenOuterX + (pIdx === 0 ? -2.6 : 2.6), GROUND_Y + 0.32, gz);
-          avg.add(hBorder);
         }
 
-        // Benches along the garden promenades
+        // Benches along the garden promenades (parallel to the north-south paths and clear of the x = +/-36 walkways)
         for (let bz = pZ0 + 12; bz <= pZ1 - 12; bz += 22) {
-          // Inner bench facing pool
-          const b1 = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.45, 0.7), darkWoodMat);
-          b1.position.set(poolX + (pIdx === 0 ? 8.5 : -8.5), GROUND_Y + 0.45, bz);
+          // Inner bench facing pool (at x = +/-16.5, between Avenue path and pool rim)
+          const b1 = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.45, 2.0), darkWoodMat);
+          b1.position.set(poolX + (pIdx === 0 ? 9.5 : -9.5), GROUND_Y + 0.45, bz);
           avg.add(b1);
-          // Outer bench facing garden
-          const b2 = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.45, 0.7), darkWoodMat);
-          b2.position.set(poolX + (pIdx === 0 ? -8.5 : 8.5), GROUND_Y + 0.45, bz);
+          // Outer bench facing pool (at x = +/-38.8, just outside the x = +/-36 promenade)
+          const b2 = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.45, 2.0), darkWoodMat);
+          b2.position.set(poolX + (pIdx === 0 ? -12.8 : 12.8), GROUND_Y + 0.45, bz);
           avg.add(b2);
         }
 
@@ -16749,19 +16876,19 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       const hmg = new THREE.Group();
       const hx = -65, hz = Z(385);
 
-      // Earth-toned packed dirt ground so green cedar hedges stand out sharply
-      const mazeGround = new THREE.Mesh(new THREE.BoxGeometry(76, 0.08, 76), dirtMat);
-      mazeGround.position.set(hx, 0.57, hz);
+      // Earth-toned packed dirt ground so green cedar hedges stand out sharply (x = -102..-39, clear of West Garden Promenade at x = -36)
+      const mazeGround = new THREE.Mesh(new THREE.BoxGeometry(63, 0.08, 76), dirtMat);
+      mazeGround.position.set(hx - 5.5, 0.57, hz);
       mazeGround.receiveShadow = true;
       hmg.add(mazeGround);
 
-      // Entrance Gate Arch & Commemorative Plaque Sign facing east towards Avenue path
+      // Entrance Gate Arch & Commemorative Plaque Sign facing east towards West Garden Promenade & Avenue
       const mSign = makeSign(
         ['WILLIAM MEANY HEDGE MAZE', 'HISTORIC 1888 SCHOOL BELL • DONATED 2015'],
         18, 2.4,
         { bg: '#14532d', fg: '#bbf7d0', borderColor: '#22c55e' }
       );
-      mSign.position.set(hx + 37, 3.8, hz);
+      mSign.position.set(hx + 26, 3.8, hz);
       mSign.rotation.y = -Math.PI / 2;
       hmg.add(mSign);
 
@@ -16772,25 +16899,25 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         rectOb(hx + wx - ww / 2, hx + wx + ww / 2, hz + wz - wd / 2, hz + wz + wd / 2);
       }
 
-      // Outer perimeter hedge walls with entrance opening facing EAST towards Avenue
-      addMazeWall(36, -20, 1.4, 32);
-      addMazeWall(36, 20, 1.4, 32);
+      // Outer perimeter hedge walls with entrance opening at x = -40 (wx = +25) facing EAST towards West Garden Promenade
+      addMazeWall(25, -20, 1.4, 32);
+      addMazeWall(25, 20, 1.4, 32);
       addMazeWall(-36, 0, 1.4, 72);
-      addMazeWall(0, -36, 72, 1.4);
-      addMazeWall(0, 36, 72, 1.4);
+      addMazeWall(-5.5, -36, 61, 1.4);
+      addMazeWall(-5.5, 36, 61, 1.4);
 
       // Concentric inner hedge rings & labyrinth turns
-      addMazeWall(-18, -24, 28, 1.2);
-      addMazeWall(18, -24, 28, 1.2);
+      addMazeWall(-18, -24, 20, 1.2);
+      addMazeWall(11, -24, 16, 1.2);
       addMazeWall(-26, 0, 1.2, 46);
-      addMazeWall(26, 0, 1.2, 46);
-      addMazeWall(0, 24, 52, 1.2);
+      addMazeWall(18, 0, 1.2, 46);
+      addMazeWall(-4, 24, 44, 1.2);
 
-      addMazeWall(-12, -12, 18, 1.2);
-      addMazeWall(12, -12, 18, 1.2);
+      addMazeWall(-12, -12, 14, 1.2);
+      addMazeWall(8, -12, 12, 1.2);
       addMazeWall(-16, 6, 1.2, 28);
-      addMazeWall(16, 6, 1.2, 28);
-      addMazeWall(0, 14, 32, 1.2);
+      addMazeWall(13, 6, 1.2, 28);
+      addMazeWall(-1.5, 14, 29, 1.2);
 
       // Centerpiece: Historic 1888 Toronto Island School Bell Arbor & Bell
       const bellArbor = new THREE.Group();
@@ -18833,9 +18960,9 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       });
     }
 
-    // Animated Toronto Harbour Ferry
+    // Animated Toronto Harbour Ferry (only in standalone island viewer; main game uses city.islandFerry.ferryMesh)
     let ferry = null;
-    {
+    if (!(typeof window !== 'undefined' && window.buildTorontoCity)) {
       ferry = new THREE.Group();
       const hull = new THREE.Mesh(new THREE.BoxGeometry(10, 3.2, 36), new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.4 }));
       hull.position.y = 1.2;
@@ -19348,6 +19475,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       canMoveTo,
       floorAt,
       getNeighborhood,
+      nearPath,
+      flowerBeds,
       drawMinimap,
       update,
       landmarks: {
@@ -19705,12 +19834,26 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     const CYCLE = 42.0;
 
     signalIntersections.forEach((inter, interIdx) => {
+      // Only signalize true intersections (3+ approaches or perpendicular East-West & North-South streets meeting)
+      const hasEW = inter.approaches.some(a => Math.abs(a.fx) > Math.abs(a.fz));
+      const hasNS = inter.approaches.some(a => Math.abs(a.fx) <= Math.abs(a.fz));
+      if (inter.approaches.length < 3 && !(hasEW && hasNS)) return;
+
       const offset = (Math.abs(inter.x * 0.08 + inter.z * 0.12) % CYCLE);
       inter.offset = offset;
       inter.approaches.forEach(a => {
         // Phase 0 = East-West, Phase 1 = North-South
         const isEastWest = Math.abs(a.fx) > Math.abs(a.fz);
         const phase = isEastWest ? 0 : 1;
+        let crossHalfW = 5.5;
+        inter.approaches.forEach(b => {
+          if (b !== a && (Math.abs(b.fx) > Math.abs(b.fz)) !== isEastWest) {
+            crossHalfW = Math.max(crossHalfW, (b.w || 10) / 2);
+          }
+        });
+        const cwDist = Math.max(4.5, crossHalfW + 1.8);
+        const stopDist = cwDist + 2.6;
+
         const sig = {
           id: signals.length,
           interIdx,
@@ -19719,23 +19862,26 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           isEastWest,
           x: a.x, z: a.z,
           fx: a.fx, fz: a.fz,
+          approach: a,
+          cwDist,
+          stopDist,
           state: 'red',
           ped: 'dontwalk',
           streetName: a.name
         };
         signals.push(sig);
         a.signal = sig;
-        a.stopDist = 5.2;
+        a.stopDist = stopDist;
         roadApproachMap.set(a.r.id + ':' + a.atStart, a);
 
-        // Draw Solid Stop Bar across approaching roadway
+        // Draw Solid Stop Bar across approaching roadway outside the cross-street
         const y = (a.r.y || 0.05) + 0.02;
         const rx = -a.fz, rz = a.fx;
-        const stopCx = a.x - a.fx * 5.2, stopCz = a.z - a.fz * 5.2;
+        const stopCx = a.x - a.fx * stopDist, stopCz = a.z - a.fz * stopDist;
         addOrientedBar(stopCx, stopCz, y, a.w * 0.9, 0.55, a.fx, a.fz);
 
         // Draw Continental Zebra Crosswalk Stripes
-        const cwCx = a.x - a.fx * 2.8, cwCz = a.z - a.fz * 2.8;
+        const cwCx = a.x - a.fx * cwDist, cwCz = a.z - a.fz * cwDist;
         const halfRoad = a.w / 2;
         for (let s = -halfRoad + 0.6; s <= halfRoad - 0.6; s += 0.85) {
           addOrientedBar(cwCx + rx * s, cwCz + rz * s, y, 0.48, 3.2, a.fx, a.fz);
@@ -19796,25 +19942,48 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     const pedGeo = new THREE.PlaneGeometry(0.36, 0.36);
     const pedLensMesh = new THREE.InstancedMesh(pedGeo, new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false, side: THREE.DoubleSide }), Math.max(1, signals.length));
 
-    const pMat4 = new THREE.Matrix4(), pQuat = new THREE.Quaternion(), pPos = new THREE.Vector3(), pScale = new THREE.Vector3(1, 1, 1);
+    const pMat4 = new THREE.Matrix4(), pQuat = new THREE.Quaternion(), pPos = new THREE.Vector3(), pScale = new THREE.Vector3(1, 1, 1), zeroScale = new THREE.Vector3(0, 0, 0);
     const upVec = new THREE.Vector3(0, 1, 0);
 
     signals.forEach((sig, i) => {
       const rx = -sig.fz, rz = sig.fx;
-      const poleX = sig.x - sig.fx * 5.2 + rx * (sig.approach ? (sig.approach.w / 2 + 1.8) : 6.2);
-      const poleZ = sig.z - sig.fz * 5.2 + rz * (sig.approach ? (sig.approach.w / 2 + 1.8) : 6.2);
+      const baseBack = (sig.stopDist || 7.5) - 1.2;
+      const baseSide = (sig.approach ? (sig.approach.w / 2 + 1.8) : 7.5);
+      let poleX = sig.x - sig.fx * baseBack + rx * baseSide;
+      let poleZ = sig.z - sig.fz * baseBack + rz * baseSide;
+      let validPole = true;
+
+      if (city && city.isOnRoad) {
+        const isBad = (x, z) => city.isOnRoad(x, z, 0.9) || (city.canMoveTo && !city.canMoveTo(x, z, 0.35));
+        if (isBad(poleX, poleZ)) {
+          validPole = false;
+          for (let bOff = 0; bOff <= 14 && !validPole; bOff += 1.6) {
+            for (let sOff = 0; sOff <= 7.2 && !validPole; sOff += 1.2) {
+              const cx = sig.x - sig.fx * (baseBack + bOff) + rx * (baseSide + sOff);
+              const cz = sig.z - sig.fz * (baseBack + bOff) + rz * (baseSide + sOff);
+              if (!isBad(cx, cz)) {
+                poleX = cx;
+                poleZ = cz;
+                validPole = true;
+              }
+            }
+          }
+        }
+      }
+
       const heading = Math.atan2(sig.fx, sig.fz);
       pQuat.setFromAxisAngle(upVec, heading);
+      const useScale = validPole ? pScale : zeroScale;
 
-      pMat4.compose(pPos.set(poleX, 0, poleZ), pQuat, pScale);
+      pMat4.compose(pPos.set(poleX, 0, poleZ), pQuat, useScale);
       polesMesh.setMatrixAt(i, pMat4);
 
       const hx = poleX - rx * 5.4, hz = poleZ - rz * 5.4;
-      pMat4.compose(pPos.set(hx, 6.4, hz), pQuat, pScale); redLensMesh.setMatrixAt(i, pMat4);
-      pMat4.compose(pPos.set(hx, 5.8, hz), pQuat, pScale); yellowLensMesh.setMatrixAt(i, pMat4);
-      pMat4.compose(pPos.set(hx, 5.2, hz), pQuat, pScale); greenLensMesh.setMatrixAt(i, pMat4);
+      pMat4.compose(pPos.set(hx, 6.4, hz), pQuat, useScale); redLensMesh.setMatrixAt(i, pMat4);
+      pMat4.compose(pPos.set(hx, 5.8, hz), pQuat, useScale); yellowLensMesh.setMatrixAt(i, pMat4);
+      pMat4.compose(pPos.set(hx, 5.2, hz), pQuat, useScale); greenLensMesh.setMatrixAt(i, pMat4);
 
-      pMat4.compose(pPos.set(poleX, 2.7, poleZ - 0.1), pQuat, pScale);
+      pMat4.compose(pPos.set(poleX, 2.7, poleZ - 0.1), pQuat, useScale);
       pedLensMesh.setMatrixAt(i, pMat4);
     });
 
@@ -26171,7 +26340,7 @@ const FERRY_DOCKS = [
     boardZ: 318,
     slipX: 726,
     slipZ: 330,
-    yaw: Math.PI,
+    yaw: 0,
     onIsland: false
   },
   {
@@ -26180,10 +26349,10 @@ const FERRY_DOCKS = [
     name: 'Centre Island Dock',
     sub: 'Avenue of the Islands · Centreville & Maze',
     boardX: 0,
-    boardZ: 1200,
+    boardZ: 1192,
     slipX: 0,
-    slipZ: 1175,
-    yaw: 0,
+    slipZ: 1146,
+    yaw: Math.PI,
     onIsland: true
   },
   {
@@ -26194,8 +26363,8 @@ const FERRY_DOCKS = [
     boardX: -720,
     boardZ: 1090,
     slipX: -720,
-    slipZ: 1062,
-    yaw: 0,
+    slipZ: 1036,
+    yaw: Math.PI,
     onIsland: true
   },
   {
@@ -26206,8 +26375,8 @@ const FERRY_DOCKS = [
     boardX: 1140,
     boardZ: 1180,
     slipX: 1140,
-    slipZ: 1148,
-    yaw: 0,
+    slipZ: 1126,
+    yaw: Math.PI,
     onIsland: true
   }
 ];
@@ -26311,10 +26480,10 @@ const FERRY_WATER_Y = -0.65;
 // Default Mainland <-> Centre Island route
 const FERRY_WAYPOINTS = [
   { x: 726, z: 330 },
-  { x: 710, z: 520 },
-  { x: 420, z: 760 },
-  { x: 140, z: 980 },
-  { x: 0, z: 1175 }
+  { x: 550, z: 530 },
+  { x: 360, z: 740 },
+  { x: 170, z: 950 },
+  { x: 0, z: 1146 }
 ];
 
 function getFerryRouteWaypoints(fromId, toId) {
@@ -26337,24 +26506,24 @@ function getFerryRouteWaypoints(fromId, toId) {
   const routesFromMainland = {
     centre: [
       { x: 726, z: 330 },
-      { x: 710, z: 520 },
-      { x: 420, z: 760 },
-      { x: 140, z: 980 },
-      { x: 0, z: 1175 }
+      { x: 550, z: 530 },
+      { x: 360, z: 740 },
+      { x: 170, z: 950 },
+      { x: 0, z: 1146 }
     ],
     hanlans: [
       { x: 726, z: 330 },
-      { x: 660, z: 540 },
-      { x: 160, z: 760 },
-      { x: -340, z: 920 },
-      { x: -720, z: 1062 }
+      { x: 380, z: 490 },
+      { x: -40, z: 675 },
+      { x: -430, z: 865 },
+      { x: -720, z: 1036 }
     ],
     wards: [
       { x: 726, z: 330 },
-      { x: 760, z: 520 },
-      { x: 910, z: 740 },
-      { x: 1055, z: 955 },
-      { x: 1140, z: 1148 }
+      { x: 840, z: 520 },
+      { x: 960, z: 725 },
+      { x: 1065, z: 930 },
+      { x: 1140, z: 1126 }
     ]
   };
   if (fromId === 'mainland' && routesFromMainland[toId]) {
@@ -26369,9 +26538,9 @@ function getFerryRouteWaypoints(fromId, toId) {
   const midX = (fromDock.slipX + toDock.slipX) / 2;
   return [
     { x: fromDock.slipX, z: fromDock.slipZ },
-    { x: fromDock.slipX * 0.7 + midX * 0.3, z: 980 },
-    { x: midX, z: 950 },
-    { x: toDock.slipX * 0.7 + midX * 0.3, z: 980 },
+    { x: fromDock.slipX * 0.72 + midX * 0.28, z: 990 },
+    { x: midX, z: 955 },
+    { x: toDock.slipX * 0.72 + midX * 0.28, z: 990 },
     { x: toDock.slipX, z: toDock.slipZ }
   ];
 }
@@ -26456,15 +26625,19 @@ function startFerryRide(dir, explicitFromId) {
   if (scene.fog) scene.fog.density = 0.00065;
   audio.playFerryHorn();
 
-  // Face forward at initial boarding, but player can freely look around in 360° during the entire voyage!
+  // Face forward over the bow at initial boarding, while allowing full 360° free look during the voyage!
   const curPos = evalFerrySpline(0, dir);
-  const nxtPos = evalFerrySpline(0.015, dir);
+  const nxtPos = evalFerrySpline(0.02, dir);
   const initialHeading = Math.atan2(nxtPos.x - curPos.x, nxtPos.z - curPos.z);
-  player.yaw = initialHeading;
-  player.pitch = 0;
+  ferryController.lastHeading = initialHeading;
+  ferryController.heading = initialHeading;
+  // Camera forward vector at yaw is (-sin(yaw), 0, -cos(yaw)), so yaw = heading + Math.PI faces forward along (dx, dz)!
+  const forwardYaw = initialHeading + Math.PI;
+  player.yaw = forwardYaw;
+  player.pitch = -0.04;
   camera.rotation.order = 'YXZ';
-  camera.rotation.y = initialHeading;
-  camera.rotation.x = 0;
+  camera.rotation.y = forwardYaw;
+  camera.rotation.x = player.pitch;
 
   let msg = '🚢 TORONTO ISLAND FERRY: DEPARTING...';
   if (isAirport) {
@@ -26497,8 +26670,18 @@ function updateFerry(dt) {
   const easeProg = prog * prog * (3 - 2 * prog);
 
   const curPos = evalFerrySpline(easeProg, ferryController.dir);
-  const nextPos = evalFerrySpline(Math.min(1, easeProg + 0.01), ferryController.dir);
-  const heading = Math.atan2(nextPos.x - curPos.x, nextPos.z - curPos.z);
+  const nextPos = evalFerrySpline(Math.min(1, easeProg + 0.015), ferryController.dir);
+  const prevPos = evalFerrySpline(Math.max(0, easeProg - 0.015), ferryController.dir);
+  const heading = Math.atan2(nextPos.x - prevPos.x, nextPos.z - prevPos.z);
+
+  if (ferryController.lastHeading !== undefined) {
+    let dHeading = heading - ferryController.lastHeading;
+    while (dHeading > Math.PI) dHeading -= Math.PI * 2;
+    while (dHeading < -Math.PI) dHeading += Math.PI * 2;
+    player.yaw += dHeading;
+  }
+  ferryController.lastHeading = heading;
+  ferryController.heading = heading;
 
   const fx = curPos.x;
   const fz = curPos.z;
@@ -26508,9 +26691,8 @@ function updateFerry(dt) {
   ferry.position.set(fx, waterY + bob, fz);
   ferry.rotation.y = heading;
 
-  // Keep player on the forward observation deck
-  // Notice: do NOT overwrite player.yaw or player.pitch so the player can freely look around in 360° at the skyline, islands & water!
-  const fwdDist = ferryController.isAirportFerry ? 4.5 : 6.0;
+  // Keep player on the forward upper sun deck overlooking the bow as the vessel glides into the destination slip!
+  const fwdDist = ferryController.isAirportFerry ? 4.5 : 11.0;
   const deckH = ferryController.isAirportFerry ? 2.1 : 6.75;
   const fwdX = fx + Math.sin(heading) * fwdDist;
   const fwdZ = fz + Math.cos(heading) * fwdDist;
@@ -26537,11 +26719,11 @@ function arriveFerry(dir) {
       if (scene.fog) scene.fog.density = 0.00065;
       const islFloor = (city && city.floorAt) ? city.floorAt(-1060, 870) : 0.55;
       player.pos.set(-1060, islFloor + EYE_HEIGHT, 870);
-      player.yaw = 0; // facing south toward Billy Bishop Terminal & Porter Q400s
+      player.yaw = Math.PI; // facing south (+Z) toward Billy Bishop Terminal & Porter Q400s
       player.velocity.set(0, 0, 0);
       player.isGrounded = true;
       camera.rotation.order = 'YXZ';
-      camera.rotation.y = 0;
+      camera.rotation.y = Math.PI;
       if (aFerry) {
         aFerry.position.set(-1060, waterY, 842);
         aFerry.rotation.y = 0;
@@ -26553,11 +26735,11 @@ function arriveFerry(dir) {
       if (scene.fog) scene.fog.density = 0.0021;
       const mainFloor = (city && city.floorAt) ? city.floorAt(-1060, 702) : 0.55;
       player.pos.set(-1060, mainFloor + EYE_HEIGHT, 702);
-      player.yaw = Math.PI; // facing north toward Bathurst Quay & downtown
+      player.yaw = 0; // facing north (-Z) toward Bathurst Quay & downtown
       player.velocity.set(0, 0, 0);
       player.isGrounded = true;
       camera.rotation.order = 'YXZ';
-      camera.rotation.y = Math.PI;
+      camera.rotation.y = 0;
       if (aFerry) {
         aFerry.position.set(-1060, waterY, 720);
         aFerry.rotation.y = Math.PI;
@@ -26598,11 +26780,11 @@ function arriveFerry(dir) {
     if (scene.fog) scene.fog.density = 0.0021;
     const mainFloor = (city && city.floorAt) ? city.floorAt(712, 318) : 0.5;
     player.pos.set(712, mainFloor + EYE_HEIGHT, 318);
-    player.yaw = Math.PI; // facing north towards Queens Quay & downtown
+    player.yaw = 0; // facing north (-Z) towards Queens Quay & downtown
     player.velocity.set(0, 0, 0);
     player.isGrounded = true;
     camera.rotation.order = 'YXZ';
-    camera.rotation.y = Math.PI;
+    camera.rotation.y = 0;
 
     if (ferry) {
       ferry.position.set(726, waterY, 330);
