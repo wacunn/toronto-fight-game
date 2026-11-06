@@ -2415,9 +2415,10 @@ CODE = r'''
     }
 
     // ------------------------------------------------------------------------
-    // Landmark: Gibraltar Point 1808 Lighthouse
+    // Landmark: Gibraltar Point 1808 Lighthouse & Keeper Radelmüller's Ghost
     // ------------------------------------------------------------------------
     let lighthouseBeacon = null;
+    let radelmuellerGhost = null;
     {
       const lhg = new THREE.Group();
       const lx = -480, lz = Z(320);
@@ -2425,6 +2426,57 @@ CODE = r'''
       tower.position.set(lx, 12.5, lz);
       lhg.add(tower);
       circOb(lx, lz, 4.4); // Solid limestone tower blocks collision!
+
+      // Heavy arched wooden door at the north base
+      const doorMesh = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.6, 0.3), darkWoodMat);
+      doorMesh.position.set(lx, 1.4, lz - 4.15);
+      lhg.add(doorMesh);
+      const doorHinges = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.12, 0.35), metalMat);
+      doorHinges.position.set(lx, 0.8, lz - 4.15);
+      lhg.add(doorHinges);
+      const doorHinges2 = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.12, 0.35), metalMat);
+      doorHinges2.position.set(lx, 2.0, lz - 4.15);
+      lhg.add(doorHinges2);
+      const doorHandle = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.3, 8), bellBrassMat);
+      doorHandle.position.set(lx + 0.55, 1.3, lz - 4.25);
+      lhg.add(doorHandle);
+
+      // Open-air catwalk gallery ring (walkable at y = 25.2m)
+      const catwalkFloor = new THREE.Mesh(new THREE.RingGeometry(2.3, 3.8, 24), darkWoodMat);
+      catwalkFloor.rotation.x = -Math.PI / 2;
+      catwalkFloor.position.set(lx, 25.2, lz);
+      lhg.add(catwalkFloor);
+      // Outer safety railing
+      const catwalkRail = new THREE.Mesh(new THREE.TorusGeometry(3.75, 0.08, 6, 24), metalMat);
+      catwalkRail.rotation.x = Math.PI / 2;
+      catwalkRail.position.set(lx, 26.1, lz);
+      lhg.add(catwalkRail);
+
+      // Keeper John Paul Radelmüller Ghost (1808-1815)
+      radelmuellerGhost = new THREE.Group();
+      radelmuellerGhost.position.set(lx - 0.6, 25.4, lz - 2.8);
+      const ghostMat = new THREE.MeshStandardMaterial({
+        color: 0xbae6fd, emissive: 0x38bdf8, emissiveIntensity: 0.65,
+        transparent: true, opacity: 0.65, roughness: 0.2
+      });
+      // 1812 frock coat
+      const gCoat = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.42, 1.15, 8), ghostMat);
+      gCoat.position.y = 0.58;
+      radelmuellerGhost.add(gCoat);
+      // Spectral head
+      const gHead = new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 10), ghostMat);
+      gHead.position.y = 1.3;
+      radelmuellerGhost.add(gHead);
+      // Keeper's tricorne hat
+      const gHat = new THREE.Mesh(new THREE.ConeGeometry(0.38, 0.2, 3), ghostMat);
+      gHat.rotation.y = Math.PI / 3;
+      gHat.position.y = 1.48;
+      radelmuellerGhost.add(gHat);
+      // Glowing antique brass hurricane lantern
+      const gLantern = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.25, 8), new THREE.MeshBasicMaterial({ color: 0xfef08a, transparent: true, opacity: 0.85 }));
+      gLantern.position.set(0.35, 0.7, 0.15);
+      radelmuellerGhost.add(gLantern);
+      lhg.add(radelmuellerGhost);
 
       const gallery = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.2, 0.8, 12), darkWoodMat);
       gallery.position.set(lx, 24.8, lz);
@@ -3890,6 +3942,10 @@ CODE = r'''
 
     function canMoveTo(x, z, radius, y) {
       const r = radius || 0.4;
+      if (y !== undefined && y > 18.0) {
+        const dLh = Math.hypot(x - (-480), z - Z(320));
+        if (dLh <= 4.0) return dLh >= 2.2 && dLh <= 3.85;
+      }
       if (getIslandBridgeAt(x, z)) return true;
       if (pierAt(x, z)) return !blocked(x, z, r);
       if (blocked(x, z, r)) return false;
@@ -3898,6 +3954,7 @@ CODE = r'''
     }
 
     function floorAt(x, z, y) {
+      if (Math.hypot(x - (-480), z - Z(320)) <= 4.0 && y !== undefined && y > 18.0) return 25.2;
       const b = getIslandBridgeAt(x, z);
       if (b) {
         const t = Math.max(0, Math.min(1, ((x - b.x0) * b.fx + (z - b.z0) * b.fz) / b.len));
@@ -3966,6 +4023,10 @@ CODE = r'''
       if (carouselTop) carouselTop.rotation.y += dt * 0.6;
       if (fountainSpray) fountainSpray.scale.y = 0.95 + Math.sin(tTime * 4.5) * 0.12;
       if (lighthouseBeacon) lighthouseBeacon.rotation.y += dt * 1.8;
+      if (radelmuellerGhost) {
+        radelmuellerGhost.position.y = 25.4 + Math.sin(tTime * 2.2) * 0.12;
+        radelmuellerGhost.rotation.y = Math.sin(tTime * 0.9) * 0.18;
+      }
       if (radarDish) radarDish.rotation.y += dt * 3.2;
       if (windsockCone) windsockCone.rotation.y = Math.sin(tTime * 1.8) * 0.25;
       q400Propellers.forEach(p => {
@@ -4152,6 +4213,14 @@ CODE = r'''
       nearPath,
       flowerBeds,
       flightPlane,
+      lighthouse: {
+        x: -480,
+        z: Z(320),
+        doorX: -480,
+        doorZ: Z(320) - 4.15,
+        galleryY: 25.2,
+        ghost: radelmuellerGhost
+      },
       drawMinimap,
       update,
       landmarks: {

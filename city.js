@@ -1125,6 +1125,8 @@
         }
 
         // Decks: latch to floor level so jumps (up to 1.7m) don't jump floors
+        // Level 4 EdgeWalk: 358.6m outdoor walkway ring (r: 22.0 to 24.5m)
+        if (feetY >= 356.5) return 358.6;
         if (Math.abs(feetY - 354.0) < 3.2 || feetY >= 351.0) return 354.0;
         if (Math.abs(feetY - 348.0) < 3.2 || (feetY >= 345.0 && feetY < 351.0)) return 348.0;
         return 342.0;
@@ -1207,6 +1209,10 @@
       if (y !== undefined && y > 50) {
         // Up in the pod: only the core and the outer glass/rail matter
         const d = towerPolar(x, z).r;
+        if (y > 356) {
+          // Level 4 EdgeWalk: 356m outdoor hands-free circular ledge (r: 22.0 to 24.4m)
+          return d >= 22.0 && d <= 24.4;
+        }
         return d >= DECK_IN + r && d <= DECK_OUT - r;
       }
       if (x < PLAY.minX || x > PLAY.maxX || z < PLAY.minZ || z > PLAY.maxZ) return false;
@@ -3702,7 +3708,8 @@
     warnLights.count = roofLights.length;
     scene.add(warnLights);
 
-    // ---------- Rogers Centre dome ----------
+    // ---------- Rogers Centre Retractable Dome & Blue Jays Stadium Interior ----------
+    let rogersCentreDome = null;
     {
       let cx = LM.rogersCentre[0], cz = LM.rogersCentre[1], R = 105;
       if (rogersPoly) {
@@ -3714,21 +3721,116 @@
         addBuilding(ring, 32, 'concrete', 0, { shops: false });
         addSolid({ type: 'poly', pts: ring, bb: [cx - R, cz - R, cx + R, cz + R], h: 32 });
       }
-      const dome = new THREE.Mesh(
-        new THREE.SphereGeometry(R * 0.96, 48, 16, 0, Math.PI * 2, 0, Math.PI / 2),
+
+      // 1. Interior Field & Ballpark Features (visible from CN Tower / Flight when open!)
+      const stadiumInterior = new THREE.Group();
+      stadiumInterior.position.set(cx, 0, cz);
+
+      // Lush green outfield grass turf
+      const turfGeo = new THREE.CircleGeometry(R * 0.88, 36);
+      turfGeo.rotateX(-Math.PI / 2);
+      const turf = new THREE.Mesh(turfGeo, new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.9 }));
+      turf.position.y = 1.2;
+      stadiumInterior.add(turf);
+
+      // Clay dirt infield diamond
+      const dirtGeo = new THREE.PlaneGeometry(38, 38);
+      dirtGeo.rotateX(-Math.PI / 2);
+      dirtGeo.rotateY(Math.PI / 4);
+      const dirt = new THREE.Mesh(dirtGeo, new THREE.MeshStandardMaterial({ color: 0x9a3412, roughness: 0.9 }));
+      dirt.position.set(0, 1.25, 18);
+      stadiumInterior.add(dirt);
+
+      // Pitcher's mound and white bases
+      const mound = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 3.2, 0.45, 16), new THREE.MeshStandardMaterial({ color: 0xc2410c, roughness: 0.9 }));
+      mound.position.set(0, 1.45, 18);
+      stadiumInterior.add(mound);
+      const baseMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      [[0, 31], [13, 18], [0, 5], [-13, 18]].forEach(([bx, bz]) => {
+        const b = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.15, 1.2), baseMat);
+        b.position.set(bx, 1.35, bz);
+        stadiumInterior.add(b);
+      });
+
+      // Blue Jays Multi-Tier Stadium Seating Bowl (Royal Blue & Navy)
+      const seatBowlMat = new THREE.MeshStandardMaterial({ color: 0x00355f, roughness: 0.65 });
+      [
+        { r: R * 0.52, y: 7.5, h: 4.2 },
+        { r: R * 0.68, y: 15.5, h: 4.6 },
+        { r: R * 0.82, y: 23.5, h: 5.0 }
+      ].forEach(tier => {
+        const bowl = new THREE.Mesh(new THREE.TorusGeometry(tier.r, tier.h, 4, 36), seatBowlMat);
+        bowl.rotation.x = Math.PI / 2;
+        bowl.position.y = tier.y;
+        stadiumInterior.add(bowl);
+      });
+
+      // Centerfield High-Definition Jumbotron Scoreboard (North outfield wall)
+      const jumbotron = signMesh(
+        ['TORONTO BLUE JAYS', 'ROGERS CENTRE • SKYDOME • HOME RUN!'],
+        46, 8.5,
+        { bg: '#002040', fg: '#38bdf8', borderColor: '#ffffff', size: 66 }
+      );
+      jumbotron.position.set(0, 24.0, -R * 0.74);
+      stadiumInterior.add(jumbotron);
+
+      scene.add(stadiumInterior);
+
+      // 2. Fixed North Hemispherical Shell
+      const fixedNorthDome = new THREE.Mesh(
+        new THREE.SphereGeometry(R * 0.96, 36, 16, Math.PI, Math.PI, 0, Math.PI / 2),
         new THREE.MeshPhongMaterial({ color: 0x9aa3ad, specular: 0x445566, shininess: 30, side: THREE.DoubleSide })
       );
-      dome.scale.set(1, 50 / R, 1);
-      dome.position.set(cx, 32, cz);
-      scene.add(dome);
-      // panel ribs
+      fixedNorthDome.scale.set(1, 50 / R, 1);
+      fixedNorthDome.position.set(cx, 32, cz);
+      scene.add(fixedNorthDome);
+
+      // 3. Retractable South Shell Group (slides north when opening)
+      const slidingRoofGroup = new THREE.Group();
+      slidingRoofGroup.position.set(cx, 32, cz);
+
+      const movingSouthDome = new THREE.Mesh(
+        new THREE.SphereGeometry(R * 0.965, 36, 16, 0, Math.PI, 0, Math.PI / 2),
+        new THREE.MeshPhongMaterial({ color: 0xa4adb8, specular: 0x445566, shininess: 30, side: THREE.DoubleSide })
+      );
+      movingSouthDome.scale.set(1, 50 / R, 1);
+      slidingRoofGroup.add(movingSouthDome);
+
+      // Panel ribs on sliding shell
       const ribMat = new THREE.MeshBasicMaterial({ color: 0x3b4048 });
       for (let i = 0; i < 4; i++) {
-        const rib = new THREE.Mesh(new THREE.TorusGeometry(R * 0.96 * (1 - i * 0.22), 0.6, 4, 64), ribMat);
+        const rib = new THREE.Mesh(new THREE.TorusGeometry(R * 0.965 * (1 - i * 0.22), 0.65, 4, 48), ribMat);
         rib.rotation.x = Math.PI / 2;
-        rib.position.set(cx, 32 + 50 * Math.sqrt(1 - Math.pow(1 - i * 0.22, 2)), cz);
-        scene.add(rib);
+        rib.position.set(0, 50 * Math.sqrt(Math.max(0, 1 - Math.pow(1 - i * 0.22, 2))), 0);
+        slidingRoofGroup.add(rib);
       }
+      scene.add(slidingRoofGroup);
+
+      // Retractable Dome Controller
+      rogersCentreDome = {
+        cx, cz, R,
+        isOpen: false,
+        progress: 0.0,
+        targetProgress: 0.0,
+        slidingGroup: slidingRoofGroup,
+        toggleRoof: function() {
+          this.targetProgress = this.targetProgress > 0.5 ? 0.0 : 1.0;
+          this.isOpen = this.targetProgress > 0.5;
+          return this.isOpen;
+        },
+        update: function(dt) {
+          if (Math.abs(this.progress - this.targetProgress) > 0.001) {
+            const step = dt * 0.35;
+            this.progress = (this.targetProgress > this.progress)
+              ? Math.min(this.targetProgress, this.progress + step)
+              : Math.max(this.targetProgress, this.progress - step);
+            if (this.slidingGroup) {
+              this.slidingGroup.position.z = cz - this.progress * (R * 0.68);
+              this.slidingGroup.position.y = 32 + this.progress * 0.8;
+            }
+          }
+        }
+      };
 
       // ---------- Rogers Centre Blue Jays Stadium Gates, Marquees & Canopies ----------
       if (rogersPoly) {
@@ -4405,6 +4507,72 @@
     }
 
     tower.add(level3Group);
+
+    // ----------------------------------------------------------------------
+    // LEVEL 4: CN TOWER EDGEWALK (y = 358.6m)
+    // 356m / 1,168 ft World-Famous Open-Air Hands-Free Skywalk Ring
+    // ----------------------------------------------------------------------
+    const edgeWalkGroup = new THREE.Group();
+    edgeWalkGroup.position.y = 358.6;
+
+    const safetyOrangeMat = new THREE.MeshStandardMaterial({ color: 0xf97316, roughness: 0.4, metalness: 0.2 });
+    const safetyYellowMat = new THREE.MeshStandardMaterial({ color: 0xeab308, roughness: 0.35, metalness: 0.6 });
+    const grateWalkMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.8, metalness: 0.7 });
+
+    // 1. Hands-Free Open-Air Walkway Grate Ring (r: 22.0 to 24.4m, 1.5m wide outer ledge)
+    const ewGrateGeo = new THREE.RingGeometry(22.0, 24.4, 48);
+    ewGrateGeo.rotateX(-Math.PI / 2);
+    const ewGrate = new THREE.Mesh(ewGrateGeo, grateWalkMat);
+    edgeWalkGroup.add(ewGrate);
+
+    // High-visibility safety orange perimeter curbs
+    const innerCurb = new THREE.Mesh(new THREE.TorusGeometry(22.0, 0.12, 6, 48), safetyOrangeMat);
+    innerCurb.rotation.x = Math.PI / 2;
+    edgeWalkGroup.add(innerCurb);
+    const outerCurb = new THREE.Mesh(new THREE.TorusGeometry(24.4, 0.14, 6, 48), safetyOrangeMat);
+    outerCurb.rotation.x = Math.PI / 2;
+    edgeWalkGroup.add(outerCurb);
+
+    // 2. Overhead Safety Tether Monorail Track at y = 2.6m (y = 361.2m world)
+    const tetherRail = new THREE.Mesh(new THREE.TorusGeometry(23.2, 0.1, 8, 48), safetyYellowMat);
+    tetherRail.rotation.x = Math.PI / 2;
+    tetherRail.position.y = 2.6;
+    edgeWalkGroup.add(tetherRail);
+
+    // Overhead cantilever support beams anchoring the rail to the central pod wall every 15 degrees
+    for (let i = 0; i < 24; i++) {
+      const a = (i * Math.PI * 2) / 24;
+      const cosA = Math.cos(a), sinA = Math.sin(a);
+      // Horizontal cantilever beam
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.22, 2.8), steelDarkMat);
+      arm.position.set(cosA * 22.0, 2.6, sinA * 22.0);
+      arm.rotation.y = -a + Math.PI / 2;
+      edgeWalkGroup.add(arm);
+
+      // Stanchion post down to inner curb
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 2.6, 8), steelDarkMat);
+      post.position.set(cosA * 21.0, 1.3, sinA * 21.0);
+      edgeWalkGroup.add(post);
+
+      // Yellow safety trolley slider on the overhead rail
+      const trolley = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.35, 0.2), safetyOrangeMat);
+      trolley.position.set(cosA * 23.2, 2.6, sinA * 23.2);
+      edgeWalkGroup.add(trolley);
+    }
+
+    // EdgeWalk Elevator Access Portal
+    const f4ElevPortal = new THREE.Group();
+    f4ElevPortal.position.set(3.25, 0, 5.63);
+    f4ElevPortal.rotation.y = -Math.PI / 3 + Math.PI / 2;
+    const f4ElevFrame = new THREE.Mesh(elevFrameGeo, safetyOrangeMat);
+    f4ElevFrame.position.set(0, 1.6, 0);
+    f4ElevPortal.add(f4ElevFrame);
+    const f4Marquee = makeMarqueeCanvasMesh('CN TOWER EDGEWALK • 356M (1,168 FT)', 3.2, 0.45, '#f97316');
+    f4Marquee.position.set(0, 3.2, 0);
+    f4ElevPortal.add(f4Marquee);
+    edgeWalkGroup.add(f4ElevPortal);
+
+    tower.add(edgeWalkGroup);
 
     // ----------------------------------------------------------------------
     // EXTERIOR VERTICAL ELEVATOR GUIDE RAILS & GROUND ENTRANCE PAVILION
@@ -12099,6 +12267,7 @@
       if (islandFountainSpray) islandFountainSpray.rotation.y = t * 1.2;
       if (lighthouseBeam) lighthouseBeam.rotation.y = t * 0.85;
       if (airportBeacon) airportBeacon.rotation.y = t * 1.6;
+      if (rogersCentreDome) rogersCentreDome.update(dt);
 
       // Animate Bi-Directional GO Transit Fleet in the Open Sunken Rail Corridor
       for (const tr of goTrains) {
@@ -13000,12 +13169,17 @@
           { id: 'ground', label: 'GROUND', name: 'PLAZA & SANCTUARY', sub: 'Peace Zone · 0 m', y: 0.15, feet: 0 },
           { id: 'floor1', label: 'LEVEL 1', name: 'GLASS FLOOR & SKYTERRACE', sub: 'Outdoor walk · 342 m', y: 342.15, feet: 342.0 },
           { id: 'floor2', label: 'LEVEL 2', name: 'LOOKOUT & TELESCOPES', sub: '360° panorama · 348 m', y: 348.15, feet: 348.0 },
-          { id: 'floor3', label: 'LEVEL 3', name: '360 RESTAURANT', sub: 'Revolving dining · 354 m', y: 354.15, feet: 354.0 }
+          { id: 'floor3', label: 'LEVEL 3', name: '360 RESTAURANT', sub: 'Revolving dining · 354 m', y: 354.15, feet: 354.0 },
+          { id: 'floor4', label: 'EDGEWALK', name: '356m OUTDOOR ROOF WALK', sub: 'Open-air hands-free skywalk · 356 m', y: 358.6, feet: 358.6 }
         ],
         exitFor: (idx) => {
-          const feet = [0, 342.0, 348.0, 354.0][idx] || 0;
+          const feet = [0, 342.0, 348.0, 354.0, 358.6][idx] || 0;
           if (idx === 0) {
             return { x: pavX + 3.2 * cosElev, z: pavZ + 3.2 * sinElev, feet: 0, yaw: Math.atan2(cosElev, sinElev) };
+          }
+          if (idx === 4) {
+            const ewR = 23.2;
+            return { x: LM.cnTower[0] + ewR * cosElev, z: LM.cnTower[1] + ewR * sinElev, feet: 358.6, yaw: Math.atan2(cosElev, sinElev) };
           }
           return { x: railX + 3.2 * cosElev, z: railZ + 3.2 * sinElev, feet, yaw: Math.atan2(cosElev, sinElev) };
         },
@@ -13016,7 +13190,8 @@
           groundY: 2.0,
           floor1Y: 342.0,
           floor2Y: 348.0,
-          floor3Y: 354.0
+          floor3Y: 354.0,
+          floor4Y: 358.6
         },
         entrancePavilion: {
           x: pavX,
@@ -13083,6 +13258,9 @@
       pushOutOfTrench,
       trenchY: TRENCH_Y,
       getUsrcZ,
+      rogersCentreDome,
+      berczyParkFountain: { x: 642.0, z: -428.0, r: 8.0 },
+      stLawrenceMarket: { doorX: 840.0, z: -455.0, r: 8.0 },
       // Centre Island & Toronto Island Ferries API
       isInsideCentreIsland,
       isInsideIslandLagoon,

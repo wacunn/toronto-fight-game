@@ -879,6 +879,71 @@ class EnhancedRetroAudio {
       osc.stop(t + 0.05);
     } catch (err) { }
   }
+
+  playHomeRunHorn() {
+    if (!this.ctx || this.isMuted) return;
+    try {
+      const t = this.ctx.currentTime;
+      // Dual-blast authentic stadium foghorn chord: 220Hz, 277.18Hz, 329.63Hz, 440Hz
+      const freqs = [220, 277.18, 329.63, 440];
+      [0, 1.1].forEach(blastStart => {
+        const dur = 0.85;
+        freqs.forEach(freq => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(freq, t + blastStart);
+          gain.gain.setValueAtTime(0.001, t + blastStart);
+          gain.gain.linearRampToValueAtTime(0.09, t + blastStart + 0.05);
+          gain.gain.setValueAtTime(0.09, t + blastStart + dur - 0.1);
+          gain.gain.exponentialRampToValueAtTime(0.0001, t + blastStart + dur);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(t + blastStart);
+          osc.stop(t + blastStart + dur);
+        });
+      });
+    } catch (err) { }
+  }
+
+  playCoinSplash() {
+    if (!this.ctx || this.isMuted) return;
+    try {
+      const t = this.ctx.currentTime;
+      // High coin chime
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1760, t);
+      osc.frequency.exponentialRampToValueAtTime(2637, t + 0.15);
+      gain.gain.setValueAtTime(0.18, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.48);
+    } catch (err) { }
+  }
+
+  playSizzle() {
+    if (!this.ctx || this.isMuted) return;
+    try {
+      const t = this.ctx.currentTime;
+      // Sizzling bacon frequency burst
+      for (let i = 0; i < 4; i++) {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(1800 + i * 450, t + i * 0.1);
+        gain.gain.setValueAtTime(0.08, t + i * 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.1 + 0.35);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(t + i * 0.1);
+        osc.stop(t + i * 0.1 + 0.38);
+      }
+    } catch (err) { }
+  }
 }
 
 const audio = new EnhancedRetroAudio();
@@ -1047,6 +1112,7 @@ const state = {
   isPointerLocked: false,
   isDead: false,
   gloryTarget: null,
+  peamealBoostTimer: 0.0,
   // CN Tower Elevator & Observation Deck State
   inElevator: false,
   onObservationDeck: false,
@@ -4397,7 +4463,7 @@ function updateElevator(dt) {
     }
 
     const fogProg = Math.max(0, Math.min(1, (elevatorController.cabY - 2.0) / 340.0));
-    if (scene.fog) scene.fog.density = THREE.MathUtils.lerp(0.0021, 0.00065, fogProg);
+    if (scene.fog) scene.fog.density = 0.0021 + (0.00065 - 0.0021) * fogProg;
 
     const altVal = document.getElementById('elev-alt-val');
     if (altVal) altVal.innerText = `${Math.round(elevatorController.cabY)} m`;
@@ -4446,7 +4512,8 @@ function arriveElevator() {
     '🕊️ BACK ON THE PLAZA • CN TOWER PEACE SANCTUARY',
     '🌟 LEVEL 1 • 342m GLASS FLOOR & OUTDOOR SKYTERRACE 🌟',
     '🔭 LEVEL 2 • 348m MAIN LOOKOUT & TELESCOPES 🔭',
-    '🍽️ LEVEL 3 • 354m 360 RESTAURANT 🍽️'
+    '🍽️ LEVEL 3 • 354m 360 RESTAURANT 🍽️',
+    '🧗 LEVEL 4 • 356m CN TOWER EDGEWALK • GUINNESS WORLD RECORD HANDS-FREE SKYWALK 🧗'
   ];
   showAnnouncement(msgs[idx] || stop.name, 4000);
 }
@@ -4532,6 +4599,38 @@ function updateObservationDeck(dt) {
         return;
       }
     }
+
+    // Easter Egg 3: Rogers Centre Retractable Dome & Blue Jays Home Run Horn
+    const dRogers = Math.hypot(player.pos.x - (-485), player.pos.z - 235);
+    if (dRogers < 18.0) {
+      activeDeckAction = 'rogers_dome_toggle';
+      setDeckPrompt('[E]', 'OPERATE ROGERS CENTRE RETRACTABLE ROOF & BLUE JAYS HOME RUN HORN');
+      return;
+    }
+
+    // Easter Egg 4: Berczy Park Claude Cormier Dog Fountain & Sculpted Cat
+    const dBerczy = Math.hypot(player.pos.x - 642, player.pos.z - (-428));
+    if (dBerczy < 8.5) {
+      activeDeckAction = 'berczy_dog_fountain';
+      setDeckPrompt('[E]', 'TOSS A COIN IN THE 27-DOG FOUNTAIN & GREET SCULPTED CAT');
+      return;
+    }
+
+    // Easter Egg 5: St. Lawrence Market Carousel Bakery Peameal Bacon
+    const dStLawrence = Math.hypot(player.pos.x - 840, player.pos.z - (-455));
+    if (dStLawrence < 9.5) {
+      activeDeckAction = 'st_lawrence_peameal';
+      setDeckPrompt('[E]', 'ORDER CAROUSEL BAKERY WORLD-FAMOUS PEAMEAL BACON ON A KAISER');
+      return;
+    }
+
+    // Easter Egg 6: 1808 Gibraltar Point Lighthouse & Keeper Radelmüller's Ghost (Ground Door)
+    const dLhDoor = Math.hypot(player.pos.x - (-480), player.pos.z - 1515.7);
+    if (dLhDoor < 4.2) {
+      activeDeckAction = 'climb_lighthouse';
+      setDeckPrompt('[E]', 'CLIMB 1808 LIGHTHOUSE SPIRAL STAIRCASE • MEET KEEPER RADELMÜLLER\'S GHOST');
+      return;
+    }
   }
 
   // Toronto Island Ferry Docks (Jack Layton Terminal, Centre, Hanlan's, Ward's & Billy Bishop Airport Ferry)
@@ -4586,6 +4685,16 @@ function updateObservationDeck(dt) {
     }
   }
 
+  // Gibraltar Point Lighthouse Catwalk Gallery (Catwalk at y = 25.2m)
+  if (feet > 20.0 && feet < 32.0) {
+    const dLhCatwalk = Math.hypot(player.pos.x - (-480), player.pos.z - 1520);
+    if (dLhCatwalk < 4.8) {
+      activeDeckAction = 'descend_lighthouse';
+      setDeckPrompt('[E]', 'DESCEND SPIRAL STAIRCASE TO ISLAND GROUND');
+      return;
+    }
+  }
+
   if (!city.cnElevator) return;
   const elevPos = city.cnElevator.pos;
   const dElev = Math.hypot(player.pos.x - elevPos.x, player.pos.z - elevPos.z);
@@ -4607,7 +4716,7 @@ function updateObservationDeck(dt) {
 
   if (feet > 200) {
     state.onObservationDeck = true;
-    state.deckFloor = feet > 351.0 ? 3 : (feet > 345.0 ? 2 : 1);
+    state.deckFloor = feet > 356.0 ? 4 : (feet > 351.0 ? 3 : (feet > 345.0 ? 2 : 1));
 
     const cx = city.landmarks.cnTower[0];
     const cz = city.landmarks.cnTower[1];
@@ -4618,9 +4727,12 @@ function updateObservationDeck(dt) {
     // Glass floor mesh sits on the SOUTH side (+z) of Level 1, r 9.5 to 17.5
     const onSouthGlassFloor = (state.deckFloor === 1 && dz > 5.0 && Math.abs(dx) < 7.8 && r >= 9.5 && r <= 17.5);
     const glassFloorEl = document.getElementById('glass-floor-indicator');
-    if (glassFloorEl) glassFloorEl.classList.toggle('hidden', !onSouthGlassFloor);
+    if (glassFloorEl) {
+      if (!onSouthGlassFloor) glassFloorEl.classList.add('hidden');
+      else glassFloorEl.classList.remove('hidden');
+    }
 
-    if (dElev < elevCallR && [342, 348, 354].some(y => Math.abs(feet - y) < 0.6)) {
+    if (dElev < elevCallR && [342, 348, 354, 358.6].some(y => Math.abs(feet - y) < 0.8)) {
       activeDeckAction = 'elevator';
       setDeckPrompt('[E]', 'GLASS ELEVATOR • CHOOSE A FLOOR');
       return;
@@ -4628,6 +4740,12 @@ function updateObservationDeck(dt) {
     // Only auto-close if player has walked away (> 8m)
     if (dElev > 8.0) {
       closeElevatorPanel();
+    }
+
+    if (state.deckFloor === 4) {
+      activeDeckAction = 'cn_edgewalk';
+      setDeckPrompt('356M', 'CN TOWER EDGEWALK • 356m / 1,168ft OPEN-AIR CATWALK • [W/A/S/D] CIRCLE 360°');
+      return;
     }
 
     if (state.deckFloor === 2 && city.cnElevator.viewfinders && !state.telescopeActive) {
@@ -4713,6 +4831,48 @@ function handleDeckAction() {
     if (audio && audio.playFerryHorn) audio.playFerryHorn();
     createFireworkBurst(player.pos.x, player.pos.y + 12, player.pos.z);
     showAnnouncement('🚂 CHOO-CHOO! STEAM WHISTLE PILSNER 5:00 PM WHISTLE & CPR #5930 TURNTABLE ACTIVATED!', 4000);
+    return true;
+  }
+  if (activeDeckAction === 'rogers_dome_toggle') {
+    if (city && city.rogersCentreDome) {
+      const open = city.rogersCentreDome.toggleRoof();
+      if (audio && audio.playHomeRunHorn) audio.playHomeRunHorn();
+      createFireworkBurst(-485, 45, 235);
+      showAnnouncement(open
+        ? '🏟️ ROGERS CENTRE SKYDOME • RETRACTABLE ROOF OPENING TO THE TORONTO SKY! ⚾ HOME RUN HORN SOUNDS!'
+        : '🏟️ ROGERS CENTRE SKYDOME • RETRACTABLE ROOF CLOSING OVER BALLPARK! ⚾ HOME RUN HORN SOUNDS!', 4600);
+    }
+    return true;
+  }
+  if (activeDeckAction === 'berczy_dog_fountain') {
+    if (audio && audio.playCoinSplash) audio.playCoinSplash();
+    state.health = Math.min(state.maxHealth, state.health + 25);
+    updateHUDHealth();
+    showAnnouncement('🪙 BERCZY PARK • You tossed a lucky loonie into the 27-Dog Fountain! The golden bone glimmers in the sun as 27 dogs spout water. The sculpted cat blinks aloofly.', 4800);
+    return true;
+  }
+  if (activeDeckAction === 'st_lawrence_peameal') {
+    if (audio && audio.playSizzle) audio.playSizzle();
+    state.health = state.maxHealth;
+    state.armor = state.maxArmor;
+    state.peamealBoostTimer = 30.0;
+    updateHUDHealth();
+    showAnnouncement('🥓 CAROUSEL BAKERY • World-Famous Peameal Bacon on a Kaiser! 100% Health & Armor Restored + 30s Toronto Sprint Speed Boost!', 4800);
+    return true;
+  }
+  if (activeDeckAction === 'climb_lighthouse') {
+    player.pos.set(-480, 25.2 + EYE_HEIGHT, 1517.5);
+    player.velocity.set(0, 0, 0);
+    player.yaw = Math.PI;
+    if (audio && audio.playElevatorDing) audio.playElevatorDing();
+    showAnnouncement('👻 1808 GIBRALTAR POINT LIGHTHOUSE • Keeper Radelmüller’s Ghost whispers: "Still watching the shoals of Lake Ontario since 1815... Beware the midnight squalls."', 5200);
+    return true;
+  }
+  if (activeDeckAction === 'descend_lighthouse') {
+    player.pos.set(-480, 0.55 + EYE_HEIGHT, 1514.0);
+    player.velocity.set(0, 0, 0);
+    player.yaw = 0;
+    showAnnouncement('🌲 BACK ON GIBRALTAR POINT • Returned to the island grounds beneath the 1808 limestone tower.', 3500);
     return true;
   }
   if (activeDeckAction === 'elevator') {
@@ -7120,9 +7280,14 @@ function updatePlayer(dt) {
     return;
   }
 
+  if (state.peamealBoostTimer > 0) {
+    state.peamealBoostTimer = Math.max(0, state.peamealBoostTimer - dt);
+  }
+
   const aiActive = window.aiCopilot && window.aiCopilot.isActive;
-  const isSprinting = aiActive ? window.aiCopilot.sprint : (keys['ShiftLeft'] || keys['ShiftRight'] || state.isBerserk);
-  const curSpeed = isSprinting ? player.sprintSpeed : player.speed;
+  const isSprinting = aiActive ? window.aiCopilot.sprint : (keys['ShiftLeft'] || keys['ShiftRight'] || state.isBerserk || state.peamealBoostTimer > 0);
+  const peamealMult = (state.peamealBoostTimer > 0) ? 1.45 : 1.0;
+  const curSpeed = (isSprinting ? player.sprintSpeed : player.speed) * peamealMult;
 
   // Jump
   if (keys['Space'] && player.isGrounded) {
