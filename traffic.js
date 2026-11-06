@@ -664,6 +664,7 @@
           speed: 0, mode: 'run', timer: 0, servedD: -1e9,
           vx: 0, vz: 0, fx: 1, fz: 0, vh: 0,
           design: SC, lenScale: 1, hitCd: 0, gongCd: 0, stuck: 0, ghost: 0, braking: false,
+          sign: sign, hasPlayer: false, boardGrace: 0,
           group: city.makeStreetcar(sign)
         };
         placeStreetcar(sc);
@@ -731,6 +732,11 @@
       streetcars.forEach(sc => {
         const rt = sc.route;
         sc.hitCd -= dt; sc.gongCd -= dt; sc.ghost -= dt;
+        sc.boardGrace = Math.max(0, (sc.boardGrace || 0) - dt);
+
+        if (sc.hasPlayer && sc.mode === 'dwell') {
+          sc.timer = Math.min(sc.timer, 0.8);
+        }
 
         if (sc.mode === 'hidden') {
           sc.timer -= dt;
@@ -818,8 +824,15 @@
           // end of the line: off the map or into the Union Station tunnel; come back the other way
           if ((sc.dir > 0 && sc.d >= rt.endHi) || (sc.dir < 0 && sc.d <= rt.endLo)) {
             sc.d = Math.max(rt.endLo, Math.min(rt.endHi, sc.d));
-            sc.dir *= -1; sc.mode = 'hidden'; sc.timer = rt.portal && sc.dir < 0 ? 14 : 9;
-            sc.servedD = -1e9; sc.speed = 0; sc.group.visible = false;
+            sc.dir *= -1;
+            sc.servedD = -1e9; sc.speed = 0;
+            if (sc.hasPlayer) {
+              sc.mode = 'run';
+              sc.group.visible = true;
+            } else {
+              sc.mode = 'hidden'; sc.timer = rt.portal && sc.dir < 0 ? 14 : 9;
+              sc.group.visible = false;
+            }
           }
         }
 
@@ -829,6 +842,7 @@
         // collisions with people: same rules as cars, but a streetcar is not going to stop for you
         const hx = SC.L / 2 + 0.15, hz = SC.W / 2 + 0.15;
         people.forEach(p => {
+          if (p.isPlayer && (sc.hasPlayer || sc.boardGrace > 0)) return;
           const r = rel(sc, p.x, p.z);
           const R = p.isPlayer ? 0.45 : 0.5;
           if (Math.abs(r.f) > hx + R || Math.abs(r.l) > hz + R) return;
@@ -1156,7 +1170,7 @@
       return streetcars.filter(sc => sc.mode !== 'hidden').map(sc => ({ x: sc.vx, z: sc.vz }));
     }
 
-    return { cars, streetcars, streetcarDots, update, silence, getIntersections: () => signalIntersections, isSafeCrossing };
+    return { cars, streetcars, streetcarDots, update, silence, ringGong: () => streetcarGong(0), getIntersections: () => signalIntersections, isSafeCrossing };
   }
 
   window.createTraffic = createTraffic;

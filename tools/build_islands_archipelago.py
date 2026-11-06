@@ -80,6 +80,7 @@ CODE = r'''
     const WATER_Y = -0.65; // matches city.js Toronto Inner Harbour water level
     let renderedOsmTowers = 0;
     const flowerBeds = [];
+    let flightPlane = null;
 
     // ------------------------------------------------------------------------
     // Deterministic noise for procedural terrain and vegetation
@@ -2942,12 +2943,12 @@ CODE = r'''
         pl.position.set(px, GROUND_Y + 1.90, pz);
         pl.rotation.y = rotY;
         apg.add(pl);
-        circOb(px, pz, 9.5);
+        if (!o.noOb) circOb(px, pz, 9.5);
         return pl;
       }
 
       // 1. Active Runway 08 Takeoff Aircraft: lined up on Runway 08 at (-1360, Z(-170)) facing East (-Math.PI/2 so -Z nose points +X!)
-      buildPorterDash8Q400(-1360, Z(-170), -Math.PI / 2, { spinSpeed: 22.0, headlight: true });
+      flightPlane = buildPorterDash8Q400(-1360, Z(-170), -Math.PI / 2, { spinSpeed: 22.0, headlight: true, noOb: true });
       // 2. Runway 26 Holding / Taxiing Q400 at East Taxiway (-1160, Z(-206)) facing West (+Math.PI/2)
       buildPorterDash8Q400(-1160, Z(-206), Math.PI / 2, { spinSpeed: 12.0, headlight: true });
       // 3 & 4. Two Gate-Parked Porter Q400 Turboprops at Terminal Gates 1 & 2
@@ -4150,6 +4151,7 @@ CODE = r'''
       getNeighborhood,
       nearPath,
       flowerBeds,
+      flightPlane,
       drawMinimap,
       update,
       landmarks: {

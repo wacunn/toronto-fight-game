@@ -3861,6 +3861,358 @@ function arriveFerry(dir) {
 }
 
 // ============================================================================
+// PORTER AIRLINES DASH 8-400 (Q400) SCENIC CITY FLIGHT & FREE-PILOT SYSTEM
+// ============================================================================
+
+const porterFlightController = {
+  isFlying: false,
+  freePilot: false,
+  viewMode: 'window', // 'window' | 'cockpit' | 'chase'
+  progress: 0,
+  duration: 42.0,
+  x: -1360,
+  y: 2.45,
+  z: 1030,
+  heading: Math.PI / 2,
+  lastHeading: Math.PI / 2,
+  pitch: 0,
+  roll: 0,
+  speed: 68.0
+};
+
+const PORTER_FLIGHT_WAYPOINTS = [
+  { x: -1360, y: 2.45, z: 1030 },  // 0: Runway 08 threshold at Billy Bishop Airport (CYTZ)
+  { x: -940,  y: 8.0,  z: 1030 },  // 1: Takeoff roll & rotation at Eastern end of Runway 08
+  { x: 180,   y: 135,  z: 880  },  // 2: Climb-out over Inner Harbour & Centre Island
+  { x: 1480,  y: 265,  z: 420  },  // 3: Banking north over Port Lands Cherry St Bridges
+  { x: 1420,  y: 325,  z: -520 },  // 4: Overflying Distillery Historic District & East Downtown
+  { x: 420,   y: 355,  z: -2150 }, // 5: Midtown Bloor-Yonge Supertalls & Eaton Centre
+  { x: -520,  y: 355,  z: -2250 }, // 6: ROM Crystal, Queen's Park Legislature & Casa Loma view
+  { x: -1650, y: 310,  z: -1150 }, // 7: West End turn toward High Park & Humber Bay
+  { x: -2350, y: 225,  z: 180  },  // 8: Overflying Humber Bay Arch Bridge & Exhibition Place
+  { x: -2050, y: 125,  z: 780  },  // 9: Descending past Ontario Place Cinesphere & BMO Field
+  { x: -1680, y: 42,   z: 1030 },  // 10: Short final over Western Gap channel
+  { x: -1360, y: 2.45, z: 1030 }   // 11: Touchdown & rollout on Runway 08
+];
+
+function evalPorterFlightSpline(prog) {
+  const pts = PORTER_FLIGHT_WAYPOINTS;
+  const n = pts.length - 1;
+  const p = Math.max(0, Math.min(1, prog));
+  const segF = p * n;
+  const seg = Math.min(n - 1, Math.floor(segF));
+  const t = segF - seg;
+  const p0 = pts[Math.max(0, seg - 1)];
+  const p1 = pts[seg];
+  const p2 = pts[seg + 1];
+  const p3 = pts[Math.min(n, seg + 2)];
+  const t2 = t * t, t3 = t2 * t;
+  const catmull = (a, b, c, d) => 0.5 * (
+    (2 * b) + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3
+  );
+  return {
+    x: catmull(p0.x, p1.x, p2.x, p3.x),
+    y: Math.max(2.45, catmull(p0.y, p1.y, p2.y, p3.y)),
+    z: catmull(p0.z, p1.z, p2.z, p3.z)
+  };
+}
+
+function startPorterFlight(viewMode) {
+  if (porterFlightController.isFlying || state.onFerry || state.inElevator) return;
+  if (state.onStreetcar) disembarkStreetcar();
+
+  porterFlightController.isFlying = true;
+  porterFlightController.freePilot = false;
+  porterFlightController.viewMode = viewMode || 'window';
+  porterFlightController.progress = 0;
+  porterFlightController.x = -1360;
+  porterFlightController.y = 2.45;
+  porterFlightController.z = 1030;
+  porterFlightController.heading = Math.PI / 2;
+  porterFlightController.lastHeading = Math.PI / 2;
+  porterFlightController.pitch = 0;
+  porterFlightController.roll = 0;
+  state.onPlane = true;
+  if (scene.fog) scene.fog.density = 0.00022; // crisp 6km aerial visibility across Greater Toronto!
+
+  // Point camera out the left window (-X relative to plane, which is North toward the CN Tower & Downtown Skyline on takeoff!)
+  player.yaw = porterFlightController.viewMode === 'window' ? 0 : (porterFlightController.heading + Math.PI);
+  player.pitch = -0.12;
+  player.velocity.set(0, 0, 0);
+  camera.rotation.order = 'YXZ';
+  camera.rotation.y = player.yaw;
+  camera.rotation.x = player.pitch;
+
+  if (audio && audio.playFerryHorn) audio.playFerryHorn();
+  showAnnouncement(
+    '✈️ PORTER AIRLINES DASH 8-400 (Q400): CLEARED FOR TAKEOFF RUNWAY 08!\n[V] Cycle Window/Cockpit/Chase View • [C] Toggle Free-Pilot Stick • [E] Land at Billy Bishop',
+    5200
+  );
+}
+
+function cyclePorterFlightView() {
+  if (!state.onPlane) return false;
+  const modes = ['window', 'cockpit', 'chase'];
+  const nextIdx = (modes.indexOf(porterFlightController.viewMode) + 1) % modes.length;
+  porterFlightController.viewMode = modes[nextIdx];
+  const labels = {
+    window: '🪟 CABIN WINDOW SEAT VIEW (OVER LEFT WING & TURBOPROP)',
+    cockpit: '👨‍✈️ FLIGHT DECK COCKPIT WINDSHIELD VIEW',
+    chase: '🎥 EXTERNAL AERIAL CHASE CAMERA VIEW'
+  };
+  if (porterFlightController.viewMode !== 'window') {
+    player.yaw = porterFlightController.heading + Math.PI;
+  }
+  showAnnouncement(labels[porterFlightController.viewMode], 2600);
+  return true;
+}
+
+function togglePorterFreePilot() {
+  if (!state.onPlane) return false;
+  porterFlightController.freePilot = !porterFlightController.freePilot;
+  if (porterFlightController.freePilot && porterFlightController.y < 80) {
+    porterFlightController.y = 220;
+  }
+  showAnnouncement(
+    porterFlightController.freePilot
+      ? '🕹️ FREE-PILOT MODE ENGAGED! Use [W/S] to Climb/Descend & [A/D] to Bank Around Toronto!'
+      : '🧭 AUTOPILOT SCENIC CITY LOOP RESUMED!',
+    3200
+  );
+  return true;
+}
+
+function updatePorterFlight(dt) {
+  if (!porterFlightController.isFlying || !state.onPlane) return;
+
+  const planeMesh = (typeof islands !== 'undefined' && islands && islands.flightPlane) ? islands.flightPlane : null;
+
+  if (porterFlightController.freePilot) {
+    let turnInput = 0;
+    if (keys['KeyA'] || keys['ArrowLeft']) turnInput += 1;
+    if (keys['KeyD'] || keys['ArrowRight']) turnInput -= 1;
+    let climbInput = 0;
+    if (keys['KeyW'] || keys['ArrowUp']) climbInput += 1;
+    if (keys['KeyS'] || keys['ArrowDown']) climbInput -= 1;
+
+    const dHeading = turnInput * 0.65 * dt;
+    porterFlightController.heading += dHeading;
+    player.yaw += dHeading;
+    porterFlightController.roll += (turnInput * 0.38 - porterFlightController.roll) * Math.min(1, dt * 5);
+    porterFlightController.pitch += (climbInput * 0.22 - porterFlightController.pitch) * Math.min(1, dt * 5);
+
+    const spd = 95.0;
+    porterFlightController.x += Math.sin(porterFlightController.heading) * spd * dt;
+    porterFlightController.z += Math.cos(porterFlightController.heading) * spd * dt;
+    porterFlightController.y = Math.max(45, Math.min(520, porterFlightController.y + climbInput * 48 * dt));
+  } else {
+    porterFlightController.progress += dt / porterFlightController.duration;
+    if (porterFlightController.progress >= 1.0) {
+      landPorterFlight();
+      return;
+    }
+    const p = porterFlightController.progress;
+    const cur = evalPorterFlightSpline(p);
+    const nxt = evalPorterFlightSpline(Math.min(1, p + 0.008));
+    const prv = evalPorterFlightSpline(Math.max(0, p - 0.008));
+
+    const dx = nxt.x - prv.x, dy = nxt.y - prv.y, dz = nxt.z - prv.z;
+    const horizDist = Math.hypot(dx, dz) || 1;
+    const heading = Math.atan2(dx, dz);
+
+    let dHeading = heading - porterFlightController.lastHeading;
+    while (dHeading > Math.PI) dHeading -= Math.PI * 2;
+    while (dHeading < -Math.PI) dHeading += Math.PI * 2;
+    player.yaw += dHeading;
+
+    const turnRate = dHeading / Math.max(0.008, dt);
+    const targetRoll = Math.max(-0.42, Math.min(0.42, turnRate * 0.45));
+    porterFlightController.roll += (targetRoll - porterFlightController.roll) * Math.min(1, dt * 6);
+    porterFlightController.pitch = Math.max(-0.25, Math.min(0.28, Math.atan2(dy, horizDist)));
+    porterFlightController.heading = heading;
+    porterFlightController.lastHeading = heading;
+    porterFlightController.x = cur.x;
+    porterFlightController.y = cur.y;
+    porterFlightController.z = cur.z;
+  }
+
+  const fx = porterFlightController.x;
+  const fy = porterFlightController.y;
+  const fz = porterFlightController.z;
+  const h = porterFlightController.heading;
+  const sinH = Math.sin(h), cosH = Math.cos(h);
+  // Right vector perpendicular to travel heading (sinH, cosH) is (-cosH, sinH); Left is (cosH, -sinH)
+  const leftX = cosH, leftZ = -sinH;
+
+  if (planeMesh) {
+    planeMesh.position.set(fx, fy, fz);
+    planeMesh.rotation.order = 'YXZ';
+    // In buildPorterDash8Q400, local -Z is nose forward, so rotation.y = heading + Math.PI points nose along (sinH, cosH)
+    planeMesh.rotation.y = h + Math.PI;
+    planeMesh.rotation.x = porterFlightController.pitch;
+    planeMesh.rotation.z = porterFlightController.roll;
+  }
+
+  if (porterFlightController.viewMode === 'cockpit') {
+    player.pos.set(fx + sinH * 12.2, fy + 1.05, fz + cosH * 12.2);
+  } else if (porterFlightController.viewMode === 'chase') {
+    player.pos.set(fx - sinH * 34.0, fy + 9.5, fz - cosH * 34.0);
+  } else {
+    // Window seat just ahead of the left high wing & spinning 6-blade turboprop
+    player.pos.set(fx + sinH * 2.8 + leftX * 1.35, fy + 0.55, fz + cosH * 2.8 + leftZ * 1.35);
+  }
+  player.velocity.set(0, 0, 0);
+  if (scene.fog) scene.fog.density = 0.00022;
+}
+
+function landPorterFlight() {
+  porterFlightController.isFlying = false;
+  porterFlightController.freePilot = false;
+  state.onPlane = false;
+  state.onIsland = true;
+  if (scene.fog) scene.fog.density = 0.00065;
+
+  const planeMesh = (typeof islands !== 'undefined' && islands && islands.flightPlane) ? islands.flightPlane : null;
+  if (planeMesh) {
+    planeMesh.position.set(-1360, 2.45, 1030);
+    planeMesh.rotation.set(0, -Math.PI / 2, 0);
+  }
+
+  // Disembark on Billy Bishop Terminal Apron facing the terminal & Q400 gate
+  const floorY = (islands && islands.floorAt) ? islands.floorAt(-1060, 965) : 0.55;
+  player.pos.set(-1060, floorY + EYE_HEIGHT, 965);
+  player.yaw = 0;
+  player.pitch = 0;
+  player.velocity.set(0, 0, 0);
+  player.isGrounded = true;
+  camera.rotation.order = 'YXZ';
+  camera.rotation.y = 0;
+  camera.rotation.x = 0;
+  camera.rotation.z = 0;
+
+  showAnnouncement('🛬 TOUCHDOWN AT BILLY BISHOP TORONTO CITY AIRPORT (CYTZ) • WELCOME BACK!', 4200);
+}
+
+window.startPorterFlight = startPorterFlight;
+window.updatePorterFlight = updatePorterFlight;
+window.landPorterFlight = landPorterFlight;
+window.cyclePorterFlightView = cyclePorterFlightView;
+window.togglePorterFreePilot = togglePorterFreePilot;
+
+// ============================================================================
+// RIDEABLE TTC FLEXITY OUTLOOK STREETCARS (504 KING, 510 SPADINA, 509 HARBOURFRONT)
+// ============================================================================
+
+const streetcarController = {
+  activeCar: null,
+  lastHeading: 0,
+  announceTimer: 0
+};
+
+function findNearbyStreetcar(maxDist) {
+  if (!traffic || !Array.isArray(traffic.streetcars)) return null;
+  const lim = maxDist || 10.5;
+  let best = null, bestD = lim;
+  for (let i = 0; i < traffic.streetcars.length; i++) {
+    const sc = traffic.streetcars[i];
+    if (!sc || sc.mode === 'hidden') continue;
+    const d = Math.hypot(player.pos.x - sc.vx, player.pos.z - sc.vz);
+    if (d < bestD) {
+      bestD = d;
+      best = sc;
+    }
+  }
+  return best;
+}
+
+function boardStreetcar(sc) {
+  const car = sc || findNearbyStreetcar(14.0);
+  if (!car || state.onFerry || state.inElevator || state.onPlane) return false;
+
+  if (streetcarController.activeCar) {
+    streetcarController.activeCar.hasPlayer = false;
+  }
+  streetcarController.activeCar = car;
+  streetcarController.lastHeading = car.vh;
+  streetcarController.announceTimer = 4.5;
+  car.hasPlayer = true;
+  car.boardGrace = 2.0;
+  car.mode = 'run';
+  state.onStreetcar = true;
+
+  if (traffic && traffic.ringGong) traffic.ringGong();
+  // Face forward along the streetcar aisle (camera forward at yaw is (-sin(yaw), -cos(yaw)))
+  player.yaw = car.vh + Math.PI;
+  player.pitch = -0.03;
+  player.velocity.set(0, 0, 0);
+  camera.rotation.order = 'YXZ';
+  camera.rotation.y = player.yaw;
+  camera.rotation.x = player.pitch;
+
+  const routeLabel = car.sign || '504 KING';
+  showAnnouncement(`🚋 BOARDED TTC FLEXITY STREETCAR (${routeLabel})!\nEnjoy 360° panoramic street views • Press [E] at any time to pull the yellow stop cord & step off!`, 4500);
+  return true;
+}
+
+function updateStreetcarRide(dt) {
+  if (!state.onStreetcar || !streetcarController.activeCar) return;
+  const sc = streetcarController.activeCar;
+  if (sc.mode === 'hidden') {
+    sc.mode = 'run';
+    sc.group.visible = true;
+  }
+
+  let dHeading = sc.vh - streetcarController.lastHeading;
+  while (dHeading > Math.PI) dHeading -= Math.PI * 2;
+  while (dHeading < -Math.PI) dHeading += Math.PI * 2;
+  player.yaw += dHeading;
+  streetcarController.lastHeading = sc.vh;
+
+  // Position player inside the forward panoramic window section of the low-floor Flexity streetcar
+  const fwdDist = 4.5;
+  player.pos.set(
+    sc.vx + Math.sin(sc.vh) * fwdDist,
+    2.15,
+    sc.vz + Math.cos(sc.vh) * fwdDist
+  );
+  player.velocity.set(0, 0, 0);
+}
+
+function disembarkStreetcar() {
+  if (!state.onStreetcar) return false;
+  const sc = streetcarController.activeCar;
+  state.onStreetcar = false;
+  streetcarController.activeCar = null;
+
+  if (traffic && traffic.ringGong) traffic.ringGong();
+  if (sc) {
+    sc.hasPlayer = false;
+    sc.boardGrace = 3.0;
+    sc.mode = 'dwell';
+    sc.timer = 3.5;
+    sc.speed = 0;
+    // Step out onto the right-hand sidewalk / boarding platform relative to streetcar travel direction
+    const rx = -sc.fz, rz = sc.fx;
+    let outX = sc.vx + rx * 4.2;
+    let outZ = sc.vz + rz * 4.2;
+    if (city && !city.canMoveTo(outX, outZ, 0.5, 0)) {
+      outX = sc.vx - rx * 4.2;
+      outZ = sc.vz - rz * 4.2;
+    }
+    const floorY = (city && city.floorAt) ? city.floorAt(outX, outZ) : 0;
+    player.pos.set(outX, floorY + EYE_HEIGHT, outZ);
+  }
+  player.velocity.set(0, 0, 0);
+  player.isGrounded = true;
+  showAnnouncement('🔔 STOP REQUESTED • DISEMBARKED TTC STREETCAR!', 2800);
+  return true;
+}
+
+window.boardStreetcar = boardStreetcar;
+window.updateStreetcarRide = updateStreetcarRide;
+window.disembarkStreetcar = disembarkStreetcar;
+
+// ============================================================================
 // CN TOWER GLASS ELEVATOR, 2-FLOOR OBSERVATION DECK & SKY SHOWDOWN SYSTEMS
 // ============================================================================
 
@@ -4130,7 +4482,57 @@ function updateObservationDeck(dt) {
     return;
   }
 
+  if (state.onPlane) {
+    activeDeckAction = 'land_porter_flight';
+    setDeckPrompt('[E] LAND • [V] VIEW • [C] PILOT', 'PORTER Q400 FLIGHT • [V] WINDOW/COCKPIT/CHASE • [C] FREE-PILOT • [E] LAND');
+    return;
+  }
+
+  if (state.onStreetcar) {
+    activeDeckAction = 'disembark_streetcar';
+    setDeckPrompt('[E]', 'PULL YELLOW CORD • DISEMBARK TTC STREETCAR AT CURB');
+    return;
+  }
+
   const feet = player.pos.y - EYE_HEIGHT;
+
+  // Billy Bishop Airport Porter Dash 8-400 (Q400) Boarding (Terminal Gate / Apron / Runway 08)
+  if (feet < 15) {
+    const dPorterGate = Math.hypot(player.pos.x - (-1060), player.pos.z - 948);
+    const dPorterApron = Math.hypot(player.pos.x - (-1094), player.pos.z - 998);
+    const dPorterRwy = Math.hypot(player.pos.x - (-1360), player.pos.z - 1030);
+    if (dPorterGate < 26 || dPorterApron < 24 || dPorterRwy < 26) {
+      activeDeckAction = 'board_porter_flight';
+      setDeckPrompt('[E]', 'BOARD PORTER Q400 TURBOPROP • SCENIC FLIGHT LOOP AROUND TORONTO');
+      return;
+    }
+
+    // Rideable TTC Flexity Outlook Streetcars (504 King, 510 Spadina, 509 Harbourfront)
+    const nearSc = findNearbyStreetcar(10.5);
+    if (nearSc) {
+      activeDeckAction = { type: 'board_streetcar', sc: nearSc };
+      setDeckPrompt('[E]', `BOARD TTC STREETCAR • ${nearSc.sign || '504 KING'}`);
+      return;
+    }
+
+    // Easter Egg 1: Speakers Corner Booth at 299 Queen St W (MuchMusic HQ)
+    const dSpeakers = Math.hypot(player.pos.x - (-558), player.pos.z - (-602));
+    if (dSpeakers < 8.5) {
+      activeDeckAction = 'speakers_corner';
+      setDeckPrompt('[E]', 'DROP A LOONIE ($1) • RECORD AT MUCHMUSIC / CITYTV SPEAKERS CORNER');
+      return;
+    }
+
+    // Easter Egg 2: John Street Roundhouse Steam Whistle & Locomotive Turntable
+    if (city.landmarks && city.landmarks.roundhouse) {
+      const dRoundhouse = Math.hypot(player.pos.x - city.landmarks.roundhouse[0], player.pos.z - city.landmarks.roundhouse[1]);
+      if (dRoundhouse < 18.0) {
+        activeDeckAction = 'roundhouse_whistle';
+        setDeckPrompt('[E]', 'BLOW 5:00 PM STEAM WHISTLE & OPERATE ROUNDHOUSE TURNTABLE');
+        return;
+      }
+    }
+  }
 
   // Toronto Island Ferry Docks (Jack Layton Terminal, Centre, Hanlan's, Ward's & Billy Bishop Airport Ferry)
   if (feet < 15) {
@@ -4276,6 +4678,41 @@ function handleDeckAction() {
   }
   if (activeDeckAction === 'airport_ferry_to_mainland') {
     startFerryRide('airport_to_mainland');
+    return true;
+  }
+  if (activeDeckAction === 'board_porter_flight') {
+    startPorterFlight('window');
+    return true;
+  }
+  if (activeDeckAction === 'land_porter_flight') {
+    landPorterFlight();
+    return true;
+  }
+  if (activeDeckAction && activeDeckAction.type === 'board_streetcar') {
+    boardStreetcar(activeDeckAction.sc);
+    return true;
+  }
+  if (activeDeckAction === 'disembark_streetcar') {
+    disembarkStreetcar();
+    return true;
+  }
+  if (activeDeckAction === 'speakers_corner') {
+    state.health = Math.min(state.maxHealth, state.health + 35);
+    state.armor = Math.min(state.maxArmor, state.armor + 35);
+    updateHUDHealth();
+    audio.playPickup();
+    const quotes = [
+      '📹 SPEAKERS CORNER [REC ●]: "299 QUEEN WEST FOREVER! BRING BACK ELECTRIC CIRCUS & THE CHUM CITY BUILDING!" (+35 HP & ARMOR)',
+      '📹 SPEAKERS CORNER [REC ●]: "WHY DOES THE 504 KING STREETCAR ALWAYS BUNCH UP IN THREES?! LOVE YOU TORONTO!" (+35 HP & ARMOR)',
+      '📹 SPEAKERS CORNER [REC ●]: "SHOUTOUT TO THE RACCOONS OF KENSINGTON MARKET AND PEAMEAL BACON AT ST. LAWRENCE!" (+35 HP & ARMOR)'
+    ];
+    showAnnouncement(quotes[Math.floor(Math.random() * quotes.length)], 4800);
+    return true;
+  }
+  if (activeDeckAction === 'roundhouse_whistle') {
+    if (audio && audio.playFerryHorn) audio.playFerryHorn();
+    createFireworkBurst(player.pos.x, player.pos.y + 12, player.pos.z);
+    showAnnouncement('🚂 CHOO-CHOO! STEAM WHISTLE PILSNER 5:00 PM WHISTLE & CPR #5930 TURNTABLE ACTIVATED!', 4000);
     return true;
   }
   if (activeDeckAction === 'elevator') {
@@ -5006,6 +5443,10 @@ window.addEventListener('keydown', (e) => {
     if (state.unlocked[ATTACKS.KICK.id]) triggerQuickKick();
   }
   if (e.code === 'KeyV') {
+    if (state.onPlane && cyclePorterFlightView()) {
+      e.preventDefault();
+      return;
+    }
     if (handleTelescopeAction()) {
       e.preventDefault();
       return;
@@ -5015,6 +5456,11 @@ window.addEventListener('keydown', (e) => {
       window.aiCopilot.toggle();
       return;
     }
+  }
+  if (e.code === 'KeyC' && state.onPlane) {
+    e.preventDefault();
+    togglePorterFreePilot();
+    return;
   }
   if (e.code === 'KeyN') {
     if (window.aiCopilot && window.aiCopilot.cyclePersona) {
@@ -6425,6 +6871,8 @@ function animate(now) {
     updateMission(simDt);
     updateElevator(simDt);
     updateFerry(simDt);
+    updatePorterFlight(simDt);
+    updateStreetcarRide(simDt);
     updateObservationDeck(simDt);
     updateTelescope(simDt);
     updateRotatingRestaurant(simDt);
@@ -6665,7 +7113,10 @@ function updatePlayer(dt) {
     }
   }
 
-  if (state.inElevator || state.onFerry) {
+  if (state.inElevator || state.onFerry || state.onPlane || state.onStreetcar) {
+    if (state.onPlane) {
+      camera.rotation.z += (porterFlightController.roll * 0.45 - camera.rotation.z) * 0.15;
+    }
     return;
   }
 
