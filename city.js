@@ -2387,14 +2387,32 @@
       [/^Scotia Plaza$/, 'stone', [1.40, 0.45, 0.40]],                                                            // iconic polished red granite
       [/^Canadian Broadcasting Centre$/, 'brick', [1.55, 0.35, 0.35]],                                            // CBC's iconic bright red grid
       [/^Royal Alexandra Theatre$|^Princess of Wales Theatre$/, 'stone', [1.18, 1.12, 1.02]],                     // King West Beaux-Arts theatres
-      [/^Bell Lightbox$|^Festival Tower$/, 'concrete', [1.12, 1.14, 1.18]],                                       // TIFF festival tower
-      [/^St\. Lawrence Hall$|^The Omni King Edward Hotel$|^1 King West$/, 'stone', [1.22, 1.16, 1.04]],           // Heritage cream limestone
-      [/^North St\. Lawrence Market|St\. Lawrence North Market/, 'victorian', [1.02, 0.95, 0.92]],                // North Market terracotta & glass
+      [/^Bell Lightbox$/, 'dark', [0.82, 0.86, 0.94]],                                                            // TIFF Bell Lightbox dark steel/glass podium
+      [/^Festival Tower$/, 'glass', [0.85, 0.98, 1.15]],                                                          // TIFF Festival Tower crystal glass
+      [/^Theatre Park$/, 'glass', [0.86, 1.02, 1.18]],                                                            // Theatre Park glass tower with diagrid
+      [/^St\. Lawrence Hall$|^The Omni King Edward Hotel$|^1 King West$|^Meridian Hall$/, 'stone', [1.22, 1.16, 1.04]], // Heritage cream limestone
+      [/^St\. Lawrence Centre/, 'concrete', [1.16, 1.13, 1.06]],                                                  // St. Lawrence Centre architectural precast
+      [/^North St\. Lawrence Market|St\. Lawrence North Market/, 'victorian', [1.08, 0.96, 0.90]],                // North Market terracotta & glass
       [/^Queen's Quay Terminal$|^Tip Top Tailors$/, 'concrete', [1.35, 1.35, 1.32]],                             // Waterfront heritage concrete/deco
-      [/^Bisha Hotel|^Hotel Le Germain|^SoHo Hotel|^Revery Toronto/, 'warehouse', [0.82, 0.72, 0.68]],            // Boutique King West brick hotels
-      [/^Commerce Court North$|^Bank of Nova Scotia$|^Royal Bank Building$|^Traders Bank$|^Dominion Public/, 'stone', [1.22, 1.16, 1.02]],
-      [/^CIBC Square/, 'glass', [0.68, 1.25, 1.22]]
+      [/^Bisha Hotel|^Hotel Le Germain|^SoHo Hotel|^Revery Toronto|^393 King West|^Anderson Building|^Beardmore Building/, 'warehouse', [0.92, 0.74, 0.66]], // King West & Front East brick warehouses
+      [/^Commerce Court North$|^Bank of Nova Scotia$|^Royal Bank Building$|^Traders Bank$|^Dominion Public|^Canadian Pacific Building$|^Prudential House$/, 'stone', [1.22, 1.16, 1.02]],
+      [/^Sun Life/, 'glass', [0.78, 0.96, 1.24]],                                                                 // Sun Life Financial blue reflective glass
+      [/^Simcoe Place$|^RBC Centre$|^The Ritz-Carlton/, 'glass', [0.82, 1.04, 1.18]],                             // Front & Wellington glass towers
+      [/^CIBC Square/, 'glass', [0.68, 1.25, 1.22]],
+      [/^MuchMusic|^CHUM 104\.5|^Canada Permanent|^Imperial Life|^Continental Building|^The Canadian Press|^Northern Ontario/, 'stone', [1.22, 1.15, 1.02]],
+      [/^Toronto Club$|^The National Club$|^Toronto Fire Station 332$|^Steele Briggs|^240 Richmond|^230 Richmond|^205 Richmond|^Purman Building/, 'victorian', [1.06, 0.86, 0.78]],
+      [/^Queen Richmond Centre West|^Picasso Condos|^Three Hundred Front/, 'condo', [1.14, 1.18, 1.24]],
+      [/^Shangri-La$|^EY Tower$|^Bay Adelaide|^The St\. Regis/, 'glass', [0.84, 1.04, 1.20]],
+      [/^The Berczy$|^Market Square$|^Market Wharf|^Novotel/, 'victorian', [1.05, 0.88, 0.80]]
     ];
+    const KING_RESTAURANT_ROW_IDS = new Set([306, 299, 309, 302, 301, 303, 310, 311, 304, 307, 305, 300, 297, 298, 308, 457, 458]);
+    const KING_WEST_HERITAGE_IDS = new Set([116, 124, 127, 130, 219, 220, 351, 424, 425, 426, 428, 464, 465, 466, 467, 468, 469, 470, 471, 533, 543, 544]);
+    const FRONT_EAST_HERITAGE_IDS = new Set([208, 209, 210, 357, 358, 215, 416, 417, 418, 419, 421, 422, 318, 320, 321, 249, 250, 401, 58]);
+    const KING_EAST_HERITAGE_IDS = new Set([179, 182, 183, 186, 211, 251, 256, 257, 258, 259, 286, 289, 290, 324, 356, 414, 415, 452, 521]);
+    const CLARENCE_SQ_ROW_IDS = new Set([133, 134, 135, 136, 137, 138]);
+    const JOHN_NELSON_ROW_IDS = new Set([145, 156, 165, 477, 549, 550, 551, 552, 553, 554, 555, 556, 557, 558, 559, 560]);
+    const QUEEN_WEST_ROW_IDS = new Set([16, 200, 221, 224, 226, 231, 236, 237, 238, 333, 359, 394, 488, 535, 547, 572, 574]);
+    const MARKET_ST_COLONNADE_IDS = new Set([417, 418, 419, 421, 422]);
     MAP.buildings.forEach((b, bi) => {
       let pts = toPairs(b.p);
       if (pts.length < 3) return;
@@ -2463,19 +2481,84 @@
                 : name.indexOf('Fairmont Royal York') >= 0 ? 'royalYork'
                   : name.indexOf('Hockey Hall of Fame') >= 0 ? 'hhof'
                     : name.indexOf('Dominion Public') >= 0 ? 'dominionPublic'
-                      : (name === '65 King Street East' || Math.hypot(cx - 664.5, cz - (-594.7)) < 16) ? 'googleKing' : null;
+                      : (name.indexOf("St. Andrew's Church") >= 0 || bi === 107) ? 'stAndrews'
+                        : (name === '65 King Street East' || Math.hypot(cx - 664.5, cz - (-594.7)) < 16) ? 'googleKing' : null;
       if (lmKey) {
         landmarkFeet[lmKey] = pts;
-        if (lmKey !== 'unionStation' && lmKey !== 'royalYork' && lmKey !== 'royThomson' && lmKey !== 'hhof' && lmKey !== 'dominionPublic' && lmKey !== 'googleKing') {
+        if (lmKey !== 'unionStation' && lmKey !== 'royalYork' && lmKey !== 'royThomson' && lmKey !== 'hhof' && lmKey !== 'dominionPublic' && lmKey !== 'googleKing' && lmKey !== 'stAndrews') {
           addSolid({ type: 'poly', pts, h: b.h || 20, name });
         }
         return;
       }
 
+      const isKingRestaurantRow = KING_RESTAURANT_ROW_IDS.has(bi);
+      const isKingWestHeritage = KING_WEST_HERITAGE_IDS.has(bi);
+      const isFrontEastHeritage = FRONT_EAST_HERITAGE_IDS.has(bi);
+      const isKingEastHeritage = KING_EAST_HERITAGE_IDS.has(bi);
+      const isClarenceSqRow = CLARENCE_SQ_ROW_IDS.has(bi);
+      const isJohnNelsonRow = JOHN_NELSON_ROW_IDS.has(bi);
+      const isQueenWestRow = QUEEN_WEST_ROW_IDS.has(bi);
+      const isMarketColonnade = MARKET_ST_COLONNADE_IDS.has(bi);
+      const is212KingW = (bi === 218); // Iconic Beaux-Arts limestone bank-style corner building at NW King & Simcoe
+      const isMuchMusic = (bi === 15 || name.indexOf('MuchMusic') >= 0);
+      const isFireStation332 = (bi === 146 || name.indexOf('Fire Station 332') >= 0);
+      const isTorontoClub = (bi === 48 || name === 'Toronto Club');
+      const isNationalClub = (bi === 326 || name === 'The National Club');
+
       let h = b.h;
-      if (!h) {
-        // unknown height: plausible downtown default scaled by footprint
-        h = 9 + hash(bi * 1.37) * (area > 2000 ? 40 : 18);
+      if (isKingRestaurantRow) {
+        h = 11.6 + (bi % 3) * 0.9; // Authentic 3-storey 1880s Victorian Restaurant Row (301–387 King St W)
+      } else if (is212KingW) {
+        h = 24.0; // 6-storey Beaux-Arts corner building at 212 King St W (NW King & Simcoe)
+      } else if (bi === 31) {
+        h = 72.0; // Sun Life Financial West Tower & Podium (150 King St W)
+      } else if (bi === 97) {
+        h = 22.0; // Meridian Hall (1 Front St E)
+      } else if (bi === 111) {
+        h = 18.5; // St. Lawrence Centre for the Arts (27 Front St E)
+      } else if (bi === 570) {
+        h = 16.5; // St. Lawrence Market North (92 Front St E)
+      } else if (bi === 11) {
+        h = 18.5; // St. Lawrence Hall (157 King St E)
+      } else if (isMuchMusic) {
+        h = 22.0; // 299 Queen St W (MuchMusic / CTV / Bell Media Gothic-Châteauesque HQ)
+      } else if (isFireStation332) {
+        h = 14.5; // Toronto Fire Station 332 (260 Adelaide St W)
+      } else if (isTorontoClub) {
+        h = 15.5; // The Toronto Club (1888 Richardsonian Romanesque clubhouse at Wellington & York)
+      } else if (isNationalClub) {
+        h = 18.0; // The National Club (303 Bay St)
+      } else if (bi === 209 || bi === 208 || bi === 210 || bi === 357 || bi === 358) {
+        h = 16.8 + (bi % 3) * 1.2; // 35–49 Front St E historic cast-iron & brick row opposite Berczy Park
+      } else if (isClarenceSqRow) {
+        h = 12.8; // Clarence Square 1879 Victorian rowhouses
+      } else if (isJohnNelsonRow) {
+        h = 11.8 + (bi % 3) * 0.9; // John & Nelson / Adelaide Victorian rowhouses
+      } else if (isQueenWestRow) {
+        h = 11.8 + (bi % 4) * 1.1; // Queen Street West historic 3-storey retail storefronts
+      } else if (isMarketColonnade) {
+        h = 13.5 + (bi % 2) * 1.8; // Market Street brick colonnade opposite St. Lawrence Market
+      } else if (bi === 141) {
+        h = 16.5; // Windsor Station heritage block on Wellington St W
+      } else if (bi === 445) {
+        h = 7.5;  // Bymark / TD Centre Pavilion on Wellington St W
+      } else if (bi === 265) {
+        h = 46.0; // 220 Bay St heritage limestone office building
+      } else if (bi === 389) {
+        h = 22.0; // Brookfield Place heritage North / Wellington facade
+      } else if (bi === 491) {
+        h = 18.0; // Toronto Hydro Station D Neo-Classical substation on Adelaide St W
+      } else if (bi === 190) {
+        h = 18.5; // EnWave Energy plant at Simcoe & Pearl
+      } else if (bi === 121 || bi === 449 || bi === 191 || bi === 448 || bi === 377) {
+        h = 24.0 + (bi % 3) * 4.0; // Financial District / Richmond-Adelaide podium blocks
+      } else if (!h) {
+        if (isKingWestHeritage || isKingEastHeritage || isFrontEastHeritage) {
+          h = 14.0 + (bi % 4) * 2.2;
+        } else {
+          // unknown height: plausible downtown default scaled by footprint
+          h = 9 + hash(bi * 1.37) * (area > 2000 ? 40 : 18);
+        }
       }
       // Gooderham & St. Lawrence Market: real footprint, roofs/turret/pediment added later
       const isGooderham = name.indexOf('Gooderham Building') === 0;
@@ -2511,7 +2594,47 @@
       let style, namedTint = null;
       const look = NAMED_LOOK.find(([re]) => re.test(name));
       if (look) { style = look[1]; namedTint = look[2]; }
-      else if (isPowerPlant || isRedpathShed || isRedpathTower || isPumpingStation) {
+      else if (is212KingW) {
+        style = 'stone';
+        namedTint = [1.24, 1.18, 1.04]; // Warm Beaux-Arts carved limestone & buff terracotta
+      } else if (isKingRestaurantRow) {
+        style = 'victorian';
+        const rowTints = [
+          [1.12, 0.78, 0.72], // classic Toronto Victorian red brick
+          [1.18, 1.10, 0.92], // painted cream / buff brick heritage townhouse
+          [0.95, 0.68, 0.60], // deep burgundy brick
+          [0.82, 0.86, 0.90], // painted charcoal/slate gastro-pub facade
+          [1.14, 0.92, 0.76]  // warm ochre/terracotta Victorian brick
+        ];
+        namedTint = rowTints[bi % rowTints.length];
+      } else if (isClarenceSqRow || isJohnNelsonRow || isQueenWestRow || isMarketColonnade) {
+        style = 'victorian';
+        const vTints = [
+          [1.10, 0.76, 0.70],
+          [1.16, 1.06, 0.90],
+          [0.98, 0.72, 0.64],
+          [1.12, 0.88, 0.74]
+        ];
+        namedTint = vTints[bi % vTints.length];
+      } else if (isKingWestHeritage) {
+        style = (bi === 219 || bi === 220 || bi === 130) ? 'stone' : (h <= 22 ? 'victorian' : 'warehouse');
+        namedTint = style === 'stone' ? [1.20, 1.14, 1.00] : [1.04, 0.84, 0.76];
+      } else if (isFrontEastHeritage) {
+        style = (bi === 209 || bi === 208 || bi === 321) ? 'stone' : 'victorian';
+        namedTint = style === 'stone' ? [1.22, 1.16, 1.02] : [1.08, 0.82, 0.74];
+      } else if (isKingEastHeritage) {
+        style = (bi === 289 || bi === 182 || bi === 186 || bi === 251 || bi === 256 || bi === 286 || bi === 290 || bi === 356) ? 'stone' : 'victorian';
+        namedTint = style === 'stone' ? [1.20, 1.15, 1.02] : [1.06, 0.82, 0.74];
+      } else if (bi === 31) {
+        style = 'glass';
+        namedTint = [0.78, 0.96, 1.24]; // Sun Life West blue reflective glass
+      } else if (bi === 265 || bi === 389 || bi === 491) {
+        style = 'stone';
+        namedTint = [1.20, 1.14, 1.02];
+      } else if (bi === 445) {
+        style = 'dark';
+        namedTint = [0.72, 0.74, 0.78]; // TD / Bymark Miesian black steel pavilion
+      } else if (isPowerPlant || isRedpathShed || isRedpathTower || isPumpingStation) {
         style = 'warehouse';
         namedTint = isRedpathTower ? [0.85, 0.8, 0.78] : [1.0, 1.0, 1.0];
       } else if (isHarbourfrontMain) {
@@ -2568,7 +2691,11 @@
       const isHeritageRetailArea = (dist === 'kingwest' || dist === 'oldtown') && h <= 36;
       const isTaggedRetail = !!(b.k && /shop|retail|commercial|restaurant|cafe|bar|pub|fast_food|bank|supermarket/i.test(b.k));
       const hasRetailTenant = !!(b.tn || (b.n && /bistro|cafe|restaurant|pub|tavern|grill|brew|tacos|pizza|coffee|bakery|market/i.test(b.n)));
-      const wantShops = !isStadiumOrSpecial && (isTaggedRetail || hasRetailTenant || (isHeritageRetailArea && hash(bi * 3.7) < 0.70));
+      const wantShops = !isStadiumOrSpecial && (
+        isKingRestaurantRow || is212KingW || isKingWestHeritage || isFrontEastHeritage || isKingEastHeritage ||
+        isQueenWestRow || isMarketColonnade || isMuchMusic ||
+        isTaggedRetail || hasRetailTenant || (isHeritageRetailArea && hash(bi * 3.7) < 0.70)
+      );
 
       addBuilding(pts, h, style, 0, {
         tint: bTint,
@@ -2597,11 +2724,29 @@
         if (Math.abs(polyArea(pts)) < 4) return;
         if (pts.some(([x, z]) => isInsideTrench(x, z))) return;   // keep the GO rail cut open to the sky
         const [cx, cz] = centroid(pts);
+        // Skip untagged OSM building:parts that overlap custom-crafted landmarks (Union Station, Scotiabank Arena, Dominion Public Bldg, St. Andrew's Church, Skywalk)
+        if (cx > 120 && cx < 395 && cz > -205 && cz < -55) return; // Union Station
+        if (cx > 270 && cx < 385 && cz > 5 && cz < 110) return;    // Scotiabank Arena
+        if (cx > 420 && cx < 520 && cz > -275 && cz < -185) return; // Dominion Public Building
+        if (cx > -190 && cx < -140 && cz > -380 && cz < -315) return; // St. Andrew's Church
+        if (cx > -45 && cx < 5 && cz > -65 && cz < -15) return;    // Skywalk
         const mh = pt.mh || 0, h = Math.min(pt.h, 320);
         if (h - mh < 0.8) return;
         const m = (pt.m || '').toLowerCase();
-        let style;
-        if (m === 'brick') style = h < 28 ? 'victorian' : 'brick';
+        // Parts belonging to Royal Alexandra Theatre, Princess of Wales Theatre, St. Lawrence Hall, One King West, King Edward Hotel, or 299 Queen W
+        const isTheatreOrHallPart = (
+          (cx > -355 && cx < -305 && cz > -410 && cz < -345) || // Royal Alexandra Theatre
+          (cx > -490 && cx < -435 && cz > -370 && cz < -310) || // Princess of Wales Theatre
+          (cx > 890 && cx < 935 && cz > -705 && cz < -655) ||   // St. Lawrence Hall
+          (cx > 410 && cx < 465 && cz > -575 && cz < -515 && h <= 65) || // 1 King West podium
+          (cx > 550 && cx < 615 && cz > -620 && cz < -550) ||   // Omni King Edward Hotel
+          (cx > -585 && cx < -525 && cz > -650 && cz < -595)    // 299 Queen St W (MuchMusic)
+        );
+        let style, partTint = null;
+        if (isTheatreOrHallPart && !m) {
+          style = 'stone';
+          partTint = [1.20, 1.14, 1.02];
+        } else if (m === 'brick') style = h < 28 ? 'victorian' : 'brick';
         else if (m === 'stone' || m === 'limestone' || m === 'sandstone') style = 'stone';
         else if (m === 'concrete') style = 'concrete';
         else if (m === 'metal' || m === 'copper') style = 'dark';
@@ -2609,7 +2754,7 @@
         else style = districtStyle(cx, cz, h, pi + 900);
         const wantPartShops = mh === 0 && pt.h <= 24 && pt.k && /shop|retail|restaurant|cafe|bar|pub/i.test(pt.k);
         addBuilding(pts, h, style, mh, {
-          tint: osmColourToTint(pt.c, style) || buildingColorTint(style, cx, cz, pi + 900),
+          tint: partTint || osmColourToTint(pt.c, style) || buildingColorTint(style, cx, cz, pi + 900),
           uOff: hash(pi * 3.3) * TILE_W, shops: wantPartShops, roof: h - mh > 20
         });
         if (mh < 2.5) addSolid({ type: 'poly', pts, h, name: pt.n || 'Building part' });
@@ -7930,6 +8075,738 @@
           scene.add(cg);
         }
       });
+    }
+
+    // ==========================================================================
+    // 7. STREET-BY-STREET & BLOCK-BY-BLOCK DOWNTOWN ARCHITECTURAL SET-PIECES
+    //    King St (W & E), Front St (W & E), Wellington St, Adelaide St,
+    //    Richmond St, Queen St W, The Esplanade / Market St, University Ave & John St
+    // ==========================================================================
+    {
+      const streetRot = -0.289; // Toronto's ~16.6° street grid rotation (atan2(-0.285, 0.958))
+      const streetDir = [0.958, -0.285]; // Eastward unit vector along King / Front / Wellington / Adelaide
+      const streetSouth = [0.285, 0.958]; // Southward unit vector perpendicular to E-W streets
+      const stoneTrimMat = new THREE.MeshStandardMaterial({ color: 0xd9ccb4, roughness: 0.72, side: THREE.DoubleSide });
+      const darkSlateMat = new THREE.MeshStandardMaterial({ color: 0x2f353d, roughness: 0.55, metalness: 0.25, side: THREE.DoubleSide });
+      const copperRoofMat = new THREE.MeshStandardMaterial({ color: 0x467f68, roughness: 0.45, metalness: 0.45, side: THREE.DoubleSide });
+      const blackIronMat = new THREE.MeshStandardMaterial({ color: 0x181b20, roughness: 0.4, metalness: 0.75 });
+      const warmGoldMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.25, metalness: 0.85 });
+      const festoonBulbMat = new THREE.MeshBasicMaterial({ color: 0xffe49e, toneMapped: false });
+
+      // ------------------------------------------------------------------------
+      // 7A. ST. ANDREW'S PRESBYTERIAN CHURCH (73 Simcoe St at King St W, #107)
+      //     1876 Scottish Romanesque Revival sandstone church directly east of Roy Thomson Hall
+      // ------------------------------------------------------------------------
+      {
+        const rawStA = landmarkFeet.stAndrews || toPairs(MAP.buildings[107].p);
+        let stPts = subdividePoly(rawStA, 2);
+        if (polyArea(stPts) < 0) stPts.reverse();
+        const [scx, scz] = centroid(stPts);
+        const stGrp = new THREE.Group();
+
+        // Scottish Romanesque sandstone & stained-glass facade texture
+        const stTex = canvasTex(512, 256, ctx => {
+          ctx.fillStyle = '#b8a282'; ctx.fillRect(0, 0, 512, 256);
+          for (let y = 0; y < 256; y += 10) {
+            for (let x = ((y / 10) % 2) ? 0 : 14; x < 512; x += 28) {
+              ctx.fillStyle = `rgba(${hash(x * 3 + y * 5) > 0.5 ? '245,230,205' : '65,50,35'},${0.05 + hash(x + y * 9) * 0.08})`;
+              ctx.fillRect(x, y, 27, 9);
+            }
+          }
+          // Romanesque round-arched stained glass windows
+          for (let b = 0; b < 4; b++) {
+            const bx = b * 128 + 34, bw = 60, by = 64, bh = 128;
+            ctx.fillStyle = '#6e5b43';
+            ctx.beginPath(); ctx.arc(bx + bw / 2, by + bw / 2, bw / 2 + 6, Math.PI, 0);
+            ctx.lineTo(bx + bw + 6, by + bh); ctx.lineTo(bx - 6, by + bh); ctx.closePath(); ctx.fill();
+            const g = ctx.createLinearGradient(0, by, 0, by + bh);
+            g.addColorStop(0, '#f59e0b'); g.addColorStop(0.5, '#2563eb'); g.addColorStop(1, '#7c2d12');
+            ctx.fillStyle = g;
+            ctx.beginPath(); ctx.arc(bx + bw / 2, by + bw / 2, bw / 2, Math.PI, 0);
+            ctx.lineTo(bx + bw, by + bh); ctx.lineTo(bx, by + bh); ctx.closePath(); ctx.fill();
+          }
+        }, ctx => {
+          for (let b = 0; b < 4; b++) {
+            const bx = b * 128 + 34, bw = 60, by = 64, bh = 128;
+            ctx.fillStyle = 'rgba(255,210,120,0.85)';
+            ctx.beginPath(); ctx.arc(bx + bw / 2, by + bw / 2, bw / 2, Math.PI, 0);
+            ctx.lineTo(bx + bw, by + bh); ctx.lineTo(bx, by + bh); ctx.closePath(); ctx.fill();
+          }
+        });
+        const stWallMat = new THREE.MeshStandardMaterial({
+          map: stTex.t, emissive: 0xffffff, emissiveMap: stTex.e, emissiveIntensity: 0.9, roughness: 0.82, side: THREE.DoubleSide
+        });
+        const naveH = 15.2;
+        const naveWalls = new THREE.Mesh(wallsGeo(stPts, 0, () => naveH, 14, 15.2), stWallMat);
+        naveWalls.castShadow = naveWalls.receiveShadow = true;
+        stGrp.add(naveWalls);
+
+        // Pitched dark-slate sanctuary roof rising to 22.8m ridge
+        const mRoof = mansardGeo(stPts, naveH, 22.8, 0.35);
+        stGrp.add(new THREE.Mesh(mRoof.geo, darkSlateMat));
+        stGrp.add(new THREE.Mesh(capGeo(mRoof.top, () => 22.8), darkSlateMat));
+
+        // Iconic 38m NW Corner Square Sandstone Bell Tower & Octagonal Spire facing King & Simcoe [-174.5, -365.5]
+        const twX = -174.5, twZ = -365.5;
+        const towerShaft = new THREE.Mesh(new THREE.BoxGeometry(8.6, 26.0, 8.6), stWallMat);
+        towerShaft.position.set(twX, 13.0, twZ);
+        towerShaft.rotation.y = streetRot;
+        towerShaft.castShadow = true;
+        stGrp.add(towerShaft);
+
+        // Corner stone buttresses & 4 Romanesque turret pinnacles at 26m
+        [[-4.3, -4.3], [4.3, -4.3], [4.3, 4.3], [-4.3, 4.3]].forEach(([ox, oz]) => {
+          const rx = twX + ox * Math.cos(-streetRot) - oz * Math.sin(-streetRot);
+          const rz = twZ + ox * Math.sin(-streetRot) + oz * Math.cos(-streetRot);
+          const butt = new THREE.Mesh(new THREE.BoxGeometry(1.5, 26.5, 1.5), stoneTrimMat);
+          butt.position.set(rx, 13.25, rz);
+          butt.rotation.y = streetRot;
+          stGrp.add(butt);
+          const pin = new THREE.Mesh(new THREE.ConeGeometry(1.0, 4.2, 4), darkSlateMat);
+          pin.position.set(rx, 28.6, rz);
+          pin.rotation.y = streetRot + Math.PI / 4;
+          stGrp.add(pin);
+        });
+
+        // Octagonal belfry drum + steep Scottish Romanesque spire (26m -> 39.5m)
+        const belfry = new THREE.Mesh(new THREE.CylinderGeometry(3.8, 4.2, 3.5, 8), stoneTrimMat);
+        belfry.position.set(twX, 27.7, twZ);
+        stGrp.add(belfry);
+        const spire = new THREE.Mesh(new THREE.ConeGeometry(3.9, 11.5, 8), darkSlateMat);
+        spire.position.set(twX, 35.2, twZ);
+        spire.castShadow = true;
+        stGrp.add(spire);
+        const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.22, 2.4, 0.22), warmGoldMat);
+        crossV.position.set(twX, 41.8, twZ);
+        stGrp.add(crossV);
+        const crossH = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.22, 0.22), warmGoldMat);
+        crossH.position.set(twX, 42.1, twZ);
+        crossH.rotation.y = streetRot;
+        stGrp.add(crossH);
+
+        // Glowing Stained-Glass Rose Window & Triple Romanesque Arched Portal facing King Street West (north facade)
+        const kingFaceX = scx - streetSouth[0] * 18.5, kingFaceZ = scz - streetSouth[1] * 18.5;
+        const roseMesh = new THREE.Mesh(
+          new THREE.CircleGeometry(3.4, 24),
+          new THREE.MeshBasicMaterial({ color: 0xffcf70, side: THREE.DoubleSide, toneMapped: false })
+        );
+        roseMesh.position.set(kingFaceX - streetSouth[0] * 0.3, 11.2, kingFaceZ - streetSouth[1] * 0.3);
+        roseMesh.rotation.y = streetRot + Math.PI;
+        stGrp.add(roseMesh);
+
+        const stSign = signMesh([
+          "ST. ANDREW'S PRESBYTERIAN CHURCH",
+          '73 SIMCOE ST AT KING ST W • SCOTTISH ROMANESQUE • EST. 1830'
+        ], 11.5, 1.5, { bg: '#1e1b18', fg: '#fde68a', borderColor: '#d4af37', size: 52 });
+        signOnEdge(stPts, [scx - 10, scz - 60], stSign, 4.2, 10);
+
+        scene.add(stGrp);
+        addSolid({ type: 'poly', pts: rawStA, h: 26, name: "St. Andrew's Church" });
+      }
+
+      // ------------------------------------------------------------------------
+      // 7B. 212 KING STREET WEST (NW Corner of King St W & Simcoe St, #218)
+      //     Historic 6-storey Beaux-Arts / Edwardian classical corner bank building
+      //     across from Roy Thomson Hall, flanked by Royal Alex & Theatre Park
+      // ------------------------------------------------------------------------
+      if (MAP.buildings[218]) {
+        const pts212 = toPairs(MAP.buildings[218].p);
+        if (polyArea(pts212) < 0) pts212.reverse();
+        const [bx, bz] = centroid(pts212);
+        const H212 = 24.0;
+        // Heavy projecting classical limestone cornice & dentil frieze at 24m + ground-floor belt course at 5.2m
+        scene.add(new THREE.Mesh(wallsGeo(scaledPoly(pts212, 1.03), H212 - 1.1, () => H212 + 0.4, 8, 1.5), stoneTrimMat));
+        scene.add(new THREE.Mesh(wallsGeo(scaledPoly(pts212, 1.015), 4.8, () => 5.5, 8, 0.7), stoneTrimMat));
+        // Rooftop stone balustrade urn piers along King & Simcoe edges
+        pts212.forEach(([px, pz]) => {
+          const pier = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.3, 0.9), stoneTrimMat);
+          pier.position.set(px, H212 + 0.65, pz);
+          scene.add(pier);
+        });
+        // Fluted classical limestone pilasters along the SE King & Simcoe corner
+        for (let k = 0; k < 5; k++) {
+          const t = k / 4;
+          const colX = -280.0 + t * 28.0, colZ = -370.5 - t * 8.2;
+          const pil = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.38, 18.0, 12), stoneTrimMat);
+          pil.position.set(colX, 14.2, colZ);
+          scene.add(pil);
+        }
+        const sign212 = signMesh([
+          '212 KING STREET WEST • HISTORIC BANKING HALL',
+          'KING & SIMCOE HERITAGE CORNER • ENTERTAINMENT DISTRICT'
+        ], 12.5, 1.5, { bg: '#141820', fg: '#fef08a', borderColor: '#d4af37', size: 52 });
+        signOnEdge(pts212, [bx + 15, bz + 50], sign212, 4.8, 10);
+      }
+
+      // ------------------------------------------------------------------------
+      // 7C. KING STREET WEST — "RESTAURANT ROW" (301–387 King St W) & THEATRE DISTRICT
+      //     The signature Destination Toronto King West look: 15 narrow 3-storey
+      //     1880s Victorian rowhouses with Second Empire mansard & gabled roofs,
+      //     bay windows, wrought-iron patio fences, striped bistro awnings & warm
+      //     overhead festoon string lights, with glass towers rising behind them!
+      // ------------------------------------------------------------------------
+      {
+        const kwGrp = new THREE.Group();
+        const restaurantNames = [
+          ['LA CARNITA • KING WEST PATIO', '#7f1d1d', '#fde68a', '#f59e0b'],
+          ['HEY LUCY CAFE & TRATTORIA', '#1e1b18', '#fef08a', '#eab308'],
+          ['WILBUR MEXICANA • CANTINA', '#064e3b', '#fde68a', '#10b981'],
+          ['GABBY\'S KING WEST ROADHOUSE', '#78350f', '#fef3c7', '#f59e0b'],
+          ['ELEPHANT & CASTLE PUB', '#0d2b1a', '#fde68a', '#22c55e'],
+          ['NOLITA ITALIAN BISTRO', '#450a0a', '#fef08a', '#ef4444'],
+          ['BAR BUKA & OYSTER LOUNGE', '#0f172a', '#7dd3fc', '#38bdf8'],
+          ['KING TAPS • FIRST CANADIAN PATIO', '#1c1917', '#fde68a', '#d97706']
+        ];
+        const awningPalette = [0x991b1b, 0x065f46, 0x1e3a8a, 0x92400e, 0x374151];
+
+        let rowIdx = 0;
+        KING_RESTAURANT_ROW_IDS.forEach(bi => {
+          const b = MAP.buildings[bi];
+          if (!b) return;
+          const pts = toPairs(b.p);
+          if (pts.length < 3) return;
+          if (polyArea(pts) < 0) pts.reverse();
+          const [cx, cz] = centroid(pts);
+          const h = 11.6 + (bi % 3) * 0.9;
+
+          // 1. Projecting Victorian Bracketed Cornice at roofline
+          kwGrp.add(new THREE.Mesh(wallsGeo(scaledPoly(pts, 1.04), h - 0.55, () => h + 0.15, 6, 0.7), stoneTrimMat));
+
+          // 2. Second Empire Mansard Roof or Pitched Victorian Gable Turret Cap
+          const m = mansardGeo(pts, h, h + 2.6, 0.72);
+          const rMat = (rowIdx % 3 === 0) ? copperRoofMat : darkSlateMat;
+          kwGrp.add(new THREE.Mesh(m.geo, rMat));
+          kwGrp.add(new THREE.Mesh(capGeo(m.top, () => h + 2.6), rMat));
+
+          // 3. North-facing King St W Victorian Bay Window, Striped Bistro Awning & String-Lit Sidewalk Patio
+          // Find the north edge facing King Street West (min Z)
+          let bestEdge = null, bestZ = Infinity;
+          for (let i = 0; i < pts.length; i++) {
+            const p1 = pts[i], p2 = pts[(i + 1) % pts.length];
+            const L = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
+            const mz = (p1[1] + p2[1]) / 2;
+            if (L >= 4.2 && mz < bestZ) {
+              bestZ = mz;
+              bestEdge = { p1, p2, L, mx: (p1[0] + p2[0]) / 2, mz };
+            }
+          }
+          if (bestEdge) {
+            const ex = (bestEdge.p2[0] - bestEdge.p1[0]) / bestEdge.L;
+            const ez = (bestEdge.p2[1] - bestEdge.p1[1]) / bestEdge.L;
+            let nx = ez, nz = -ex;
+            if (nz > 0) { nx = -nx; nz = -nz; } // outward normal pointing NORTH toward King St W
+            const rotY = Math.atan2(nx, nz);
+            const spanW = Math.min(bestEdge.L * 0.88, 12.0);
+
+            // 2nd & 3rd floor projecting Victorian wooden bay window + pointed gable dormer
+            const bayBox = new THREE.Mesh(new THREE.BoxGeometry(Math.min(2.6, spanW * 0.45), h - 4.4, 0.85), stoneTrimMat);
+            bayBox.position.set(bestEdge.mx + nx * 0.42, 4.0 + (h - 4.4) / 2, bestEdge.mz + nz * 0.42);
+            bayBox.rotation.y = rotY;
+            kwGrp.add(bayBox);
+            const dormer = new THREE.Mesh(new THREE.ConeGeometry(1.5, 2.2, 4), rMat);
+            dormer.position.set(bestEdge.mx + nx * 0.35, h + 1.1, bestEdge.mz + nz * 0.35);
+            dormer.rotation.y = rotY + Math.PI / 4;
+            kwGrp.add(dormer);
+
+            // Slanted Bistro Awning projecting 1.8m over the storefront
+            const awnMat = new THREE.MeshStandardMaterial({
+              color: awningPalette[rowIdx % awningPalette.length], roughness: 0.55, side: THREE.DoubleSide
+            });
+            const awning = new THREE.Mesh(new THREE.BoxGeometry(spanW, 0.14, 1.9), awnMat);
+            awning.position.set(bestEdge.mx + nx * 0.95, 3.65, bestEdge.mz + nz * 0.95);
+            awning.rotation.y = rotY;
+            awning.rotation.x = 0.22;
+            kwGrp.add(awning);
+
+            // Storefront restaurant sign
+            const [rName, rBg, rFg, rBorder] = restaurantNames[rowIdx % restaurantNames.length];
+            const rSign = signMesh([rName], Math.min(spanW * 0.92, 6.8), 0.72, {
+              bg: rBg, fg: rFg, borderColor: rBorder, size: 58
+            });
+            rSign.position.set(bestEdge.mx + nx * 0.35, 4.35, bestEdge.mz + nz * 0.35);
+            rSign.rotation.y = rotY;
+            kwGrp.add(rSign);
+
+            // Sidewalk Patio Enclosure (tucked within 2.1m of facade so sidewalk & street stay 100% clear)
+            const patioDepth = 1.95;
+            const px = bestEdge.mx + nx * (patioDepth * 0.55);
+            const pz = bestEdge.mz + nz * (patioDepth * 0.55);
+            const fenceFront = new THREE.Mesh(new THREE.BoxGeometry(spanW, 0.95, 0.08), blackIronMat);
+            fenceFront.position.set(bestEdge.mx + nx * patioDepth, 0.48, bestEdge.mz + nz * patioDepth);
+            fenceFront.rotation.y = rotY;
+            kwGrp.add(fenceFront);
+
+            // Warm overhead festoon string light bulbs above patio
+            for (let bi2 = -1; bi2 <= 1; bi2++) {
+              const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.11, 6, 6), festoonBulbMat);
+              bulb.position.set(px + ex * (bi2 * spanW * 0.3), 3.35, pz + ez * (bi2 * spanW * 0.3));
+              kwGrp.add(bulb);
+            }
+
+            // Bistro table & umbrella inside patio
+            const tbl = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.52, 0.74, 10), blackIronMat);
+            tbl.position.set(px, 0.37, pz);
+            kwGrp.add(tbl);
+            const umb = new THREE.Mesh(new THREE.ConeGeometry(1.15, 0.48, 8), awnMat);
+            umb.position.set(px, 2.25, pz);
+            kwGrp.add(umb);
+          }
+          rowIdx++;
+        });
+
+        // Royal Alexandra Theatre (#132, 260 King St W): Vertical Blade Sign + Ornate Gilded Canopy
+        if (MAP.buildings[132]) {
+          const raPts = toPairs(MAP.buildings[132].p);
+          const [rx, rz] = centroid(raPts);
+          const raCanopy = new THREE.Mesh(new THREE.BoxGeometry(14.5, 0.55, 3.6), warmGoldMat);
+          raCanopy.position.set(rx + streetSouth[0] * 16.5, 4.4, rz + streetSouth[1] * 16.5);
+          raCanopy.rotation.y = streetRot;
+          kwGrp.add(raCanopy);
+          const raMarquee = signMesh([
+            'ROYAL ALEXANDRA THEATRE',
+            '260 KING ST W • NORTH AMERICA\'S OLDEST CONTINUOUSLY OPERATING ROYAL THEATRE'
+          ], 14.0, 1.8, { bg: '#450a0a', fg: '#fef08a', borderColor: '#f59e0b', size: 52 });
+          signOnEdge(raPts, [rx + 10, rz + 50], raMarquee, 5.8, 12);
+          // Vertical Broadway-style glowing blade sign
+          const raBlade = signMesh(['R O Y A L   A L E X'], 2.2, 9.5, {
+            bg: '#7f1d1d', fg: '#fef08a', borderColor: '#f59e0b', size: 62
+          });
+          raBlade.position.set(rx + streetSouth[0] * 17.5, 11.2, rz + streetSouth[1] * 17.5);
+          raBlade.rotation.y = streetRot + Math.PI / 2;
+          kwGrp.add(raBlade);
+        }
+
+        // Princess of Wales Theatre (#125, 300 King St W): Theatrical Canopy + Marquee
+        if (MAP.buildings[125]) {
+          const pwPts = toPairs(MAP.buildings[125].p);
+          const [px, pz] = centroid(pwPts);
+          const pwCanopy = new THREE.Mesh(new THREE.BoxGeometry(16.0, 0.5, 3.8), blackIronMat);
+          pwCanopy.position.set(px + streetSouth[0] * 15.5, 4.4, pz + streetSouth[1] * 15.5);
+          pwCanopy.rotation.y = streetRot;
+          kwGrp.add(pwCanopy);
+          const pwMarquee = signMesh([
+            'PRINCESS OF WALES THEATRE',
+            '300 KING STREET WEST • MIRVISH PRODUCTIONS'
+          ], 15.5, 1.9, { bg: '#1e1b4b', fg: '#fde047', borderColor: '#f59e0b', size: 54 });
+          signOnEdge(pwPts, [px + 10, pz + 50], pwMarquee, 5.8, 12);
+        }
+
+        // TIFF Bell Lightbox (#284, 350 King St W at John St): Cantilevered Glass/Steel Canopy & Marquee
+        if (MAP.buildings[284]) {
+          const tiffPts = toPairs(MAP.buildings[284].p);
+          const [tx, tz] = centroid(tiffPts);
+          const tiffCanopy = new THREE.Mesh(new THREE.BoxGeometry(26.0, 0.45, 4.2), blackIronMat);
+          tiffCanopy.position.set(tx + streetSouth[0] * 19.0, 4.8, tz + streetSouth[1] * 19.0);
+          tiffCanopy.rotation.y = streetRot;
+          kwGrp.add(tiffCanopy);
+          const tiffSign = signMesh([
+            'TIFF BELL LIGHTBOX',
+            'TORONTO INTERNATIONAL FILM FESTIVAL • 350 KING ST W'
+          ], 22.0, 2.4, { bg: '#090d16', fg: '#ffffff', borderColor: '#f97316', size: 58 });
+          signOnEdge(tiffPts, [tx + 15, tz + 60], tiffSign, 6.8, 14);
+        }
+
+        // Theatre Park (#7, 224 King St W): Signature White Diagonal Structural Diagrid Exoskeleton
+        if (MAP.buildings[7]) {
+          const tpPts = toPairs(MAP.buildings[7].p);
+          const [tpx, tpz] = centroid(tpPts);
+          const diagMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.3, metalness: 0.5 });
+          for (let tier = 0; tier < 5; tier++) {
+            const y0 = 18 + tier * 30;
+            const band = new THREE.Mesh(new THREE.BoxGeometry(19.5, 0.7, 36.5), diagMat);
+            band.position.set(tpx, y0, tpz);
+            band.rotation.y = streetRot;
+            kwGrp.add(band);
+          }
+        }
+
+        // Canada's Walk of Fame Stars embedded along the King St W sidewalk (Simcoe to John)
+        const starMat = new THREE.MeshBasicMaterial({ color: 0xfbbf24, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+        for (let si = 0; si < 16; si++) {
+          const sx = -235 - si * 16.0;
+          const sz = -376.8 + (sx - (-207.6)) * (-0.298) + (si % 2 === 0 ? 7.8 : -7.8);
+          const star = new THREE.Mesh(new THREE.CircleGeometry(0.48, 5), starMat);
+          star.rotation.x = -Math.PI / 2;
+          star.position.set(sx, 0.06, sz);
+          kwGrp.add(star);
+        }
+
+        scene.add(kwGrp);
+      }
+
+      // ------------------------------------------------------------------------
+      // 7D. KING STREET EAST & FINANCIAL DISTRICT LANDMARKS
+      //     TD Banking Pavilion (#212), One King West (#98/#289),
+      //     The Omni King Edward Hotel (#180), and 1850 St. Lawrence Hall (#11)
+      // ------------------------------------------------------------------------
+      {
+        const keGrp = new THREE.Group();
+
+        // TD Banking Pavilion (#212, King & Bay): Miesian black steel roofline & glowing green TD shield
+        if (MAP.buildings[212]) {
+          const tdPts = toPairs(MAP.buildings[212].p);
+          const [tx, tz] = centroid(tdPts);
+          const tdSign = signMesh(['TD', 'TORONTO-DOMINION CENTRE BANKING HALL'], 12.0, 1.8, {
+            bg: '#052e16', fg: '#4ade80', borderColor: '#22c55e', size: 60
+          });
+          signOnEdge(tdPts, [tx, tz - 50], tdSign, 4.8, 12);
+        }
+
+        // One King West (#98 / #289, SW corner of King & Yonge): Beaux-Arts podium cornice & hotel marquee
+        if (MAP.buildings[98]) {
+          const okPts = toPairs(MAP.buildings[98].p);
+          const [ox, oz] = centroid(okPts);
+          keGrp.add(new THREE.Mesh(wallsGeo(scaledPoly(okPts, 1.03), 18.0, () => 19.2, 8, 1.2), stoneTrimMat));
+          const okSign = signMesh(['ONE KING WEST HOTEL & RESIDENCE', 'HISTORIC 1914 DOMINION BANK HEADQUARTERS'], 14.0, 1.7, {
+            bg: '#1c1917', fg: '#fef08a', borderColor: '#d4af37', size: 54
+          });
+          signOnEdge(okPts, [ox + 10, oz - 50], okSign, 5.2, 10);
+        }
+
+        // The Omni King Edward Hotel (#180, 37 King St E): 1903 Beaux-Arts cornice & gilded porte-cochère canopy
+        if (MAP.buildings[180]) {
+          const kePts = toPairs(MAP.buildings[180].p);
+          if (polyArea(kePts) < 0) kePts.reverse();
+          const [kx, kz] = centroid(kePts);
+          keGrp.add(new THREE.Mesh(wallsGeo(scaledPoly(kePts, 1.025), 14.0, () => 15.0, 8, 1.0), stoneTrimMat));
+          keGrp.add(new THREE.Mesh(wallsGeo(scaledPoly(kePts, 1.03), 65.5, () => 67.2, 8, 1.7), stoneTrimMat));
+          const keSign = signMesh([
+            'THE OMNI KING EDWARD HOTEL',
+            '37 KING STREET EAST • TORONTO\'S FIRST LUXURY HOTEL • EST. 1903'
+          ], 16.0, 1.9, { bg: '#1e1b18', fg: '#fde68a', borderColor: '#d4af37', size: 54 });
+          signOnEdge(kePts, [kx - 10, kz + 50], keSign, 5.5, 14);
+        }
+
+        // St. Lawrence Hall (#11, 157 King St E at Jarvis St): 1850 Renaissance Revival Portico, Pediment & Domed Clock Cupola
+        if (MAP.buildings[11]) {
+          const slPts = toPairs(MAP.buildings[11].p);
+          if (polyArea(slPts) < 0) slPts.reverse();
+          const [hx, hz] = centroid(slPts);
+          const H_SL = 18.5;
+          // Mansard slate roof over the 1850 hall
+          const slMansard = mansardGeo(slPts, H_SL, H_SL + 3.6, 0.78);
+          keGrp.add(new THREE.Mesh(slMansard.geo, darkSlateMat));
+          keGrp.add(new THREE.Mesh(capGeo(slMansard.top, () => H_SL + 3.6), darkSlateMat));
+
+          // 4-Column Corinthian Portico & Triangular Pediment facing King St E (north facade)
+          const pMidX = hx - streetSouth[0] * 14.5, pMidZ = hz - streetSouth[1] * 14.5;
+          [-4.2, -1.4, 1.4, 4.2].forEach(u => {
+            const colX = pMidX + streetDir[0] * u - streetSouth[0] * 1.1;
+            const colZ = pMidZ + streetDir[1] * u - streetSouth[1] * 1.1;
+            const col = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.42, 11.5, 12), stoneTrimMat);
+            col.position.set(colX, 11.2, colZ);
+            keGrp.add(col);
+          });
+          const ped = new THREE.Mesh(new THREE.ConeGeometry(7.2, 3.2, 4), stoneTrimMat);
+          ped.position.set(pMidX - streetSouth[0] * 0.8, H_SL + 1.4, pMidZ - streetSouth[1] * 0.8);
+          ped.rotation.y = streetRot + Math.PI / 4;
+          keGrp.add(ped);
+
+          // Iconic Octagonal Domed Clock & Bell Cupola rising to 31m
+          const cupBase = new THREE.Mesh(new THREE.CylinderGeometry(2.8, 3.1, 4.2, 8), stoneTrimMat);
+          cupBase.position.set(hx, H_SL + 5.2, hz);
+          keGrp.add(cupBase);
+          const cupDome = new THREE.Mesh(new THREE.SphereGeometry(2.8, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2), copperRoofMat);
+          cupDome.position.set(hx, H_SL + 7.3, hz);
+          keGrp.add(cupDome);
+          const cupSpire = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.28, 3.5, 8), warmGoldMat);
+          cupSpire.position.set(hx, H_SL + 11.4, hz);
+          keGrp.add(cupSpire);
+
+          const slSign = signMesh([
+            'ST. LAWRENCE HALL • EST. 1850',
+            'NATIONAL HISTORIC SITE • 157 KING STREET EAST'
+          ], 13.0, 1.6, { bg: '#1c1917', fg: '#fef08a', borderColor: '#d4af37', size: 54 });
+          signOnEdge(slPts, [hx - 10, hz - 50], slSign, 5.0, 12);
+        }
+
+        scene.add(keGrp);
+      }
+
+      // ------------------------------------------------------------------------
+      // 7E. FRONT STREET WEST & EAST BLOCK-BY-BLOCK ARCHITECTURAL HIGHLIGHTS
+      //     CBC Broadcast Centre (#1), MTCC North (#41) & Simcoe Place (#52),
+      //     TD Terrace (#489), Brookfield Place Galleria (#61/#62),
+      //     Meridian Hall (#97), St. Lawrence Centre (#111),
+      //     35–49 Front St E Cast-Iron Row (#208–#358), & St. Lawrence Market North (#570)
+      // ------------------------------------------------------------------------
+      {
+        const frGrp = new THREE.Group();
+
+        // 1. CBC Canadian Broadcasting Centre (#1, 250 Front St W): Crimson Red Steel Grid & Projecting Geometric Cubes
+        if (MAP.buildings[1]) {
+          const cbcPts = toPairs(MAP.buildings[1].p);
+          const [cx, cz] = centroid(cbcPts);
+          const cbcRedMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.3, metalness: 0.55 });
+          const cbcWhiteMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.4, metalness: 0.2 });
+          // Signature crimson-red structural grid bands across the Front St & John St facades
+          for (let lv = 1; lv <= 5; lv++) {
+            const by = lv * 9.2;
+            frGrp.add(new THREE.Mesh(wallsGeo(scaledPoly(cbcPts, 1.015), by - 0.55, () => by + 0.55, 8, 1.1), cbcRedMat));
+          }
+          // Famous projecting white geometric cube studios cantilevered out of the facade
+          const cube1 = new THREE.Mesh(new THREE.BoxGeometry(14.0, 12.0, 6.0), cbcWhiteMat);
+          cube1.position.set(cx + streetSouth[0] * 36.0, 22.0, cz + streetSouth[1] * 36.0);
+          cube1.rotation.y = streetRot + 0.18;
+          frGrp.add(cube1);
+          const cbcSign = signMesh([
+            'CBC • RADIO-CANADA • CANADIAN BROADCASTING CENTRE',
+            '250 FRONT STREET WEST • NATIONAL BROADCAST HEADQUARTERS'
+          ], 24.0, 2.5, { bg: '#991b1b', fg: '#ffffff', borderColor: '#f87171', size: 56 });
+          signOnEdge(cbcPts, [cx + 15, cz + 80], cbcSign, 6.8, 16);
+        }
+
+        // 2. Metro Toronto Convention Centre North (#41, 255 Front St W) & Simcoe Place (#52, 200 Front St W)
+        if (MAP.buildings[41]) {
+          const mtccPts = toPairs(MAP.buildings[41].p);
+          const [mx, mz] = centroid(mtccPts);
+          const rotunda = new THREE.Mesh(
+            new THREE.CylinderGeometry(11.5, 11.5, 9.5, 24),
+            new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.15, metalness: 0.8, transparent: true, opacity: 0.78 })
+          );
+          rotunda.position.set(mx - streetSouth[0] * 24.0, 19.5, mz - streetSouth[1] * 24.0);
+          frGrp.add(rotunda);
+          const mtccSign = signMesh([
+            'METRO TORONTO CONVENTION CENTRE • NORTH BUILDING',
+            '255 FRONT STREET WEST • CONSTITUTION HALL & JOHN BASSETT THEATRE'
+          ], 24.0, 2.4, { bg: '#0f172a', fg: '#7dd3fc', borderColor: '#0284c7', size: 54 });
+          signOnEdge(mtccPts, [mx - 15, mz - 60], mtccSign, 6.5, 16);
+        }
+        if (MAP.buildings[52]) {
+          const spPts = toPairs(MAP.buildings[52].p);
+          const [sx, sz] = centroid(spPts);
+          [-14, 14].forEach(off => {
+            const pyr = new THREE.Mesh(new THREE.ConeGeometry(12.0, 11.0, 4), copperRoofMat);
+            pyr.position.set(sx + streetDir[0] * off, 139.9, sz + streetDir[1] * off);
+            pyr.rotation.y = streetRot + Math.PI / 4;
+            frGrp.add(pyr);
+          });
+        }
+
+        // 3. TD Terrace (#489, 160 Front St W at Simcoe): Glowing Green TD Crown & Heritage Red-Brick Podium Trim
+        if (MAP.buildings[489]) {
+          const tdtPts = toPairs(MAP.buildings[489].p);
+          const [tx, tz] = centroid(tdtPts);
+          const tdCrown = signMesh(['TD'], 14.0, 9.5, {
+            bg: '#052e16', fg: '#4ade80', borderColor: '#22c55e', size: 92
+          });
+          tdCrown.position.set(tx, 232.0, tz + 18.0);
+          tdCrown.rotation.y = streetRot;
+          frGrp.add(tdCrown);
+        }
+
+        // 4. Brookfield Place — Allen Lambert Galleria (#61/#62, Front & Bay/Yonge)
+        if (MAP.buildings[62]) {
+          const bpPts = toPairs(MAP.buildings[62].p);
+          const [bx, bz] = centroid(bpPts);
+          // Stepped recessed spire crown atop TD Canada Trust Tower (261m)
+          const spireCrown = new THREE.Mesh(new THREE.BoxGeometry(22.0, 18.0, 22.0), stoneTrimMat);
+          spireCrown.position.set(bx, 270.0, bz);
+          spireCrown.rotation.y = streetRot;
+          frGrp.add(spireCrown);
+          const bpSign = signMesh([
+            'BROOKFIELD PLACE • ALLEN LAMBERT GALLERIA',
+            '181 BAY STREET • SANTIAGO CALATRAVA HERITAGE GALLERIA'
+          ], 20.0, 2.2, { bg: '#1e293b', fg: '#f8fafc', borderColor: '#94a3b8', size: 54 });
+          signOnEdge(bpPts, [bx + 10, bz + 60], bpSign, 6.2, 14);
+        }
+
+        // 5. Meridian Hall (#97, 1 Front St E) & St. Lawrence Centre for the Arts (#111, 27 Front St E)
+        if (MAP.buildings[97]) {
+          const mhPts = toPairs(MAP.buildings[97].p);
+          const [mx, mz] = centroid(mhPts);
+          const mhSign = signMesh([
+            'MERIDIAN HALL • 1 FRONT STREET EAST',
+            'TORONTO\'S PREMIER PERFORMING ARTS CENTRE (FORMERLY O\'KEEFE CENTRE)'
+          ], 22.0, 2.2, { bg: '#1c1917', fg: '#fde68a', borderColor: '#f59e0b', size: 54 });
+          signOnEdge(mhPts, [mx - 10, mz - 60], mhSign, 6.2, 14);
+        }
+        if (MAP.buildings[111]) {
+          const slcPts = toPairs(MAP.buildings[111].p);
+          const [lx, lz] = centroid(slcPts);
+          const slcSign = signMesh([
+            'ST. LAWRENCE CENTRE FOR THE ARTS',
+            '27 FRONT STREET EAST • JANE MALLETT THEATRE & BLUMA APPEL THEATRE'
+          ], 18.0, 2.0, { bg: '#0f172a', fg: '#fde047', borderColor: '#38bdf8', size: 52 });
+          signOnEdge(slcPts, [lx - 10, lz - 50], slcSign, 5.8, 12);
+        }
+
+        // 6. 35–49 Front Street East Heritage Cast-Iron & Stone Row (#209 Beardmore Bldg, #208, #210, #357, #358)
+        //    Directly opposite Berczy Park & Gooderham Flatiron!
+        [209, 208, 210, 357, 358].forEach((bi, idx) => {
+          const b = MAP.buildings[bi];
+          if (!b) return;
+          const pts = toPairs(b.p);
+          if (polyArea(pts) < 0) pts.reverse();
+          const h = 16.8 + (bi % 3) * 1.2;
+          // Projecting Italianate / Second Empire cornice + mansard slate roof cap
+          frGrp.add(new THREE.Mesh(wallsGeo(scaledPoly(pts, 1.035), h - 0.65, () => h + 0.2, 6, 0.85), stoneTrimMat));
+          const m = mansardGeo(pts, h, h + 2.8, 0.78);
+          frGrp.add(new THREE.Mesh(m.geo, idx % 2 === 0 ? darkSlateMat : copperRoofMat));
+          frGrp.add(new THREE.Mesh(capGeo(m.top, () => h + 2.8), idx % 2 === 0 ? darkSlateMat : copperRoofMat));
+          if (bi === 209) {
+            const [bx, bz] = centroid(pts);
+            const bmSign = signMesh([
+              'THE BEARDMORE BUILDING • 35–39 FRONT ST E',
+              'EST. 1872 • CAST-IRON & ITALIANATE HERITAGE ROW'
+            ], 14.0, 1.6, { bg: '#1c1917', fg: '#fde68a', borderColor: '#d4af37', size: 52 });
+            signOnEdge(pts, [bx - 10, bz - 50], bmSign, 4.8, 10);
+          }
+        });
+
+        // 7. St. Lawrence Market North (#570, 92 Front St E): Twin Barrel-Vaulted Roofs & Central Glass Spine
+        if (MAP.buildings[570]) {
+          const nmPts = toPairs(MAP.buildings[570].p);
+          const [nx, nz] = centroid(nmPts);
+          [-9.5, 9.5].forEach(off => {
+            const vault = new THREE.Mesh(
+              new THREE.CylinderGeometry(7.2, 7.2, 52.0, 16, 1, false, 0, Math.PI),
+              copperRoofMat
+            );
+            vault.rotation.x = Math.PI / 2;
+            vault.rotation.z = -streetRot;
+            vault.position.set(nx + streetDir[0] * off, 16.5, nz + streetDir[1] * off);
+            frGrp.add(vault);
+          });
+          const nmSign = signMesh([
+            'ST. LAWRENCE MARKET NORTH',
+            '92 FRONT STREET EAST • SATURDAY FARMERS\' MARKET HALL'
+          ], 18.0, 2.0, { bg: '#7f1d1d', fg: '#fde68a', borderColor: '#f59e0b', size: 56 });
+          signOnEdge(nmPts, [nx + 10, nz + 50], nmSign, 5.5, 14);
+        }
+
+        scene.add(frGrp);
+      }
+
+      // ------------------------------------------------------------------------
+      // 7F. OTHER DOWNTOWN STREETS — WELLINGTON, ADELAIDE, RICHMOND, QUEEN WEST,
+      //     THE ESPLANADE / MARKET ST, UNIVERSITY AVE & JOHN ST
+      // ------------------------------------------------------------------------
+      {
+        const otherGrp = new THREE.Group();
+
+        // 1. WELLINGTON ST W: Clarence Square 1879 Victorian Rowhouses (#133–#138) & The Toronto Club (#48)
+        CLARENCE_SQ_ROW_IDS.forEach(bi => {
+          const b = MAP.buildings[bi];
+          if (!b) return;
+          const pts = toPairs(b.p);
+          if (polyArea(pts) < 0) pts.reverse();
+          const h = 12.8;
+          otherGrp.add(new THREE.Mesh(wallsGeo(scaledPoly(pts, 1.035), h - 0.5, () => h + 0.15, 6, 0.65), stoneTrimMat));
+          const m = mansardGeo(pts, h, h + 2.6, 0.72);
+          otherGrp.add(new THREE.Mesh(m.geo, darkSlateMat));
+          otherGrp.add(new THREE.Mesh(capGeo(m.top, () => h + 2.6), darkSlateMat));
+        });
+        if (MAP.buildings[48]) {
+          const tcPts = toPairs(MAP.buildings[48].p);
+          if (polyArea(tcPts) < 0) tcPts.reverse();
+          const [tx, tz] = centroid(tcPts);
+          otherGrp.add(new THREE.Mesh(wallsGeo(scaledPoly(tcPts, 1.03), 14.8, () => 15.8, 8, 1.0), stoneTrimMat));
+          const tcSign = signMesh([
+            'THE TORONTO CLUB • EST. 1837',
+            '107 WELLINGTON STREET WEST AT YORK • 1888 ROMANESQUE LANDMARK'
+          ], 12.0, 1.5, { bg: '#450a0a', fg: '#fde68a', borderColor: '#d4af37', size: 52 });
+          signOnEdge(tcPts, [tx - 10, tz - 50], tcSign, 4.6, 10);
+        }
+
+        // 2. ADELAIDE ST W & BAY ST: Toronto Fire Station 332 (#146), John/Nelson Victorian Row (#549–#560),
+        //    EY Tower Concourse Building (#456), & The National Club (#326)
+        if (MAP.buildings[146]) {
+          const fsPts = toPairs(MAP.buildings[146].p);
+          if (polyArea(fsPts) < 0) fsPts.reverse();
+          const [fx, fz] = centroid(fsPts);
+          // Iconic brick hose-drying tower rising to 22m + 3 crimson-red fire engine bay doors
+          const hoseTower = new THREE.Mesh(new THREE.BoxGeometry(4.2, 22.0, 4.2), new THREE.MeshStandardMaterial({ color: 0x991b1b, roughness: 0.75 }));
+          hoseTower.position.set(fx - 8.0, 11.0, fz - 4.0);
+          hoseTower.rotation.y = streetRot;
+          otherGrp.add(hoseTower);
+          const fsSign = signMesh([
+            'TORONTO FIRE STATION 332 • EMERGENCY SERVICES',
+            '260 ADELAIDE STREET WEST AT JOHN ST'
+          ], 13.0, 1.6, { bg: '#7f1d1d', fg: '#fef08a', borderColor: '#ef4444', size: 54 });
+          signOnEdge(fsPts, [fx - 10, fz - 45], fsSign, 5.0, 10);
+        }
+        JOHN_NELSON_ROW_IDS.forEach(bi => {
+          const b = MAP.buildings[bi];
+          if (!b) return;
+          const pts = toPairs(b.p);
+          if (polyArea(pts) < 0) pts.reverse();
+          const h = 11.8 + (bi % 3) * 0.9;
+          const m = mansardGeo(pts, h, h + 2.3, 0.74);
+          otherGrp.add(new THREE.Mesh(m.geo, darkSlateMat));
+          otherGrp.add(new THREE.Mesh(capGeo(m.top, () => h + 2.3), darkSlateMat));
+        });
+        if (MAP.buildings[326]) {
+          const ncPts = toPairs(MAP.buildings[326].p);
+          if (polyArea(ncPts) < 0) ncPts.reverse();
+          const [nx, nz] = centroid(ncPts);
+          otherGrp.add(new THREE.Mesh(wallsGeo(scaledPoly(ncPts, 1.03), 17.2, () => 18.2, 8, 1.0), stoneTrimMat));
+          const ncSign = signMesh([
+            'THE NATIONAL CLUB • 303 BAY STREET',
+            'EST. 1874 • HISTORIC EDWARDIAN CLUBHOUSE'
+          ], 11.5, 1.5, { bg: '#1e1b18', fg: '#fde68a', borderColor: '#d4af37', size: 52 });
+          signOnEdge(ncPts, [nx - 40, nz], ncSign, 4.6, 10);
+        }
+
+        // 3. RICHMOND ST W & QUEEN ST W: 299 Queen St W — MuchMusic / CTV HQ (#15),
+        //    QRC West (#151/#222), & Queen West Heritage Storefront Row (#221–#238)
+        if (MAP.buildings[15]) {
+          const mmPts = toPairs(MAP.buildings[15].p);
+          if (polyArea(mmPts) < 0) mmPts.reverse();
+          const [qx, qz] = centroid(mmPts);
+          const H_MM = 22.0;
+          // Steep Châteauesque copper roof & corner turret spire at Queen & John
+          const mmMansard = mansardGeo(mmPts, H_MM, H_MM + 3.8, 0.76);
+          otherGrp.add(new THREE.Mesh(mmMansard.geo, copperRoofMat));
+          otherGrp.add(new THREE.Mesh(capGeo(mmMansard.top, () => H_MM + 3.8), copperRoofMat));
+          const mmTurret = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.4, 24.5, 16), stoneTrimMat);
+          mmTurret.position.set(qx - 14.0, 12.25, qz - 10.0);
+          otherGrp.add(mmTurret);
+          const mmSpire = new THREE.Mesh(new THREE.ConeGeometry(3.6, 7.5, 16), copperRoofMat);
+          mmSpire.position.set(qx - 14.0, 28.2, qz - 10.0);
+          otherGrp.add(mmSpire);
+          const mmSign = signMesh([
+            '299 QUEEN STREET WEST • MUCHMUSIC & CTV HEADQUARTERS',
+            'SPEAKERS CORNER • HISTORIC CHUM-CITY BUILDING (EST. 1913)'
+          ], 18.0, 2.2, { bg: '#090d16', fg: '#38bdf8', borderColor: '#f43f5e', size: 56 });
+          signOnEdge(mmPts, [qx - 10, qz - 50], mmSign, 6.2, 14);
+        }
+        QUEEN_WEST_ROW_IDS.forEach(bi => {
+          const b = MAP.buildings[bi];
+          if (!b) return;
+          const pts = toPairs(b.p);
+          if (polyArea(pts) < 0) pts.reverse();
+          const h = 11.8 + (bi % 4) * 1.1;
+          otherGrp.add(new THREE.Mesh(wallsGeo(scaledPoly(pts, 1.03), h - 0.5, () => h + 0.15, 6, 0.65), stoneTrimMat));
+        });
+
+        // 4. MARKET STREET COLONNADE (#417–#422, west of St. Lawrence Market South):
+        //    Warm overhead festoon bistro lights & cast-iron colonnade awnings
+        MARKET_ST_COLONNADE_IDS.forEach((bi, idx) => {
+          const b = MAP.buildings[bi];
+          if (!b) return;
+          const pts = toPairs(b.p);
+          if (polyArea(pts) < 0) pts.reverse();
+          const [mx, mz] = centroid(pts);
+          const h = 13.5 + (bi % 2) * 1.8;
+          otherGrp.add(new THREE.Mesh(wallsGeo(scaledPoly(pts, 1.035), h - 0.55, () => h + 0.15, 6, 0.7), stoneTrimMat));
+          // Overhead festoon lights along Market Street patio lane (east side of buildings)
+          for (let k = -1; k <= 1; k++) {
+            const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.12, 6, 6), festoonBulbMat);
+            bulb.position.set(mx + 6.5, 3.8, mz + k * 3.5);
+            otherGrp.add(bulb);
+          }
+          if (idx === 1) {
+            const msSign = signMesh([
+              'MARKET STREET HISTORIC DINING COLONNADE',
+              'ST. LAWRENCE MARKET PRECINCT • PEDESTRIAN PATIO PROMENADE'
+            ], 12.0, 1.5, { bg: '#1c1917', fg: '#fde68a', borderColor: '#f59e0b', size: 52 });
+            signOnEdge(pts, [mx + 40, mz], msSign, 4.6, 8);
+          }
+        });
+
+        scene.add(otherGrp);
+      }
     }
 
     // ---------- Street lamps (instanced) + pooled real lights ----------
