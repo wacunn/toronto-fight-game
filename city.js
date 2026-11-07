@@ -86,6 +86,70 @@
     return [c, c.getContext('2d')];
   }
 
+  let _canadianFlagMat = null;
+  function makeCanadianFlag() {
+    if (_canadianFlagMat) return _canadianFlagMat;
+    const W = 512, H = 256;
+    const [c, ctx] = canvas2(W, H);
+    // Official 1:2 Canadian National Flag proportions (1:2:1 vertical bands)
+    ctx.fillStyle = '#d80621';
+    ctx.fillRect(0, 0, 128, H);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(128, 0, 256, H);
+    ctx.fillStyle = '#d80621';
+    ctx.fillRect(384, 0, 128, H);
+
+    // Authentic 11-point Canadian Maple Leaf (3 three-pointed lobes + 2 basal spurs + stem)
+    const cx = 256, cy = 130, R = 96;
+    const leafPts = [
+      [0.00, 0.92],   // Point 1: Top central apex
+      [0.13, 0.63],   // Right notch of top lobe
+      [0.30, 0.70],   // Point 2: Top-right tip of top lobe
+      [0.21, 0.25],   // Deep upper-right sinus
+      [0.52, 0.45],   // Point 3: Upper tip of right lobe
+      [0.46, 0.25],   // Upper notch of right lobe
+      [0.82, 0.20],   // Point 4: Main outer tip of right lobe
+      [0.62, -0.05],  // Lower notch of right lobe
+      [0.69, -0.19],  // Point 5: Lower tip of right lobe
+      [0.28, -0.35],  // Lower-right sinus
+      [0.34, -0.50],  // Point 6: Right basal spur
+      [0.045, -0.43], // Right stem junction
+      [0.055, -0.90], // Stem bottom-right
+      [-0.055, -0.90],// Stem bottom-left
+      [-0.045, -0.43],// Left stem junction
+      [-0.34, -0.50], // Point 7: Left basal spur
+      [-0.28, -0.35], // Lower-left sinus
+      [-0.69, -0.19], // Point 8: Lower tip of left lobe
+      [-0.62, -0.05], // Lower notch of left lobe
+      [-0.82, 0.20],  // Point 9: Main outer tip of left lobe
+      [-0.46, 0.25],  // Upper notch of left lobe
+      [-0.52, 0.45],  // Point 10: Upper tip of left lobe
+      [-0.21, 0.25],  // Deep upper-left sinus
+      [-0.30, 0.70],  // Point 11: Top-left tip of top lobe
+      [-0.13, 0.63]   // Left notch of top lobe
+    ];
+    ctx.fillStyle = '#d80621';
+    ctx.beginPath();
+    leafPts.forEach(([dx, dy], idx) => {
+      const px = cx + dx * R;
+      const py = cy - dy * R;
+      if (idx === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    });
+    ctx.closePath();
+    ctx.fill();
+
+    const tex = new THREE.CanvasTexture(c);
+    tex.anisotropy = 4;
+    _canadianFlagMat = new THREE.MeshStandardMaterial({
+      map: tex,
+      roughness: 0.42,
+      metalness: 0.05,
+      side: THREE.DoubleSide
+    });
+    return _canadianFlagMat;
+  }
+
   function makeFacade(style, seed) {
     const SZ = 512, CELL = SZ / 8;
     const [c, ctx] = canvas2(SZ, SZ);   // albedo
@@ -6381,28 +6445,11 @@
       const mastHeight = 9.0;
       const mastCenter = [porticoCenter[0] + pNorm[0] * 0.8, H + 7.0, porticoCenter[1] + pNorm[1] * 0.8];
       const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.18, mastHeight, 10), new THREE.MeshStandardMaterial({ color: 0xdddddd, metalness: 0.9, roughness: 0.15 }));
-      mast.position.set(mastCenter[0], mastCenter[1] + mastHeight / 2, mastCenter[1]);
+      mast.position.set(mastCenter[0], mastCenter[1] + mastHeight / 2, mastCenter[2]);
       scene.add(mast);
 
-      // Canadian Flag Canvas Texture
-      function makeCanadianFlag() {
-        const [c, ctx] = canvas2(256, 128);
-        ctx.fillStyle = '#dc2626'; ctx.fillRect(0, 0, 64, 128);
-        ctx.fillStyle = '#ffffff'; ctx.fillRect(64, 0, 128, 128);
-        ctx.fillStyle = '#dc2626'; ctx.fillRect(192, 0, 64, 128);
-        // Stylized 11-point maple leaf
-        ctx.fillStyle = '#dc2626';
-        ctx.beginPath();
-        ctx.moveTo(128, 25); ctx.lineTo(134, 45); ctx.lineTo(152, 42); ctx.lineTo(142, 58);
-        ctx.lineTo(158, 68); ctx.lineTo(138, 76); ctx.lineTo(142, 92); ctx.lineTo(130, 84);
-        ctx.lineTo(130, 105); ctx.lineTo(126, 105); ctx.lineTo(126, 84); ctx.lineTo(114, 92);
-        ctx.lineTo(118, 76); ctx.lineTo(98, 68); ctx.lineTo(114, 58); ctx.lineTo(104, 42);
-        ctx.lineTo(122, 45); ctx.closePath(); ctx.fill();
-        const tex = new THREE.CanvasTexture(c);
-        return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.4, side: THREE.DoubleSide });
-      }
       const flagMesh = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 1.8), makeCanadianFlag());
-      flagMesh.position.set(mastCenter[0] + 1.8, mastCenter[1] + mastHeight - 1.2, mastCenter[1]);
+      flagMesh.position.set(mastCenter[0] + 1.8, mastCenter[1] + mastHeight - 1.2, mastCenter[2]);
       scene.add(flagMesh);
     }
 
@@ -10859,16 +10906,27 @@
           bench.position.set(0, 6.95, bz);
           fg.add(bench);
         });
-        // Canadian Flag at stern
-        const flagPole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 3.5, 6), hullWhite);
-        flagPole.position.set(0, 8.2, 12);
-        fg.add(flagPole);
-        const flag = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.0, 0.05), hullRed);
-        flag.position.set(0.8, 9.2, 12);
-        fg.add(flag);
-        const flagWhite = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.0, 0.06), hullWhite);
-        flagWhite.position.set(0.8, 9.2, 12);
-        fg.add(flagWhite);
+        // Authentic 11-Point Maple Leaf Canadian Flags at bow & stern jackstaffs + wheelhouse mast
+        const canFlagMat = makeCanadianFlag();
+        [12.2, -12.2].forEach(fz => {
+          const flagPole = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.065, 3.6, 8), hullWhite);
+          flagPole.position.set(0, 8.4, fz);
+          fg.add(flagPole);
+          const finial = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 8), hullYellow);
+          finial.position.set(0, 10.25, fz);
+          fg.add(finial);
+          const flag = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.9, 0.04), canFlagMat);
+          flag.position.set(0.92, 9.6, fz);
+          fg.add(flag);
+        });
+        // Wheelhouse rooftop mast & trailing Canadian ensign (visible in side profile too)
+        const whMast = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 2.6, 8), hullWhite);
+        whMast.position.set(0, 10.3, -1.8);
+        fg.add(whMast);
+        const whFlag = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.9), canFlagMat);
+        whFlag.rotation.y = Math.PI / 2;
+        whFlag.position.set(0, 11.05, -2.72);
+        fg.add(whFlag);
 
         // Peaceful Torontonian citizen passengers on the upper deck (along side railings and benches)
         const passSpots = [
@@ -10992,6 +11050,12 @@
         mbSign.position.set(5.3, 5.0, 0);
         mbSign.rotation.y = Math.PI / 2;
         mb.add(mbSign);
+        const mbPole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 2.8, 8), hullWhite);
+        mbPole.position.set(0, 8.9, 0);
+        mb.add(mbPole);
+        const mbFlag = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.8, 0.04), makeCanadianFlag());
+        mbFlag.position.set(0.82, 9.8, 0);
+        mb.add(mbFlag);
 
         airportFerryMesh = mb;
         airportFerryMesh.position.set(-1060, WATER_Y, 725);
