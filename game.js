@@ -4443,9 +4443,63 @@ function disembarkSubwayTrain() {
   return true;
 }
 
+function teleportToRandomSubwayEntrance() {
+  if (state.telescopeActive) exitTelescope();
+  if (elevatorPanel && elevatorPanel.open) closeElevatorPanel();
+  if (ferryPanel && ferryPanel.open) closeFerryPanel();
+  if (state.onFerry) state.onFerry = false;
+  if (state.onPlane) landPorterFlight();
+  if (state.onStreetcar) disembarkStreetcar();
+  if (state.onSubway) disembarkSubwayTrain();
+
+  const stations = (city && city.subway && Array.isArray(city.subway.stations)) ? city.subway.stations : [];
+  if (stations.length === 0) return null;
+
+  // Pick a random station (preferring a different one if already standing near one so repeated Shift+T cycles stations)
+  let candidates = stations.filter(s => Math.hypot(player.pos.x - s.streetX, player.pos.z - s.streetZ) > 12);
+  if (candidates.length === 0) candidates = stations;
+  const st = candidates[Math.floor(Math.random() * candidates.length)];
+  const stIdx = stations.indexOf(st);
+
+  // Place player 4.2m south of the subway stairwell entrance, facing north (yaw = 0) straight at the stairs & red SUBWAY sign
+  const stFloor = (city && city.floorAt) ? city.floorAt(st.streetX, st.streetZ + 4.2, 0) : 0;
+  player.pos.set(st.streetX, stFloor + EYE_HEIGHT, st.streetZ + 4.2);
+  player.yaw = 0;
+  player.pitch = -0.05;
+  player.velocity.set(0, 0, 0);
+  player.isGrounded = true;
+  camera.rotation.order = 'YXZ';
+  camera.rotation.y = 0;
+  camera.rotation.x = -0.05;
+  state.onIsland = false;
+  state.isUnderground = false;
+  if (scene.fog) scene.fog.density = 0.0021;
+
+  // Position the 6-car TTC Rocket train at this station platform with doors open so it's ready when you head downstairs
+  if (city.subway.state && stIdx >= 0) {
+    const tState = city.subway.state;
+    tState.currentStopIdx = stIdx;
+    tState.nextStopIdx = (stIdx + 1) % stations.length;
+    tState.isStopped = true;
+    tState.doorsOpen = true;
+    tState.stopTimer = 9.0;
+    tState.progress = 0;
+    tState.x = st.x - 7.4;
+    tState.z = st.z;
+    tState.heading = Math.PI;
+    if (city.subway.train) {
+      city.subway.train.position.set(tState.x, tState.y, tState.z);
+      city.subway.train.rotation.y = 0;
+    }
+  }
+  if (typeof updateObservationDeck === 'function') updateObservationDeck(0);
+  return st;
+}
+
 window.boardSubwayTrain = boardSubwayTrain;
 window.updateSubwayRide = updateSubwayRide;
 window.disembarkSubwayTrain = disembarkSubwayTrain;
+window.teleportToRandomSubwayEntrance = teleportToRandomSubwayEntrance;
 
 // ============================================================================
 // CN TOWER GLASS ELEVATOR, 2-FLOOR OBSERVATION DECK & SKY SHOWDOWN SYSTEMS
@@ -5054,15 +5108,39 @@ function handleDeckAction() {
   // TTC Line 1 Subway System Interactions
   if (typeof activeDeckAction === 'string' && activeDeckAction.startsWith('enter_subway_')) {
     const stId = activeDeckAction.replace('enter_subway_', '');
-    const st = (city && city.subway && city.subway.stations) ? city.subway.stations.find(s => s.id === stId) : null;
+    const stations = (city && city.subway && city.subway.stations) ? city.subway.stations : [];
+    const stIdx = stations.findIndex(s => s.id === stId);
+    const st = stIdx >= 0 ? stations[stIdx] : null;
     if (st) {
       if (audio && audio.playPrestoChime) audio.playPrestoChime();
       else if (audio && audio.playPickup) audio.playPickup();
       player.pos.set(st.x, city.subway.platformY + EYE_HEIGHT, st.z);
       player.velocity.set(0, 0, 0);
-      player.yaw = 0;
+      // Face west (-X) toward the waiting Line 1 Toronto Rocket train on the platform track!
+      player.yaw = Math.PI / 2;
       player.pitch = 0;
+      camera.rotation.order = 'YXZ';
+      camera.rotation.y = player.yaw;
+      camera.rotation.x = 0;
       state.isUnderground = true;
+
+      // Ensure the Line 1 subway train is at this station with doors open ready to board!
+      if (city.subway.state) {
+        const tState = city.subway.state;
+        tState.currentStopIdx = stIdx;
+        tState.nextStopIdx = (stIdx + 1) % stations.length;
+        tState.isStopped = true;
+        tState.doorsOpen = true;
+        tState.stopTimer = 8.5;
+        tState.progress = 0;
+        tState.x = st.x - 7.4;
+        tState.z = st.z;
+        tState.heading = Math.PI;
+        if (city.subway.train) {
+          city.subway.train.position.set(tState.x, tState.y, tState.z);
+          city.subway.train.rotation.y = 0;
+        }
+      }
       return true;
     }
   }
@@ -5777,6 +5855,13 @@ window.addEventListener('keydown', (e) => {
       audio.playFerryHorn();
       showAnnouncement("🚢 CHEAT: TELEPORTED TO MAINLAND FERRY DOCK (JACK LAYTON TERMINAL)!", 3200);
     }
+    return;
+  }
+
+  // Secret Cheat Code: [Shift] + T teleports directly to the street entrance of a randomly selected TTC Subway Station!
+  if (e.shiftKey && (e.code === 'KeyT' || e.key === 'T' || e.key === 't')) {
+    e.preventDefault();
+    teleportToRandomSubwayEntrance();
     return;
   }
 
