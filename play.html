@@ -12587,6 +12587,285 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       return carGroup;
     }
 
+    // ---------- 2b. Walkable TTC Flexity Outlook Streetcar Interior Cabin (Local Interior Grid) ----------
+    const streetcarInterior = (() => {
+      const grp = new THREE.Group();
+      grp.name = 'ttcStreetcarInterior';
+      grp.visible = false;
+
+      const floorMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.85, metalness: 0.05 });
+      const aisleMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.9 });
+      const wallInMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.55, side: THREE.DoubleSide });
+      const wallOutRedMat = new THREE.MeshStandardMaterial({ color: 0xd71920, roughness: 0.42, metalness: 0.25, side: THREE.DoubleSide });
+      const trimDarkMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.5, metalness: 0.35 });
+      const bellowsMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.85 });
+      const steelPoleMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.22, metalness: 0.88 });
+      const yellowBarMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.35, metalness: 0.15 });
+      const seatRedMat = new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.72 });
+      const seatBlueMat = new THREE.MeshStandardMaterial({ color: 0x1d4ed8, roughness: 0.72 });
+      const prestoMat = new THREE.MeshStandardMaterial({ color: 0x16a34a, roughness: 0.35, emissive: 0x15803d, emissiveIntensity: 0.35 });
+      const ledStripMat = new THREE.MeshBasicMaterial({ color: 0xfefce8, toneMapped: false });
+
+      // 1. Low-Floor Transit Deck (y = 0.38m top surface) & Center Aisle Runner
+      const mainFloor = new THREE.Mesh(new THREE.BoxGeometry(2.48, 0.10, 27.4), floorMat);
+      mainFloor.position.set(0, 0.33, 0);
+      grp.add(mainFloor);
+
+      const aisleRunner = new THREE.Mesh(new THREE.BoxGeometry(1.08, 0.014, 26.4), aisleMat);
+      aisleRunner.position.set(0, 0.382, 0);
+      grp.add(aisleRunner);
+
+      // 4 Articulation Turntable Discs & Open Accordion Bellows Portals (z = -7.0, -3.4, 3.4, 7.0)
+      [-7.0, -3.4, 3.4, 7.0].forEach(az => {
+        const disc = new THREE.Mesh(new THREE.CylinderGeometry(1.08, 1.08, 0.02, 20), trimDarkMat);
+        disc.position.set(0, 0.385, az);
+        grp.add(disc);
+        // Open accordion bellows side ribs & top arch (hollow center so player can walk & see end-to-end!)
+        [-1.16, 1.16].forEach(bx => {
+          const ribSide = new THREE.Mesh(new THREE.BoxGeometry(0.16, 2.52, 0.38), bellowsMat);
+          ribSide.position.set(bx, 1.64, az);
+          grp.add(ribSide);
+        });
+        const ribTop = new THREE.Mesh(new THREE.BoxGeometry(2.48, 0.22, 0.38), bellowsMat);
+        ribTop.position.set(0, 2.82, az);
+        grp.add(ribTop);
+      });
+
+      // 2. Lower Waist Walls (Below Windows: y = 0.38m .. 1.06m) & Window Sills
+      // Left wall (+X = +1.22m) is continuous; Right wall (-X = -1.22m) has 4 doorway cutouts at z = 10.2, 5.2, -5.2, -10.2
+      const leftWallIn = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.68, 27.0), wallInMat);
+      leftWallIn.position.set(1.20, 0.72, 0);
+      grp.add(leftWallIn);
+      const leftWallOut = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.74, 27.2), wallOutRedMat);
+      leftWallOut.position.set(1.25, 0.72, 0);
+      grp.add(leftWallOut);
+      const leftSill = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.04, 27.0), steelPoleMat);
+      leftSill.position.set(1.21, 1.07, 0);
+      grp.add(leftSill);
+
+      // Right wall (-X) segments between the 4 doorways (doors at z = -10.2, -5.2, 5.2, 10.2, width 1.3m)
+      const rightWallSegs = [
+        [-13.5, -10.9], [-9.5, -5.9], [-4.5, 4.5], [5.9, 9.5], [10.9, 13.5]
+      ];
+      rightWallSegs.forEach(([z0, z1]) => {
+        const segLen = z1 - z0, segMid = (z0 + z1) * 0.5;
+        const rIn = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.68, segLen), wallInMat);
+        rIn.position.set(-1.20, 0.72, segMid);
+        grp.add(rIn);
+        const rOut = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.74, segLen), wallOutRedMat);
+        rOut.position.set(-1.25, 0.72, segMid);
+        grp.add(rOut);
+        const rSill = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.04, segLen), steelPoleMat);
+        rSill.position.set(-1.21, 1.07, segMid);
+        grp.add(rSill);
+      });
+
+      // 4 Right-Side Boarding Doorways with Yellow Safety Step Strips, Door Portals & Green PRESTO Readers
+      [-10.2, -5.2, 5.2, 10.2].forEach(dz => {
+        const yStep = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.025, 1.32), yellowBarMat);
+        yStep.position.set(-1.14, 0.388, dz);
+        grp.add(yStep);
+        // Door frame posts & clear glass door leaves (open-view framed leaves)
+        [-0.66, 0.66].forEach(doff => {
+          const post = new THREE.Mesh(new THREE.BoxGeometry(0.07, 2.48, 0.09), trimDarkMat);
+          post.position.set(-1.21, 1.62, dz + doff);
+          grp.add(post);
+        });
+        // Lower door kick-panels (below window level so upper 1.08..2.45m stays crystal-clear!)
+        const doorLow = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.64, 1.24), trimDarkMat);
+        doorLow.position.set(-1.22, 0.70, dz);
+        grp.add(doorLow);
+        // Green PRESTO Card Tap Reader on the door stanchion
+        const prestoBox = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.06, 14), prestoMat);
+        prestoBox.rotation.z = Math.PI / 2;
+        prestoBox.position.set(-1.08, 1.24, dz + 0.56);
+        grp.add(prestoBox);
+      });
+
+      // 3. Panoramic Open Window Pillars (y = 1.08m .. 2.48m) with Yellow Stop-Request Bars
+      for (let pz = -12.0; pz <= 12.0; pz += 2.4) {
+        if (Math.abs(Math.abs(pz) - 7.0) < 0.5 || Math.abs(Math.abs(pz) - 3.4) < 0.5) continue;
+        // Left window pillar
+        const pilL = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.44, 0.11), trimDarkMat);
+        pilL.position.set(1.22, 1.78, pz);
+        grp.add(pilL);
+        const stopStripL = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.48, 0.035), yellowBarMat);
+        stopStripL.position.set(1.19, 1.68, pz);
+        grp.add(stopStripL);
+
+        // Right window pillar (skip doorway centers)
+        if (Math.abs(Math.abs(pz) - 10.2) > 0.7 && Math.abs(Math.abs(pz) - 5.2) > 0.7) {
+          const pilR = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.44, 0.11), trimDarkMat);
+          pilR.position.set(-1.22, 1.78, pz);
+          grp.add(pilR);
+          const stopStripR = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.48, 0.035), yellowBarMat);
+          stopStripR.position.set(-1.19, 1.68, pz);
+          grp.add(stopStripR);
+        }
+      }
+
+      // 4. Upper Header Coves, Acoustic Ceiling & Warm LED Diffuser Strips (y = 2.48m .. 2.94m)
+      [-1.21, 1.21].forEach(cx => {
+        const coveIn = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.42, 27.2), wallInMat);
+        coveIn.position.set(cx, 2.68, 0);
+        grp.add(coveIn);
+        const coveOut = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.44, 27.4), wallOutRedMat);
+        coveOut.position.set(cx + (cx > 0 ? 0.04 : -0.04), 2.68, 0);
+        grp.add(coveOut);
+      });
+      const ceiling = new THREE.Mesh(new THREE.BoxGeometry(2.48, 0.08, 27.4), wallInMat);
+      ceiling.position.set(0, 2.91, 0);
+      grp.add(ceiling);
+
+      [-0.56, 0.56].forEach(lx => {
+        const led = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.025, 25.6), ledStripMat);
+        led.position.set(lx, 2.86, 0);
+        grp.add(led);
+      });
+
+      // Soft interior cabin illumination so seats & poles glow warmly
+      [-5.5, 5.5].forEach(lz => {
+        const pt = new THREE.PointLight(0xfffbeb, 0.85, 14);
+        pt.position.set(0, 2.65, lz);
+        grp.add(pt);
+      });
+
+      // 5. Contoured TTC Red & Blue Fabric Bucket Seats Along Both Window Walls
+      const seatPositions = [];
+      for (let sz = -11.6; sz <= 10.6; sz += 1.45) {
+        if (Math.abs(Math.abs(sz) - 7.0) < 0.75 || Math.abs(Math.abs(sz) - 3.4) < 0.75) continue;
+        // Left side seat (+X)
+        seatPositions.push({ x: 0.90, z: sz, side: 1, priority: Math.abs(sz) < 6.2 });
+        // Right side seat (-X, skip 4 doorways)
+        if (Math.abs(Math.abs(sz) - 10.2) > 0.95 && Math.abs(Math.abs(sz) - 5.2) > 0.95) {
+          seatPositions.push({ x: -0.90, z: sz, side: -1, priority: Math.abs(sz) < 6.2 });
+        }
+      }
+      seatPositions.forEach((sp, idx) => {
+        const sMat = sp.priority ? seatBlueMat : seatRedMat;
+        const sGrp = new THREE.Group();
+        // Contoured seat cushion
+        const cushion = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.08, 0.46), sMat);
+        cushion.position.set(0, 0.74, 0);
+        sGrp.add(cushion);
+        // Contoured seat backrest (facing forward +Z or inward)
+        const back = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.52, 0.08), sMat);
+        back.position.set(0, 1.02, -0.20);
+        back.rotation.x = -0.10;
+        sGrp.add(back);
+        // Pedestal leg
+        const ped = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.34, 0.18), trimDarkMat);
+        ped.position.set(sp.side * 0.12, 0.55, -0.05);
+        sGrp.add(ped);
+        sGrp.position.set(sp.x, 0, sp.z);
+        grp.add(sGrp);
+
+        // Add seated fellow Torontonian commuters on select seats looking out the windows
+        if (idx % 4 === 1) {
+          const pGrp = new THREE.Group();
+          const coatCols = [0x2563eb, 0xd97706, 0x059669, 0x7c3aed, 0xdc2626, 0x0891b2];
+          const cCol = coatCols[idx % coatCols.length];
+          const torso = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.48, 0.26), new THREE.MeshStandardMaterial({ color: cCol, roughness: 0.7 }));
+          torso.position.set(0, 1.04, -0.04);
+          const head = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 8), new THREE.MeshStandardMaterial({ color: 0xe2a77f, roughness: 0.6 }));
+          head.position.set(0, 1.40, -0.04);
+          pGrp.add(torso, head);
+          pGrp.position.set(sp.x, 0, sp.z);
+          grp.add(pGrp);
+        }
+      });
+
+      // 6. Brushed Stainless-Steel Vertical Stanchion Poles & Overhead Handrails with Yellow Grab Straps
+      [-9.4, -4.4, 0, 4.4, 9.4].forEach(pz => {
+        [-0.56, 0.56].forEach(px => {
+          const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 2.50, 8), steelPoleMat);
+          pole.position.set(px, 1.63, pz);
+          grp.add(pole);
+        });
+      });
+      [-0.48, 0.48].forEach(rx => {
+        const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 24.4, 8), steelPoleMat);
+        rail.rotation.x = Math.PI / 2;
+        rail.position.set(rx, 2.38, 0);
+        grp.add(rail);
+        for (let sz = -10.8; sz <= 10.8; sz += 2.4) {
+          const strap = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.18, 0.06), yellowBarMat);
+          strap.position.set(rx, 2.28, sz);
+          grp.add(strap);
+        }
+      });
+
+      // 7. Front Operator Cab Console, Open Panoramic Windshield & Rear Window
+      // Front lower apron below windshield (y = 0.38 .. 1.02m at z = +13.55m)
+      const frontDash = new THREE.Mesh(new THREE.BoxGeometry(2.44, 0.64, 0.35), trimDarkMat);
+      frontDash.position.set(0, 0.70, 13.45);
+      grp.add(frontDash);
+      const frontHeader = new THREE.Mesh(new THREE.BoxGeometry(2.46, 0.42, 0.25), wallOutRedMat);
+      frontHeader.position.set(0, 2.68, 13.50);
+      grp.add(frontHeader);
+      [-1.18, 1.18].forEach(fx => {
+        const fPil = new THREE.Mesh(new THREE.BoxGeometry(0.09, 1.50, 0.14), trimDarkMat);
+        fPil.position.set(fx, 1.76, 13.48);
+        fPil.rotation.x = -0.14;
+        grp.add(fPil);
+      });
+      // Half-height operator cab partition & glowing transit monitors (leaving upper windshield wide open!)
+      const cabLowWall = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.68, 0.06), trimDarkMat);
+      cabLowWall.position.set(0.50, 0.72, 11.65);
+      grp.add(cabLowWall);
+      const cabScreen = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.22, 0.04), new THREE.MeshBasicMaterial({ color: 0x38bdf8, toneMapped: false }));
+      cabScreen.position.set(0.45, 1.12, 13.15);
+      cabScreen.rotation.y = Math.PI;
+      grp.add(cabScreen);
+
+      // Rear panoramic window frame at z = -13.55m
+      const rearLow = new THREE.Mesh(new THREE.BoxGeometry(2.44, 0.70, 0.12), wallInMat);
+      rearLow.position.set(0, 0.73, -13.55);
+      grp.add(rearLow);
+      const rearHigh = new THREE.Mesh(new THREE.BoxGeometry(2.46, 0.44, 0.12), wallOutRedMat);
+      rearHigh.position.set(0, 2.68, -13.55);
+      grp.add(rearHigh);
+      [-1.18, 1.18].forEach(rx => {
+        const rPil = new THREE.Mesh(new THREE.BoxGeometry(0.10, 1.44, 0.12), trimDarkMat);
+        rPil.position.set(rx, 1.78, -13.55);
+        grp.add(rPil);
+      });
+
+      // 8. Internal Overhead Next-Stop LED Matrix Boards (facing rear -Z so passengers looking forward see it!)
+      let currentRouteText = '';
+      let frontLedMesh = null;
+      let midLedMesh = null;
+      function updateRouteSign(routeText) {
+        const clean = routeText || '504 KING';
+        if (clean === currentRouteText) return;
+        currentRouteText = clean;
+        if (frontLedMesh) grp.remove(frontLedMesh);
+        if (midLedMesh) grp.remove(midLedMesh);
+        frontLedMesh = signMesh([
+          'TTC • ' + clean,
+          'WALK AISLE [WASD] • PRESS [E] TO EXIT'
+        ], 1.75, 0.28, { bg: '#090d16', fg: '#facc15', borderColor: '#dc2626', size: 42 });
+        frontLedMesh.position.set(0, 2.58, 11.5);
+        frontLedMesh.rotation.y = Math.PI;
+        grp.add(frontLedMesh);
+
+        midLedMesh = signMesh([
+          'TTC • ' + clean,
+          'PANORAMIC CITY VIEW • [E] DISEMBARK'
+        ], 1.65, 0.26, { bg: '#090d16', fg: '#facc15', borderColor: '#dc2626', size: 42 });
+        midLedMesh.position.set(0, 2.58, 0.2);
+        midLedMesh.rotation.y = Math.PI;
+        grp.add(midLedMesh);
+      }
+      updateRouteSign('504 KING');
+
+      scene.add(grp);
+      return {
+        group: grp,
+        updateRouteSign
+      };
+    })();
+
     // ---------- 3. Green & White Bi-Level GO Transit Fleet in Open Sunken Corridor ----------
     const goTrains = [];
     // Extend portal-to-portal span so an entire 7-car consist is inside the tunnel before wrapping
@@ -16250,49 +16529,280 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       subwayUndergroundGroup.add(stUnder);
     });
 
-    // 2. Animated 6-Car Toronto Rocket Subway Train
+    // 2. Animated 6-Car Toronto Rocket Subway Train (Car 0 = Full Walkable Open-Window Interior + Animated Doors!)
     const rocketTrain = new THREE.Group();
     const trainCars = [];
+    const subwaySlidingDoors = [];
+    const subWallInMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.52, side: THREE.DoubleSide });
+    const subSeatVelvetMat = new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.78 });
+    const subPriorityBlueMat = new THREE.MeshStandardMaterial({ color: 0x1d4ed8, roughness: 0.75 });
+    const subPoleSteelMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.2, metalness: 0.88 });
+    const subYellowBarMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.35 });
+
     for (let cIdx = 0; cIdx < 6; cIdx++) {
       const car = new THREE.Group();
-      // Stainless steel corrugated train car body (18m long, 3.1m wide, 3.4m tall)
-      const carBody = new THREE.Mesh(new THREE.BoxGeometry(3.1, 3.2, 17.5), subSteelMat);
-      carBody.position.y = 1.95;
-      car.add(carBody);
-
-      // Red TTC waist stripe
-      const stripe = new THREE.Mesh(new THREE.BoxGeometry(3.14, 0.28, 17.52), subTtcRedMat);
-      stripe.position.y = 1.55;
-      car.add(stripe);
-
-      // Illuminated passenger windows along both sides
-      for (let wz = -6.5; wz <= 6.5; wz += 2.6) {
-        [-1.58, 1.58].forEach(wx => {
-          const win = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.85, 1.6), subWindowGlowMat);
-          win.position.set(wx, 2.2, wz);
-          car.add(win);
-        });
-      }
-
-      // Front car headlights / Rear car taillights
       if (cIdx === 0) {
+        // Car 0: Full Walkable TTC Toronto Rocket Lead Car with Open Windows, Red Velvet Seats, Poles & Sliding Doors
+        const floor = new THREE.Mesh(new THREE.BoxGeometry(3.04, 0.12, 17.5), subFloorMat);
+        floor.position.y = 1.04;
+        car.add(floor);
+
+        const ceiling = new THREE.Mesh(new THREE.BoxGeometry(3.06, 0.10, 17.5), subWallInMat);
+        ceiling.position.y = 3.45;
+        car.add(ceiling);
+
+        // Continuous overhead LED diffuser strips & cabin point lights
+        [-0.85, 0.85].forEach(lx => {
+          const led = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.03, 16.6), new THREE.MeshBasicMaterial({ color: 0xfefce8, toneMapped: false }));
+          led.position.set(lx, 3.38, 0);
+          car.add(led);
+        });
+        [-4.2, 4.2].forEach(lz => {
+          const pt = new THREE.PointLight(0xfffbeb, 0.95, 14);
+          pt.position.set(0, 3.15, lz);
+          car.add(pt);
+        });
+
+        // Side walls with 3 doorway openings per side (z = -5.4, 0, +5.4, width 1.45m) & open panoramic windows (y = 1.92..2.88m)
+        const wallZSegs = [[-8.75, -6.15], [-4.65, -0.75], [0.75, 4.65], [6.15, 8.75]];
+        [-1, 1].forEach(side => {
+          const wx = side * 1.50;
+          // Upper header band above windows & doors (y = 2.88..3.42m)
+          const headerIn = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.54, 17.5), subWallInMat);
+          headerIn.position.set(wx, 3.15, 0);
+          car.add(headerIn);
+          const headerOut = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.56, 17.52), subSteelMat);
+          headerOut.position.set(wx + side * 0.04, 3.15, 0);
+          car.add(headerOut);
+
+          // Illuminated Line 1 Yonge-University route strip above the doors
+          const lineStrip = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.18, 15.8), new THREE.MeshBasicMaterial({ color: 0xfef08a, toneMapped: false }));
+          lineStrip.position.set(wx - side * 0.04, 3.04, 0);
+          car.add(lineStrip);
+
+          // Lower waist walls & window pillars between the 3 doorways
+          wallZSegs.forEach(([z0, z1]) => {
+            const sLen = z1 - z0, sMid = (z0 + z1) * 0.5;
+            const lowIn = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.84, sLen), subWallInMat);
+            lowIn.position.set(wx, 1.50, sMid);
+            car.add(lowIn);
+            const lowOut = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.86, sLen), subSteelMat);
+            lowOut.position.set(wx + side * 0.04, 1.50, sMid);
+            car.add(lowOut);
+            const redStripe = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.24, sLen), subTtcRedMat);
+            redStripe.position.set(wx + side * 0.05, 1.55, sMid);
+            car.add(redStripe);
+            const sill = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.04, sLen), subPoleSteelMat);
+            sill.position.set(wx, 1.92, sMid);
+            car.add(sill);
+
+            // Vertical window frame posts at each end of segment (leaving y = 1.92..2.88m completely open window!)
+            [z0 + 0.06, z1 - 0.06].forEach(pz => {
+              const post = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.00, 0.12), subSteelMat);
+              post.position.set(wx, 2.40, pz);
+              car.add(post);
+            });
+
+            // TTC Crimson-Red Velvet Longitudinal Bench Seats along each wall segment
+            const benchLen = Math.max(0.8, sLen - 0.36);
+            const seatMat = Math.abs(sMid) < 3.5 ? subSeatVelvetMat : subPriorityBlueMat;
+            const cushion = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.10, benchLen), seatMat);
+            cushion.position.set(wx - side * 0.28, 1.48, sMid);
+            car.add(cushion);
+            const backrest = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.44, benchLen), seatMat);
+            backrest.position.set(wx - side * 0.08, 1.72, sMid);
+            car.add(backrest);
+          });
+
+          // 3 Animated Double Sliding Pocket Doors per side (z = -5.4, 0, +5.4)
+          [-5.4, 0, 5.4].forEach(dz => {
+            const thresh = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.025, 1.44), subYellowBarMat);
+            thresh.position.set(wx, 1.105, dz);
+            car.add(thresh);
+
+            [-1, 1].forEach(leafDir => {
+              const leaf = new THREE.Group();
+              // Lower aluminum door panel (y = 1.10..1.92m) & upper header (y = 2.72..2.88m), leaving clear window cutout!
+              const dLow = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.82, 0.70), subSteelMat);
+              dLow.position.y = 1.51;
+              leaf.add(dLow);
+              const dTop = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.18, 0.70), subSteelMat);
+              dTop.position.y = 2.80;
+              leaf.add(dTop);
+              [-0.31, 0.31].forEach(stz => {
+                const stile = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.82, 0.08), subSteelMat);
+                stile.position.set(0, 2.32, stz);
+                leaf.add(stile);
+              });
+              const closedZ = dz + leafDir * 0.36;
+              leaf.position.set(wx + side * 0.02, 0, closedZ);
+              car.add(leaf);
+              subwaySlidingDoors.push({ mesh: leaf, closedZ, dir: leafDir });
+            });
+          });
+        });
+
+        // Central Brushed Stainless-Steel Stanchion Poles & Overhead Grab Bars
+        [-6.6, -2.7, 0, 2.7, 6.6].forEach(pz => {
+          const cPole = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 2.35, 10), subPoleSteelMat);
+          cPole.position.set(0, 2.26, pz);
+          car.add(cPole);
+        });
+        [-0.58, 0.58].forEach(rx => {
+          const oRail = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 16.4, 8), subPoleSteelMat);
+          oRail.rotation.x = Math.PI / 2;
+          oRail.position.set(rx, 2.96, 0);
+          car.add(oRail);
+        });
+
+        // Front Cab Nose & Open Windshield (z = -8.75m) + Rear Open-Gangway Portal (z = +8.75m)
+        const frontLow = new THREE.Mesh(new THREE.BoxGeometry(3.04, 0.86, 0.16), subSteelMat);
+        frontLow.position.set(0, 1.50, -8.72);
+        car.add(frontLow);
+        const frontHigh = new THREE.Mesh(new THREE.BoxGeometry(3.06, 0.54, 0.16), subSteelMat);
+        frontHigh.position.set(0, 3.15, -8.72);
+        car.add(frontHigh);
+        [-1.42, 0, 1.42].forEach(fx => {
+          const fPost = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.00, 0.16), subSteelMat);
+          fPost.position.set(fx, 2.40, -8.72);
+          car.add(fPost);
+        });
         [-0.95, 0.95].forEach(hx => {
           const headlight = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false }));
-          headlight.position.set(hx, 1.45, -8.82);
+          headlight.position.set(hx, 1.45, -8.84);
           car.add(headlight);
         });
-      } else if (cIdx === 5) {
-        [-0.95, 0.95].forEach(hx => {
-          const taillight = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), new THREE.MeshBasicMaterial({ color: 0xef4444, toneMapped: false }));
-          taillight.position.set(hx, 1.45, 8.82);
-          car.add(taillight);
+
+        // Rear open-gangway portal frame (z = +8.75m) looking back down the 6-car train
+        [-1.28, 1.28].forEach(gx => {
+          const gSide = new THREE.Mesh(new THREE.BoxGeometry(0.48, 2.35, 0.24), subSteelMat);
+          gSide.position.set(gx, 2.26, 8.72);
+          car.add(gSide);
         });
+      } else {
+        // Cars 1..5: Trailing articulated stainless steel cars
+        const carBody = new THREE.Mesh(new THREE.BoxGeometry(3.1, 3.2, 17.5), subSteelMat);
+        carBody.position.y = 1.95;
+        car.add(carBody);
+
+        const stripe = new THREE.Mesh(new THREE.BoxGeometry(3.14, 0.28, 17.52), subTtcRedMat);
+        stripe.position.y = 1.55;
+        car.add(stripe);
+
+        for (let wz = -6.5; wz <= 6.5; wz += 2.6) {
+          [-1.58, 1.58].forEach(wx => {
+            const win = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.85, 1.6), subWindowGlowMat);
+            win.position.set(wx, 2.2, wz);
+            car.add(win);
+          });
+        }
+
+        if (cIdx === 5) {
+          [-0.95, 0.95].forEach(hx => {
+            const taillight = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), new THREE.MeshBasicMaterial({ color: 0xef4444, toneMapped: false }));
+            taillight.position.set(hx, 1.45, 8.82);
+            car.add(taillight);
+          });
+        }
       }
 
       car.position.z = cIdx * 18.2;
       rocketTrain.add(car);
       trainCars.push(car);
     }
+
+    // Dynamic Overhead Next-Station LED Board inside Car 0 (z = -7.8m and z = +0.2m)
+    let subLedFront = null, subLedMid = null, lastSubLedKey = '';
+    function updateSubwayLedSigns(stationName, isStopped) {
+      const key = stationName + '|' + (isStopped ? '1' : '0');
+      if (key === lastSubLedKey) return;
+      lastSubLedKey = key;
+      if (subLedFront) trainCars[0].remove(subLedFront);
+      if (subLedMid) trainCars[0].remove(subLedMid);
+      const line1 = isStopped
+        ? ('ARRIVED: ' + stationName.toUpperCase())
+        : ('NEXT STATION: ' + stationName.toUpperCase());
+      subLedFront = signMesh([line1, 'LINE 1 YONGE-UNIVERSITY • WALK [WASD] • [E] EXIT'], 2.1, 0.32, {
+        bg: '#090d16', fg: '#facc15', borderColor: '#ef4444', size: 42
+      });
+      subLedFront.position.set(0, 3.08, -8.45);
+      trainCars[0].add(subLedFront);
+
+      subLedMid = signMesh([line1, 'LINE 1 YONGE-UNIVERSITY • WALK [WASD] • [E] EXIT'], 2.1, 0.32, {
+        bg: '#090d16', fg: '#facc15', borderColor: '#ef4444', size: 42
+      });
+      subLedMid.position.set(0, 3.08, 8.45);
+      subLedMid.rotation.y = Math.PI;
+      trainCars[0].add(subLedMid);
+    }
+    updateSubwayLedSigns('Union Station', true);
+
+    // 2b. Streaming Underground Concrete Subway Tunnel (Surrounds Moving Train Between Stations!)
+    const subwayTunnelRunner = new THREE.Group();
+    subwayTunnelRunner.visible = false;
+    const tunWallMat = new THREE.MeshStandardMaterial({ color: 0x27272a, roughness: 0.92, side: THREE.DoubleSide });
+    const tunRibMat = new THREE.MeshStandardMaterial({ color: 0x3f3f46, roughness: 0.80 });
+    const tunLightMat = new THREE.MeshBasicMaterial({ color: 0xfef08a, toneMapped: false });
+    const tunGreenSigMat = new THREE.MeshBasicMaterial({ color: 0x22c55e, toneMapped: false });
+    const tunAmberSigMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b, toneMapped: false });
+
+    // Outer concrete tunnel shell around the moving train (x = ±2.55m, ceiling y = 4.15m, floor y = 0.0m)
+    [-2.55, 2.55].forEach(tx => {
+      const tWall = new THREE.Mesh(new THREE.BoxGeometry(0.25, 4.3, 68), tunWallMat);
+      tWall.position.set(tx, 2.1, 4.0);
+      subwayTunnelRunner.add(tWall);
+      // Continuous power/signal cable conduits along tunnel walls
+      [1.3, 2.6].forEach(cy => {
+        const cable = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.08, 68), subThirdRailMat);
+        cable.position.set(tx > 0 ? tx - 0.14 : tx + 0.14, cy, 4.0);
+        subwayTunnelRunner.add(cable);
+      });
+    });
+    const tCeil = new THREE.Mesh(new THREE.BoxGeometry(5.3, 0.25, 68), tunWallMat);
+    tCeil.position.set(0, 4.2, 4.0);
+    subwayTunnelRunner.add(tCeil);
+    const tBed = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.12, 68), subTrackBedMat);
+    tBed.position.set(0, 0.04, 4.0);
+    subwayTunnelRunner.add(tBed);
+    [-0.72, 0.72].forEach(rx => {
+      const r = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.14, 68), subRailSteelMat);
+      r.position.set(rx, 0.20, 4.0);
+      subwayTunnelRunner.add(r);
+    });
+
+    // Scrolling rib & tunnel light ring group (repeats every 3.2m so scrolling 0..3.2m creates infinite 86 km/h motion!)
+    const tunnelScrollGroup = new THREE.Group();
+    for (let rz = -28.8; rz <= 35.2; rz += 3.2) {
+      [-2.36, 2.36].forEach(rx => {
+        const rib = new THREE.Mesh(new THREE.BoxGeometry(0.18, 4.0, 0.22), tunRibMat);
+        rib.position.set(rx, 2.05, rz);
+        tunnelScrollGroup.add(rib);
+      });
+      const topRib = new THREE.Mesh(new THREE.BoxGeometry(4.9, 0.18, 0.22), tunRibMat);
+      topRib.position.set(0, 4.02, rz);
+      tunnelScrollGroup.add(topRib);
+
+      // Wooden track tie
+      const tie = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.12, 0.26), subWoodTieMat);
+      tie.position.set(0, 0.12, rz);
+      tunnelScrollGroup.add(tie);
+
+      // Glowing tunnel strip light every 6.4m + wayside block signals
+      if (Math.abs(Math.round(rz / 3.2)) % 2 === 0) {
+        [-2.24, 2.24].forEach(lx => {
+          const fix = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 1.1), tunLightMat);
+          fix.position.set(lx, 3.35, rz);
+          tunnelScrollGroup.add(fix);
+        });
+      }
+      if (Math.abs(Math.round(rz / 3.2)) % 4 === 0) {
+        const sig = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 8), rz < 0 ? tunGreenSigMat : tunAmberSigMat);
+        sig.position.set(-2.18, 2.25, rz);
+        tunnelScrollGroup.add(sig);
+      }
+    }
+    subwayTunnelRunner.add(tunnelScrollGroup);
+    subwayUndergroundGroup.add(subwayTunnelRunner);
     subwayUndergroundGroup.add(rocketTrain);
     scene.add(subwayGroup);
 
@@ -16313,23 +16823,44 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       isStopped: true,
       stopTimer: 8.0,
       doorsOpen: true,
+      doorAnim: 1.0,
+      tunnelScroll: 0,
+      hasPlayer: false,
       x: SUBWAY_LOOP_STOPS[0].x,
       y: SUBWAY_PLATFORM_Y + 0.1,
       z: SUBWAY_LOOP_STOPS[0].z,
-      heading: 0
+      heading: Math.PI
     };
     rocketTrain.position.set(subwayTrainState.x, subwayTrainState.y, subwayTrainState.z);
+    rocketTrain.rotation.y = 0;
 
     updateSubwayTrain = function(dt) {
+      // Smoothly animate sliding pocket doors (open = 0.66m offset, closed = 0m)
+      const targetDoor = subwayTrainState.doorsOpen ? 1.0 : 0.0;
+      subwayTrainState.doorAnim += (targetDoor - subwayTrainState.doorAnim) * Math.min(1, dt * 6.5);
+      const dOff = subwayTrainState.doorAnim * 0.66;
+      for (let i = 0; i < subwaySlidingDoors.length; i++) {
+        const d = subwaySlidingDoors[i];
+        d.mesh.position.z = d.closedZ + d.dir * dOff;
+      }
+
       if (subwayTrainState.isStopped) {
+        if (subwayTrainState.hasPlayer && subwayTrainState.stopTimer > 2.2) {
+          subwayTrainState.stopTimer = 2.2;
+        }
         subwayTrainState.stopTimer -= dt;
         subwayTrainState.doorsOpen = true;
+        subwayTrainState.heading = Math.PI;
+        rocketTrain.rotation.y = 0;
+        subwayTunnelRunner.visible = false;
+        const curStop = SUBWAY_LOOP_STOPS[subwayTrainState.currentStopIdx];
+        updateSubwayLedSigns(curStop.name, true);
         if (subwayTrainState.stopTimer <= 0) {
           subwayTrainState.isStopped = false;
           subwayTrainState.doorsOpen = false;
           subwayTrainState.progress = 0;
-          subwayTrainState.currentStopIdx = subwayTrainState.nextStopIdx;
-          subwayTrainState.nextStopIdx = (subwayTrainState.currentStopIdx + 1) % SUBWAY_LOOP_STOPS.length;
+          const nxtStop = SUBWAY_LOOP_STOPS[subwayTrainState.nextStopIdx];
+          updateSubwayLedSigns(nxtStop.name, false);
         }
         return;
       }
@@ -16342,19 +16873,29 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
 
       if (subwayTrainState.progress >= 1.0) {
         subwayTrainState.progress = 1.0;
+        subwayTrainState.currentStopIdx = subwayTrainState.nextStopIdx;
+        subwayTrainState.nextStopIdx = (subwayTrainState.currentStopIdx + 1) % SUBWAY_LOOP_STOPS.length;
         subwayTrainState.isStopped = true;
-        subwayTrainState.stopTimer = 10.0;
+        subwayTrainState.stopTimer = 8.0;
         subwayTrainState.doorsOpen = true;
         subwayTrainState.x = toStop.x;
         subwayTrainState.z = toStop.z;
+        subwayTrainState.heading = Math.PI;
         rocketTrain.position.set(toStop.x, subwayTrainState.y, toStop.z);
+        rocketTrain.rotation.y = 0;
+        subwayTunnelRunner.visible = false;
+        updateSubwayLedSigns(toStop.name, true);
         return;
       }
 
       const p = subwayTrainState.progress;
       const curX = fromStop.x + (toStop.x - fromStop.x) * p;
       const curZ = fromStop.z + (toStop.z - fromStop.z) * p;
-      const heading = Math.atan2(toStop.x - fromStop.x, toStop.z - fromStop.z);
+      const rawHeading = Math.atan2(toStop.x - fromStop.x, toStop.z - fromStop.z);
+
+      // Align parallel to north-south station track beds when departing/entering stations (p < 0.12 or p > 0.88)
+      const inTunnel = p > 0.09 && p < 0.91;
+      const heading = inTunnel ? rawHeading : Math.PI;
 
       subwayTrainState.x = curX;
       subwayTrainState.z = curZ;
@@ -16362,6 +16903,15 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
 
       rocketTrain.position.set(curX, subwayTrainState.y, curZ);
       rocketTrain.rotation.y = heading + Math.PI;
+
+      // Show streaming concrete tunnel outside windows while between stations!
+      subwayTunnelRunner.visible = inTunnel;
+      if (inTunnel) {
+        subwayTunnelRunner.position.set(curX, subwayTrainState.y, curZ);
+        subwayTunnelRunner.rotation.y = heading + Math.PI;
+        subwayTrainState.tunnelScroll = (subwayTrainState.tunnelScroll + subwayTrainState.speed * dt) % 3.2;
+        tunnelScrollGroup.position.z = subwayTrainState.tunnelScroll;
+      }
     };
 
     return {
@@ -16383,6 +16933,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       streetcarRoutes,
       streetcarTrackOffset: 1.5,
       makeStreetcar,
+      streetcarInterior,
       // CN Tower Glass Elevator, Observation Decks & 360 Restaurant reference
       cnElevator: {
         cab: elevatorCab,
@@ -29106,7 +29657,9 @@ window.togglePorterFreePilot = togglePorterFreePilot;
 const streetcarController = {
   activeCar: null,
   lastHeading: 0,
-  announceTimer: 0
+  announceTimer: 0,
+  localX: 0.0,
+  localZ: 3.2
 };
 
 function findNearbyStreetcar(maxDist) {
@@ -29129,25 +29682,37 @@ function boardStreetcar(sc) {
   const car = sc || findNearbyStreetcar(14.0);
   if (!car || state.onFerry || state.inElevator || state.onPlane) return false;
 
-  if (streetcarController.activeCar) {
+  if (streetcarController.activeCar && streetcarController.activeCar.group) {
     streetcarController.activeCar.hasPlayer = false;
+    streetcarController.activeCar.group.visible = true;
   }
   streetcarController.activeCar = car;
   streetcarController.lastHeading = car.vh;
   streetcarController.announceTimer = 4.5;
+  // Start on the streetcar's local interior grid (center aisle at localX=0, localZ=3.2m facing forward)
+  streetcarController.localX = 0.0;
+  streetcarController.localZ = 3.2;
   car.hasPlayer = true;
   car.boardGrace = 2.0;
   car.mode = 'run';
+  if (car.group) car.group.visible = false;
+  if (city && city.streetcarInterior && city.streetcarInterior.group) {
+    city.streetcarInterior.updateRouteSign(car.sign || '504 KING');
+    city.streetcarInterior.group.position.set(car.vx, 0.05, car.vz);
+    city.streetcarInterior.group.rotation.y = car.vh;
+    city.streetcarInterior.group.visible = true;
+  }
   state.onStreetcar = true;
 
   if (traffic && traffic.ringGong) traffic.ringGong();
   // Face forward along the streetcar aisle (camera forward at yaw is (-sin(yaw), -cos(yaw)))
   player.yaw = car.vh + Math.PI;
-  player.pitch = -0.03;
+  player.pitch = -0.02;
   player.velocity.set(0, 0, 0);
   camera.rotation.order = 'YXZ';
   camera.rotation.y = player.yaw;
   camera.rotation.x = player.pitch;
+  updateStreetcarRide(0.0);
   return true;
 }
 
@@ -29156,22 +29721,47 @@ function updateStreetcarRide(dt) {
   const sc = streetcarController.activeCar;
   if (sc.mode === 'hidden') {
     sc.mode = 'run';
-    sc.group.visible = true;
+  }
+  // Hide exterior solid box of the active car and show the full panoramic walkable interior cabin
+  if (sc.group) sc.group.visible = false;
+  if (city && city.streetcarInterior && city.streetcarInterior.group) {
+    city.streetcarInterior.group.visible = true;
+    city.streetcarInterior.group.position.set(sc.vx, 0.05, sc.vz);
+    city.streetcarInterior.group.rotation.y = sc.vh;
   }
 
   let dHeading = sc.vh - streetcarController.lastHeading;
   while (dHeading > Math.PI) dHeading -= Math.PI * 2;
   while (dHeading < -Math.PI) dHeading += Math.PI * 2;
   player.yaw += dHeading;
+  camera.rotation.y = player.yaw;
   streetcarController.lastHeading = sc.vh;
 
-  // Position player inside the forward panoramic window section of the low-floor Flexity streetcar
-  const fwdDist = 4.5;
-  player.pos.set(
-    sc.vx + Math.sin(sc.vh) * fwdDist,
-    2.15,
-    sc.vz + Math.cos(sc.vh) * fwdDist
-  );
+  // Walkable local interior coordinate grid (W/A/S/D moves player along the streetcar aisle & windows!)
+  const scFwdX = Math.sin(sc.vh), scFwdZ = Math.cos(sc.vh);
+  const scLeftX = Math.cos(sc.vh), scLeftZ = -Math.sin(sc.vh);
+  const lookFwdX = -Math.sin(player.yaw), lookFwdZ = -Math.cos(player.yaw);
+  const lookRightX = Math.cos(player.yaw), lookRightZ = -Math.sin(player.yaw);
+  let moveX = 0, moveZ = 0;
+  if (keys['KeyW'] || keys['ArrowUp']) { moveX += lookFwdX; moveZ += lookFwdZ; }
+  if (keys['KeyS'] || keys['ArrowDown']) { moveX -= lookFwdX; moveZ -= lookFwdZ; }
+  if (keys['KeyD']) { moveX += lookRightX; moveZ += lookRightZ; }
+  if (keys['KeyA']) { moveX -= lookRightX; moveZ -= lookRightZ; }
+  const moveLen = Math.hypot(moveX, moveZ);
+  if (moveLen > 0.001 && dt > 0) {
+    moveX /= moveLen;
+    moveZ /= moveLen;
+    const localVelZ = moveX * scFwdX + moveZ * scFwdZ;
+    const localVelX = moveX * scLeftX + moveZ * scLeftZ;
+    const walkSpd = 3.8;
+    streetcarController.localX = Math.max(-0.52, Math.min(0.52, streetcarController.localX + localVelX * walkSpd * dt));
+    streetcarController.localZ = Math.max(-12.0, Math.min(11.2, streetcarController.localZ + localVelZ * walkSpd * dt));
+  }
+
+  // Transform player's local interior coordinates (localX, localZ) onto the external world grid
+  const wx = sc.vx + scLeftX * streetcarController.localX + scFwdX * streetcarController.localZ;
+  const wz = sc.vz + scLeftZ * streetcarController.localX + scFwdZ * streetcarController.localZ;
+  player.pos.set(wx, 0.05 + 0.38 + EYE_HEIGHT, wz);
   player.velocity.set(0, 0, 0);
 }
 
@@ -29180,9 +29770,13 @@ function disembarkStreetcar() {
   const sc = streetcarController.activeCar;
   state.onStreetcar = false;
   streetcarController.activeCar = null;
+  if (city && city.streetcarInterior && city.streetcarInterior.group) {
+    city.streetcarInterior.group.visible = false;
+  }
 
   if (traffic && traffic.ringGong) traffic.ringGong();
   if (sc) {
+    if (sc.group) sc.group.visible = true;
     sc.hasPlayer = false;
     sc.boardGrace = 3.0;
     sc.mode = 'dwell';
@@ -29207,6 +29801,97 @@ function disembarkStreetcar() {
 window.boardStreetcar = boardStreetcar;
 window.updateStreetcarRide = updateStreetcarRide;
 window.disembarkStreetcar = disembarkStreetcar;
+
+// ============================================================================
+// WALKABLE TTC LINE 1 TORONTO ROCKET SUBWAY INTERIOR & LOCAL GRID CONTROLLER
+// ============================================================================
+
+const subwayController = {
+  localX: 0.0,
+  localZ: 0.0,
+  lastHeading: Math.PI
+};
+
+function boardSubwayTrain() {
+  if (!city || !city.subway) return false;
+  state.onSubway = true;
+  state.isUnderground = true;
+  const tState = city.subway.state;
+  tState.hasPlayer = true;
+  subwayController.localX = 0.0;
+  subwayController.localZ = 0.0;
+  subwayController.lastHeading = tState.heading !== undefined ? tState.heading : Math.PI;
+  // Face along the subway car interior toward the front cab window
+  player.yaw = subwayController.lastHeading + Math.PI;
+  player.pitch = -0.02;
+  player.velocity.set(0, 0, 0);
+  camera.rotation.order = 'YXZ';
+  camera.rotation.y = player.yaw;
+  camera.rotation.x = player.pitch;
+  updateSubwayRide(0.0);
+  return true;
+}
+
+function updateSubwayRide(dt) {
+  if (!state.onSubway || !city || !city.subway) return;
+  const tState = city.subway.state;
+  tState.hasPlayer = true;
+  const h = tState.heading !== undefined ? tState.heading : Math.PI;
+
+  let dHeading = h - subwayController.lastHeading;
+  while (dHeading > Math.PI) dHeading -= Math.PI * 2;
+  while (dHeading < -Math.PI) dHeading += Math.PI * 2;
+  player.yaw += dHeading;
+  camera.rotation.y = player.yaw;
+  subwayController.lastHeading = h;
+
+  // Local axes of rocketTrain (which has rotation.y = h + Math.PI)
+  const rotY = h + Math.PI;
+  const axisZX = Math.sin(rotY), axisZZ = Math.cos(rotY);
+  const axisXX = Math.cos(rotY), axisXZ = -Math.sin(rotY);
+
+  // Walkable local interior coordinate grid inside Car 0 (W/A/S/D moves freely along the subway car!)
+  const lookFwdX = -Math.sin(player.yaw), lookFwdZ = -Math.cos(player.yaw);
+  const lookRightX = Math.cos(player.yaw), lookRightZ = -Math.sin(player.yaw);
+  let moveX = 0, moveZ = 0;
+  if (keys['KeyW'] || keys['ArrowUp']) { moveX += lookFwdX; moveZ += lookFwdZ; }
+  if (keys['KeyS'] || keys['ArrowDown']) { moveX -= lookFwdX; moveZ -= lookFwdZ; }
+  if (keys['KeyD']) { moveX += lookRightX; moveZ += lookRightZ; }
+  if (keys['KeyA']) { moveX -= lookRightX; moveZ -= lookRightZ; }
+  const moveLen = Math.hypot(moveX, moveZ);
+  if (moveLen > 0.001 && dt > 0) {
+    moveX /= moveLen;
+    moveZ /= moveLen;
+    const localVelZ = moveX * axisZX + moveZ * axisZZ;
+    const localVelX = moveX * axisXX + moveZ * axisXZ;
+    const walkSpd = 3.8;
+    subwayController.localX = Math.max(-0.82, Math.min(0.82, subwayController.localX + localVelX * walkSpd * dt));
+    subwayController.localZ = Math.max(-7.9, Math.min(7.9, subwayController.localZ + localVelZ * walkSpd * dt));
+  }
+
+  const wx = tState.x + axisXX * subwayController.localX + axisZX * subwayController.localZ;
+  const wz = tState.z + axisXZ * subwayController.localX + axisZZ * subwayController.localZ;
+  player.pos.set(wx, city.subway.platformY + 1.25 + EYE_HEIGHT, wz);
+  player.velocity.set(0, 0, 0);
+}
+
+function disembarkSubwayTrain() {
+  if (!state.onSubway) return false;
+  state.onSubway = false;
+  if (city && city.subway && city.subway.state) {
+    city.subway.state.hasPlayer = false;
+  }
+  const curStop = (city && city.subway && city.subway.stations)
+    ? (city.subway.stations[city.subway.state.currentStopIdx] || city.subway.stations[0])
+    : { name: 'Station', x: 265, z: -140 };
+  player.pos.set(curStop.x, (city && city.subway) ? city.subway.platformY + EYE_HEIGHT : -14.0 + EYE_HEIGHT, curStop.z);
+  player.velocity.set(0, 0, 0);
+  return true;
+}
+
+window.boardSubwayTrain = boardSubwayTrain;
+window.updateSubwayRide = updateSubwayRide;
+window.disembarkSubwayTrain = disembarkSubwayTrain;
 
 // ============================================================================
 // CN TOWER GLASS ELEVATOR, 2-FLOOR OBSERVATION DECK & SKY SHOWDOWN SYSTEMS
@@ -29838,17 +30523,10 @@ function handleDeckAction() {
     }
   }
   if (activeDeckAction === 'board_subway_train') {
-    state.onSubway = true;
-    return true;
+    return boardSubwayTrain();
   }
   if (activeDeckAction === 'disembark_subway_train') {
-    state.onSubway = false;
-    const curStop = (city && city.subway && city.subway.stations)
-      ? (city.subway.stations[city.subway.state.currentStopIdx] || city.subway.stations[0])
-      : { name: 'Station', x: 265, z: -140 };
-    player.pos.set(curStop.x, (city && city.subway) ? city.subway.platformY + EYE_HEIGHT : -14.0 + EYE_HEIGHT, curStop.z);
-    player.velocity.set(0, 0, 0);
-    return true;
+    return disembarkSubwayTrain();
   }
   if (activeDeckAction === 'elevator') {
     if (elevatorPanel.open) closeElevatorPanel();
@@ -31678,7 +32356,7 @@ function updateKickLeg(prog) {
 }
 
 function updateArmsRig(dt) {
-  armsRig.visible = !(state.onPlane || state.telescopeActive);
+  armsRig.visible = !(state.onPlane || state.telescopeActive || state.onStreetcar || state.onSubway);
   if (!armsRig.visible) return;
   vm.time += dt;
 
@@ -32002,6 +32680,9 @@ function animate(now) {
   if (city) {
     try { city.update(dt, player.pos); } catch (e) { console.warn('city.update error:', e); }
   }
+  if (state.inGame && !state.isDead && !state.isPaused && state.onSubway) {
+    updateSubwayRide(simDt);
+  }
   if (islands) {
     try { islands.update(dt, player.pos); } catch (e) { console.warn('islands.update error:', e); }
   }
@@ -32229,10 +32910,8 @@ function updatePlayer(dt) {
     if (state.onPlane) {
       camera.rotation.z += (porterFlightController.roll * 0.45 - camera.rotation.z) * 0.15;
     }
-    if (state.onSubway && city && city.subway) {
-      const tState = city.subway.state;
-      player.pos.set(tState.x, city.subway.platformY + 1.25 + EYE_HEIGHT, tState.z);
-      player.velocity.set(0, 0, 0);
+    if (state.onSubway) {
+      updateSubwayRide(dt);
     }
     return;
   }

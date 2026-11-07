@@ -4211,7 +4211,9 @@ window.togglePorterFreePilot = togglePorterFreePilot;
 const streetcarController = {
   activeCar: null,
   lastHeading: 0,
-  announceTimer: 0
+  announceTimer: 0,
+  localX: 0.0,
+  localZ: 3.2
 };
 
 function findNearbyStreetcar(maxDist) {
@@ -4234,25 +4236,37 @@ function boardStreetcar(sc) {
   const car = sc || findNearbyStreetcar(14.0);
   if (!car || state.onFerry || state.inElevator || state.onPlane) return false;
 
-  if (streetcarController.activeCar) {
+  if (streetcarController.activeCar && streetcarController.activeCar.group) {
     streetcarController.activeCar.hasPlayer = false;
+    streetcarController.activeCar.group.visible = true;
   }
   streetcarController.activeCar = car;
   streetcarController.lastHeading = car.vh;
   streetcarController.announceTimer = 4.5;
+  // Start on the streetcar's local interior grid (center aisle at localX=0, localZ=3.2m facing forward)
+  streetcarController.localX = 0.0;
+  streetcarController.localZ = 3.2;
   car.hasPlayer = true;
   car.boardGrace = 2.0;
   car.mode = 'run';
+  if (car.group) car.group.visible = false;
+  if (city && city.streetcarInterior && city.streetcarInterior.group) {
+    city.streetcarInterior.updateRouteSign(car.sign || '504 KING');
+    city.streetcarInterior.group.position.set(car.vx, 0.05, car.vz);
+    city.streetcarInterior.group.rotation.y = car.vh;
+    city.streetcarInterior.group.visible = true;
+  }
   state.onStreetcar = true;
 
   if (traffic && traffic.ringGong) traffic.ringGong();
   // Face forward along the streetcar aisle (camera forward at yaw is (-sin(yaw), -cos(yaw)))
   player.yaw = car.vh + Math.PI;
-  player.pitch = -0.03;
+  player.pitch = -0.02;
   player.velocity.set(0, 0, 0);
   camera.rotation.order = 'YXZ';
   camera.rotation.y = player.yaw;
   camera.rotation.x = player.pitch;
+  updateStreetcarRide(0.0);
   return true;
 }
 
@@ -4261,22 +4275,47 @@ function updateStreetcarRide(dt) {
   const sc = streetcarController.activeCar;
   if (sc.mode === 'hidden') {
     sc.mode = 'run';
-    sc.group.visible = true;
+  }
+  // Hide exterior solid box of the active car and show the full panoramic walkable interior cabin
+  if (sc.group) sc.group.visible = false;
+  if (city && city.streetcarInterior && city.streetcarInterior.group) {
+    city.streetcarInterior.group.visible = true;
+    city.streetcarInterior.group.position.set(sc.vx, 0.05, sc.vz);
+    city.streetcarInterior.group.rotation.y = sc.vh;
   }
 
   let dHeading = sc.vh - streetcarController.lastHeading;
   while (dHeading > Math.PI) dHeading -= Math.PI * 2;
   while (dHeading < -Math.PI) dHeading += Math.PI * 2;
   player.yaw += dHeading;
+  camera.rotation.y = player.yaw;
   streetcarController.lastHeading = sc.vh;
 
-  // Position player inside the forward panoramic window section of the low-floor Flexity streetcar
-  const fwdDist = 4.5;
-  player.pos.set(
-    sc.vx + Math.sin(sc.vh) * fwdDist,
-    2.15,
-    sc.vz + Math.cos(sc.vh) * fwdDist
-  );
+  // Walkable local interior coordinate grid (W/A/S/D moves player along the streetcar aisle & windows!)
+  const scFwdX = Math.sin(sc.vh), scFwdZ = Math.cos(sc.vh);
+  const scLeftX = Math.cos(sc.vh), scLeftZ = -Math.sin(sc.vh);
+  const lookFwdX = -Math.sin(player.yaw), lookFwdZ = -Math.cos(player.yaw);
+  const lookRightX = Math.cos(player.yaw), lookRightZ = -Math.sin(player.yaw);
+  let moveX = 0, moveZ = 0;
+  if (keys['KeyW'] || keys['ArrowUp']) { moveX += lookFwdX; moveZ += lookFwdZ; }
+  if (keys['KeyS'] || keys['ArrowDown']) { moveX -= lookFwdX; moveZ -= lookFwdZ; }
+  if (keys['KeyD']) { moveX += lookRightX; moveZ += lookRightZ; }
+  if (keys['KeyA']) { moveX -= lookRightX; moveZ -= lookRightZ; }
+  const moveLen = Math.hypot(moveX, moveZ);
+  if (moveLen > 0.001 && dt > 0) {
+    moveX /= moveLen;
+    moveZ /= moveLen;
+    const localVelZ = moveX * scFwdX + moveZ * scFwdZ;
+    const localVelX = moveX * scLeftX + moveZ * scLeftZ;
+    const walkSpd = 3.8;
+    streetcarController.localX = Math.max(-0.52, Math.min(0.52, streetcarController.localX + localVelX * walkSpd * dt));
+    streetcarController.localZ = Math.max(-12.0, Math.min(11.2, streetcarController.localZ + localVelZ * walkSpd * dt));
+  }
+
+  // Transform player's local interior coordinates (localX, localZ) onto the external world grid
+  const wx = sc.vx + scLeftX * streetcarController.localX + scFwdX * streetcarController.localZ;
+  const wz = sc.vz + scLeftZ * streetcarController.localX + scFwdZ * streetcarController.localZ;
+  player.pos.set(wx, 0.05 + 0.38 + EYE_HEIGHT, wz);
   player.velocity.set(0, 0, 0);
 }
 
@@ -4285,9 +4324,13 @@ function disembarkStreetcar() {
   const sc = streetcarController.activeCar;
   state.onStreetcar = false;
   streetcarController.activeCar = null;
+  if (city && city.streetcarInterior && city.streetcarInterior.group) {
+    city.streetcarInterior.group.visible = false;
+  }
 
   if (traffic && traffic.ringGong) traffic.ringGong();
   if (sc) {
+    if (sc.group) sc.group.visible = true;
     sc.hasPlayer = false;
     sc.boardGrace = 3.0;
     sc.mode = 'dwell';
@@ -4312,6 +4355,97 @@ function disembarkStreetcar() {
 window.boardStreetcar = boardStreetcar;
 window.updateStreetcarRide = updateStreetcarRide;
 window.disembarkStreetcar = disembarkStreetcar;
+
+// ============================================================================
+// WALKABLE TTC LINE 1 TORONTO ROCKET SUBWAY INTERIOR & LOCAL GRID CONTROLLER
+// ============================================================================
+
+const subwayController = {
+  localX: 0.0,
+  localZ: 0.0,
+  lastHeading: Math.PI
+};
+
+function boardSubwayTrain() {
+  if (!city || !city.subway) return false;
+  state.onSubway = true;
+  state.isUnderground = true;
+  const tState = city.subway.state;
+  tState.hasPlayer = true;
+  subwayController.localX = 0.0;
+  subwayController.localZ = 0.0;
+  subwayController.lastHeading = tState.heading !== undefined ? tState.heading : Math.PI;
+  // Face along the subway car interior toward the front cab window
+  player.yaw = subwayController.lastHeading + Math.PI;
+  player.pitch = -0.02;
+  player.velocity.set(0, 0, 0);
+  camera.rotation.order = 'YXZ';
+  camera.rotation.y = player.yaw;
+  camera.rotation.x = player.pitch;
+  updateSubwayRide(0.0);
+  return true;
+}
+
+function updateSubwayRide(dt) {
+  if (!state.onSubway || !city || !city.subway) return;
+  const tState = city.subway.state;
+  tState.hasPlayer = true;
+  const h = tState.heading !== undefined ? tState.heading : Math.PI;
+
+  let dHeading = h - subwayController.lastHeading;
+  while (dHeading > Math.PI) dHeading -= Math.PI * 2;
+  while (dHeading < -Math.PI) dHeading += Math.PI * 2;
+  player.yaw += dHeading;
+  camera.rotation.y = player.yaw;
+  subwayController.lastHeading = h;
+
+  // Local axes of rocketTrain (which has rotation.y = h + Math.PI)
+  const rotY = h + Math.PI;
+  const axisZX = Math.sin(rotY), axisZZ = Math.cos(rotY);
+  const axisXX = Math.cos(rotY), axisXZ = -Math.sin(rotY);
+
+  // Walkable local interior coordinate grid inside Car 0 (W/A/S/D moves freely along the subway car!)
+  const lookFwdX = -Math.sin(player.yaw), lookFwdZ = -Math.cos(player.yaw);
+  const lookRightX = Math.cos(player.yaw), lookRightZ = -Math.sin(player.yaw);
+  let moveX = 0, moveZ = 0;
+  if (keys['KeyW'] || keys['ArrowUp']) { moveX += lookFwdX; moveZ += lookFwdZ; }
+  if (keys['KeyS'] || keys['ArrowDown']) { moveX -= lookFwdX; moveZ -= lookFwdZ; }
+  if (keys['KeyD']) { moveX += lookRightX; moveZ += lookRightZ; }
+  if (keys['KeyA']) { moveX -= lookRightX; moveZ -= lookRightZ; }
+  const moveLen = Math.hypot(moveX, moveZ);
+  if (moveLen > 0.001 && dt > 0) {
+    moveX /= moveLen;
+    moveZ /= moveLen;
+    const localVelZ = moveX * axisZX + moveZ * axisZZ;
+    const localVelX = moveX * axisXX + moveZ * axisXZ;
+    const walkSpd = 3.8;
+    subwayController.localX = Math.max(-0.82, Math.min(0.82, subwayController.localX + localVelX * walkSpd * dt));
+    subwayController.localZ = Math.max(-7.9, Math.min(7.9, subwayController.localZ + localVelZ * walkSpd * dt));
+  }
+
+  const wx = tState.x + axisXX * subwayController.localX + axisZX * subwayController.localZ;
+  const wz = tState.z + axisXZ * subwayController.localX + axisZZ * subwayController.localZ;
+  player.pos.set(wx, city.subway.platformY + 1.25 + EYE_HEIGHT, wz);
+  player.velocity.set(0, 0, 0);
+}
+
+function disembarkSubwayTrain() {
+  if (!state.onSubway) return false;
+  state.onSubway = false;
+  if (city && city.subway && city.subway.state) {
+    city.subway.state.hasPlayer = false;
+  }
+  const curStop = (city && city.subway && city.subway.stations)
+    ? (city.subway.stations[city.subway.state.currentStopIdx] || city.subway.stations[0])
+    : { name: 'Station', x: 265, z: -140 };
+  player.pos.set(curStop.x, (city && city.subway) ? city.subway.platformY + EYE_HEIGHT : -14.0 + EYE_HEIGHT, curStop.z);
+  player.velocity.set(0, 0, 0);
+  return true;
+}
+
+window.boardSubwayTrain = boardSubwayTrain;
+window.updateSubwayRide = updateSubwayRide;
+window.disembarkSubwayTrain = disembarkSubwayTrain;
 
 // ============================================================================
 // CN TOWER GLASS ELEVATOR, 2-FLOOR OBSERVATION DECK & SKY SHOWDOWN SYSTEMS
@@ -4943,17 +5077,10 @@ function handleDeckAction() {
     }
   }
   if (activeDeckAction === 'board_subway_train') {
-    state.onSubway = true;
-    return true;
+    return boardSubwayTrain();
   }
   if (activeDeckAction === 'disembark_subway_train') {
-    state.onSubway = false;
-    const curStop = (city && city.subway && city.subway.stations)
-      ? (city.subway.stations[city.subway.state.currentStopIdx] || city.subway.stations[0])
-      : { name: 'Station', x: 265, z: -140 };
-    player.pos.set(curStop.x, (city && city.subway) ? city.subway.platformY + EYE_HEIGHT : -14.0 + EYE_HEIGHT, curStop.z);
-    player.velocity.set(0, 0, 0);
-    return true;
+    return disembarkSubwayTrain();
   }
   if (activeDeckAction === 'elevator') {
     if (elevatorPanel.open) closeElevatorPanel();
@@ -6783,7 +6910,7 @@ function updateKickLeg(prog) {
 }
 
 function updateArmsRig(dt) {
-  armsRig.visible = !(state.onPlane || state.telescopeActive);
+  armsRig.visible = !(state.onPlane || state.telescopeActive || state.onStreetcar || state.onSubway);
   if (!armsRig.visible) return;
   vm.time += dt;
 
@@ -7107,6 +7234,9 @@ function animate(now) {
   if (city) {
     try { city.update(dt, player.pos); } catch (e) { console.warn('city.update error:', e); }
   }
+  if (state.inGame && !state.isDead && !state.isPaused && state.onSubway) {
+    updateSubwayRide(simDt);
+  }
   if (islands) {
     try { islands.update(dt, player.pos); } catch (e) { console.warn('islands.update error:', e); }
   }
@@ -7334,10 +7464,8 @@ function updatePlayer(dt) {
     if (state.onPlane) {
       camera.rotation.z += (porterFlightController.roll * 0.45 - camera.rotation.z) * 0.15;
     }
-    if (state.onSubway && city && city.subway) {
-      const tState = city.subway.state;
-      player.pos.set(tState.x, city.subway.platformY + 1.25 + EYE_HEIGHT, tState.z);
-      player.velocity.set(0, 0, 0);
+    if (state.onSubway) {
+      updateSubwayRide(dt);
     }
     return;
   }
