@@ -384,26 +384,30 @@ canvas {
 
 #announcement {
   position: absolute;
-  top: 24%;
+  top: 13%;
   left: 50%;
   transform: translateX(-50%);
   font-family: 'Chakra Petch', sans-serif;
-  font-weight: 900;
-  font-size: 26px;
-  letter-spacing: 2px;
-  color: #ffea00;
-  text-shadow: 0 0 20px rgba(255, 100, 0, 0.9), 3px 3px 0 #000;
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: 1.2px;
+  color: #fde047;
+  background: rgba(12, 16, 26, 0.78);
+  border: 1px solid rgba(253, 224, 71, 0.35);
+  padding: 6px 16px;
+  border-radius: 6px;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
   pointer-events: none;
   z-index: 30;
   opacity: 0;
   text-align: center;
   white-space: nowrap;
-  transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
 #announcement.show {
   opacity: 1;
-  transform: translateX(-50%) scale(1.15);
+  transform: translateX(-50%) scale(1.0);
 }
 
 /* ENHANCED MODERN/RETRO HYBRID HUD */

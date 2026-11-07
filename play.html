@@ -392,26 +392,30 @@ canvas {
 
 #announcement {
   position: absolute;
-  top: 24%;
+  top: 13%;
   left: 50%;
   transform: translateX(-50%);
   font-family: 'Chakra Petch', sans-serif;
-  font-weight: 900;
-  font-size: 26px;
-  letter-spacing: 2px;
-  color: #ffea00;
-  text-shadow: 0 0 20px rgba(255, 100, 0, 0.9), 3px 3px 0 #000;
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: 1.2px;
+  color: #fde047;
+  background: rgba(12, 16, 26, 0.78);
+  border: 1px solid rgba(253, 224, 71, 0.35);
+  padding: 6px 16px;
+  border-radius: 6px;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
   pointer-events: none;
   z-index: 30;
   opacity: 0;
   text-align: center;
   white-space: nowrap;
-  transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
 #announcement.show {
   opacity: 1;
-  transform: translateX(-50%) scale(1.15);
+  transform: translateX(-50%) scale(1.0);
 }
 
 /* ENHANCED MODERN/RETRO HYBRID HUD */
@@ -18233,6 +18237,28 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       cvg.add(ssBuilding);
       rectOb(203.5, 216.5, Z(210), Z(220));
 
+      // Steep Victorian gingerbread roof + decorative roof cresting & parlor windows
+      const ssRoof = new THREE.Mesh(
+        new THREE.ConeGeometry(8.8, 2.8, 4),
+        new THREE.MeshStandardMaterial({ color: 0x9d174d, roughness: 0.55 })
+      );
+      ssRoof.rotation.y = Math.PI / 4;
+      ssRoof.position.set(210, 6.1, Z(215));
+      cvg.add(ssRoof);
+
+      const ssPorch = new THREE.Mesh(new THREE.BoxGeometry(12.4, 0.3, 2.6), woodMat);
+      ssPorch.position.set(210, GROUND_Y + 0.15, Z(209.2));
+      cvg.add(ssPorch);
+
+      [-3.6, 3.6].forEach(wx => {
+        const win = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.1, 0.15), new THREE.MeshBasicMaterial({ color: 0xfef08a, fog: false }));
+        win.position.set(210 + wx, 2.3, Z(210.48));
+        cvg.add(win);
+      });
+      const ssDoor = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.4, 0.18), new THREE.MeshStandardMaterial({ color: 0x831843, roughness: 0.5 }));
+      ssDoor.position.set(210, 1.5, Z(210.48));
+      cvg.add(ssDoor);
+
       // Candy-striped pink and white scalloped awnings
       const ssAwning = new THREE.Mesh(
         new THREE.BoxGeometry(12.4, 0.4, 2.4),
@@ -18257,6 +18283,27 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       ccBuilding.position.set(150, 2.25, Z(180));
       cvg.add(ccBuilding);
       rectOb(144, 156, Z(175.5), Z(184.5));
+
+      const ccRoof = new THREE.Mesh(
+        new THREE.ConeGeometry(8.0, 2.6, 4),
+        new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.65 })
+      );
+      ccRoof.rotation.y = Math.PI / 4;
+      ccRoof.position.set(150, 5.7, Z(180));
+      cvg.add(ccRoof);
+
+      const ccAwning = new THREE.Mesh(
+        new THREE.BoxGeometry(11.4, 0.36, 2.2),
+        new THREE.MeshStandardMaterial({ color: 0xb45309, roughness: 0.4 })
+      );
+      ccAwning.position.set(150, 3.35, Z(175.0));
+      cvg.add(ccAwning);
+
+      [-3.2, 3.2].forEach(wx => {
+        const win = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.9, 0.15), new THREE.MeshBasicMaterial({ color: 0xfef9c3, fog: false }));
+        win.position.set(150 + wx, 2.1, Z(175.98));
+        cvg.add(win);
+      });
 
       const ccSign = makeSign(
         ['CAROUSEL CAFE & BAKERY', 'FRESH PASTRIES • GOURMET COFFEE • PATIO'],
@@ -19306,11 +19353,27 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       }
 
       const porterTailTex = makePorterTailTexture();
-      const porterWhiteMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.22, metalness: 0.18 });
-      const porterNavyMat = new THREE.MeshStandardMaterial({ color: 0x0f2557, roughness: 0.32, metalness: 0.28 });
+      const porterWhiteMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.22, metalness: 0.18, side: THREE.DoubleSide });
+      const porterNavyMat = new THREE.MeshStandardMaterial({ color: 0x0f2557, roughness: 0.32, metalness: 0.28, side: THREE.DoubleSide });
       const porterGoldMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.35, metalness: 0.65 });
-      const radomeMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.35 });
-      const cockpitGlassMat = new THREE.MeshStandardMaterial({ color: 0x0ea5e9, roughness: 0.08, metalness: 0.85 });
+      const radomeMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.35, side: THREE.DoubleSide });
+      const cockpitGlassMat = new THREE.MeshStandardMaterial({
+        color: 0x38bdf8,
+        roughness: 0.08,
+        metalness: 0.25,
+        transparent: true,
+        opacity: 0.16,
+        depthWrite: false,
+        side: THREE.DoubleSide
+      });
+      const cabinWinGlassMat = new THREE.MeshBasicMaterial({
+        color: 0xbae6fd,
+        transparent: true,
+        opacity: 0.14,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        fog: false
+      });
       const cabinWinMat = new THREE.MeshBasicMaterial({ color: 0xbae6fd, fog: false });
       const tireMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.88 });
       const propBladeMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.3, metalness: 0.5 });
@@ -19319,37 +19382,116 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       function buildPorterDash8Q400(px, pz, rotY, opts) {
         const o = opts || {};
         const pl = new THREE.Group();
+        const fuseLen = 25.0, fuseR = 1.62;
 
         // 1. Stretched Q400 Pressurized Fuselage (local -Z is forward nose, +Z is tail)
-        const fuseLen = 25.0, fuseR = 1.62;
-        const fuse = new THREE.Mesh(new THREE.CylinderGeometry(fuseR, fuseR, fuseLen, 20), porterWhiteMat);
-        fuse.rotation.x = Math.PI / 2;
-        pl.add(fuse);
+        // Open-ended exterior fuselage or windowed fuselage so Seat 6A & Cockpit have 100% real unobstructed views!
+        const lowerBelly = new THREE.Mesh(
+          new THREE.CylinderGeometry(fuseR, fuseR, fuseLen, 24, 1, true, Math.PI * 0.42, Math.PI * 1.16),
+          porterWhiteMat
+        );
+        lowerBelly.rotation.x = Math.PI / 2;
+        pl.add(lowerBelly);
+
+        // Upper fuselage crown arch (solid roof overhead from z = -12.5 to +12.5, leaving window band y = 0.14..0.66 open!)
+        const upperCrown = new THREE.Mesh(
+          new THREE.CylinderGeometry(fuseR, fuseR, fuseLen, 24, 1, true, -Math.PI * 0.36, Math.PI * 0.72),
+          porterWhiteMat
+        );
+        upperCrown.rotation.x = Math.PI / 2;
+        pl.add(upperCrown);
 
         // Porter navy-blue lower belly & cheatline stripe + gold accent pin-stripe
-        const bellyStripe = new THREE.Mesh(new THREE.BoxGeometry(fuseR * 2.02, 0.55, fuseLen * 0.96), porterNavyMat);
-        bellyStripe.position.set(0, -0.45, 0);
+        const bellyStripe = new THREE.Mesh(new THREE.BoxGeometry(fuseR * 2.02, 0.52, fuseLen * 0.96), porterNavyMat);
+        bellyStripe.position.set(0, -0.52, 0);
         pl.add(bellyStripe);
-        const goldStripe = new THREE.Mesh(new THREE.BoxGeometry(fuseR * 2.04, 0.10, fuseLen * 0.96), porterGoldMat);
-        goldStripe.position.set(0, -0.12, 0);
+        const goldStripe = new THREE.Mesh(new THREE.BoxGeometry(fuseR * 2.04, 0.08, fuseLen * 0.96), porterGoldMat);
+        goldStripe.position.set(0, -0.20, 0);
         pl.add(goldStripe);
 
-        // Aerodynamic Nose Cone & Weather Radar Radome (-Z forward)
-        const noseCone = new THREE.Mesh(new THREE.CylinderGeometry(0.65, fuseR, 4.2, 20), porterWhiteMat);
-        noseCone.rotation.x = -Math.PI / 2;
-        noseCone.position.set(0, -0.12, -fuseLen / 2 - 2.1);
-        pl.add(noseCone);
+        // Window Belt Mullions & Clear Cabin Windows (Port & Starboard) so you can genuinely look out the windows!
+        for (let wi = -11.8; wi <= 11.8; wi += 0.95) {
+          [-fuseR + 0.03, fuseR - 0.03].forEach(wx => {
+            // Vertical fuselage pillar between windows
+            const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.62, 0.36), porterWhiteMat);
+            pillar.position.set(wx, 0.38, wi - 0.47);
+            pl.add(pillar);
+            // Transparent window pane
+            const pane = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.48, 0.56), o.noOb ? cabinWinGlassMat : cabinWinMat);
+            pane.position.set(wx, 0.38, wi);
+            pl.add(pane);
+          });
+        }
 
-        const radome = new THREE.Mesh(new THREE.SphereGeometry(0.66, 16, 12), radomeMat);
-        radome.scale.set(1.0, 0.88, 1.55);
-        radome.position.set(0, -0.18, -fuseLen / 2 - 4.2);
+        // Aerodynamic Lower Nose & Weather Radar Radome (-Z forward, kept below y = 0.20 so forward cockpit view is 100% clear!)
+        const lowerNose = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.62, fuseR * 0.92, 3.8, 20, 1, false),
+          porterWhiteMat
+        );
+        lowerNose.rotation.x = -Math.PI / 2;
+        lowerNose.scale.set(1.0, 0.58, 1.0);
+        lowerNose.position.set(0, -0.42, -fuseLen / 2 - 1.9);
+        pl.add(lowerNose);
+
+        const radome = new THREE.Mesh(new THREE.SphereGeometry(0.64, 16, 12), radomeMat);
+        radome.scale.set(0.96, 0.68, 1.50);
+        radome.position.set(0, -0.45, -fuseLen / 2 - 3.85);
         pl.add(radome);
 
-        // Angled Cockpit Flight Deck Windshield
-        const windshield = new THREE.Mesh(new THREE.BoxGeometry(1.95, 0.72, 1.85), cockpitGlassMat);
-        windshield.position.set(0, 0.62, -fuseLen / 2 - 1.15);
-        windshield.rotation.x = 0.35;
-        pl.add(windshield);
+        // Flight Deck Cockpit Canopy Roof, Pillars & Transparent Wraparound Windshields (z = -12.3 to -14.5)
+        // Solid Flight Deck Roof Overhead (with interior ceiling & overhead switches)
+        const cockpitRoof = new THREE.Mesh(new THREE.BoxGeometry(2.25, 0.14, 2.45), porterWhiteMat);
+        cockpitRoof.position.set(0, 1.08, -13.35);
+        cockpitRoof.rotation.x = 0.10;
+        pl.add(cockpitRoof);
+
+        const cockpitCrown = new THREE.Mesh(new THREE.BoxGeometry(1.95, 0.16, 1.95), porterWhiteMat);
+        cockpitCrown.position.set(0, 1.20, -13.10);
+        pl.add(cockpitCrown);
+
+        // Overhead Pilot Switch Panel on underside of cockpit roof
+        const overheadPanel = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.05, 0.95), radomeMat);
+        overheadPanel.position.set(0, 1.00, -13.25);
+        overheadPanel.rotation.x = 0.10;
+        pl.add(overheadPanel);
+
+        // Front Left & Right Transparent Windshields (sloped from glareshield y=0.22 up to roof y=1.02)
+        [-0.48, 0.48].forEach(wx => {
+          const fPane = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.84, 0.04), cockpitGlassMat);
+          fPane.position.set(wx, 0.62, -14.12);
+          fPane.rotation.x = 0.36;
+          fPane.rotation.y = wx < 0 ? 0.14 : -0.14;
+          pl.add(fPane);
+        });
+
+        // Side Cockpit Windows (Left Captain & Right First Officer) so pilot can look left/right out the windows
+        [-1.08, 1.08].forEach(sx => {
+          const sPane = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.78, 1.65), cockpitGlassMat);
+          sPane.position.set(sx, 0.60, -13.30);
+          sPane.rotation.z = sx < 0 ? -0.12 : 0.12;
+          pl.add(sPane);
+          // Lower cockpit sidewall below window sill
+          const sWall = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.75, 2.15), porterWhiteMat);
+          sWall.position.set(sx * 1.04, -0.15, -13.35);
+          pl.add(sWall);
+        });
+
+        // Slim Cockpit Windshield Framing Pillars (Center Post, Left/Right A-Pillars & B-Pillars)
+        const centerPost = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.86, 0.06), radomeMat);
+        centerPost.position.set(0, 0.62, -14.18);
+        centerPost.rotation.x = 0.36;
+        pl.add(centerPost);
+
+        [-0.96, 0.96].forEach(pxOff => {
+          const aPillar = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.86, 0.06), radomeMat);
+          aPillar.position.set(pxOff, 0.62, -14.02);
+          aPillar.rotation.x = 0.36;
+          pl.add(aPillar);
+
+          const bPillar = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.84, 0.08), radomeMat);
+          bPillar.position.set(pxOff * 1.12, 0.62, -12.55);
+          pl.add(bPillar);
+        });
 
         // Tapered Rear Tail Cone (+Z aft)
         const tailCone = new THREE.Mesh(new THREE.CylinderGeometry(0.45, fuseR, 5.4, 20), porterNavyMat);
@@ -19357,122 +19499,127 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         tailCone.position.set(0, 0.22, fuseLen / 2 + 2.7);
         pl.add(tailCone);
 
-        // 28 Illuminated Oval Cabin Windows on Port & Starboard Sides + "porter" Fuselage Titles
-        for (let wi = -9.5; wi <= 9.0; wi += 0.95) {
-          [-fuseR - 0.02, fuseR + 0.02].forEach(wx => {
-            const win = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.34, 0.24), cabinWinMat);
-            win.position.set(wx, 0.36, wi);
-            pl.add(win);
+        // --- Interior Cabin Modeling (Floor, Ceiling Arch, Rows of Navy Leather Seats & Seat 6A Window View) ---
+        const seatNavyCloth = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.85, side: THREE.DoubleSide });
+        const seatGreyTrim = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.6, metalness: 0.2, side: THREE.DoubleSide });
+        const cabinCarpetMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.9, side: THREE.DoubleSide });
+
+        // Continuous Cabin & Flight Deck Floor (y = -0.52 from cockpit z = -14.2 to rear cabin z = +11.0)
+        const cabinFloor = new THREE.Mesh(new THREE.BoxGeometry(2.65, 0.08, 25.2), cabinCarpetMat);
+        cabinFloor.position.set(0, -0.52, -1.6);
+        pl.add(cabinFloor);
+
+        // Interior Overhead Ceiling Panel & Luggage Bins (y = 1.18, never blocking windows at y = 0.14..0.66!)
+        const cabinCeiling = new THREE.Mesh(new THREE.BoxGeometry(2.20, 0.06, 24.0), porterWhiteMat);
+        cabinCeiling.position.set(0, 1.24, -1.0);
+        pl.add(cabinCeiling);
+
+        // Rows of 2x2 Porter Airlines Navy Leather Passenger Seats along the cabin
+        for (let rz = -10.4; rz <= 6.8; rz += 0.95) {
+          [-1.08, -0.58, 0.58, 1.08].forEach(sx => {
+            const sBack = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.64, 0.09), seatNavyCloth);
+            sBack.position.set(sx, 0.04, rz - 0.18);
+            sBack.rotation.x = -0.06;
+            pl.add(sBack);
+            const sHead = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.15, 0.10), porterWhiteMat);
+            sHead.position.set(sx, 0.40, rz - 0.19);
+            pl.add(sHead);
+            const sCushion = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.10, 0.42), seatNavyCloth);
+            sCushion.position.set(sx, -0.26, rz);
+            pl.add(sCushion);
           });
         }
 
-        // --- Interior Cabin Modeling (Seat 6A Passenger Window View) ---
-        const seatNavyCloth = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.85 });
-        const seatGreyTrim = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.6, metalness: 0.2 });
-        const cabinLiningMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.75, side: THREE.BackSide });
-
-        // Interior fuselage lining for passenger cabin & cockpit
-        const cabinLining = new THREE.Mesh(new THREE.CylinderGeometry(fuseR - 0.06, fuseR - 0.06, 16.0, 16, 1, true), cabinLiningMat);
-        cabinLining.rotation.x = Math.PI / 2;
-        cabinLining.position.set(0, 0, -4.0);
-        pl.add(cabinLining);
-
-        // Seat 5A in front of passenger (looking forward from Seat 6A)
-        const seat5Back = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.68, 0.10), seatNavyCloth);
-        seat5Back.position.set(-1.08, 0.24, -3.72);
-        seat5Back.rotation.x = -0.06;
-        pl.add(seat5Back);
-
-        const seat5Headrest = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.16, 0.12), seatNavyCloth);
-        seat5Headrest.position.set(-1.08, 0.62, -3.74);
-        pl.add(seat5Headrest);
-
-        const seat5Antimacassar = new THREE.Mesh(new THREE.BoxGeometry(0.33, 0.12, 0.04), porterWhiteMat);
-        seat5Antimacassar.position.set(-1.08, 0.63, -3.69);
-        pl.add(seat5Antimacassar);
-
-        // Folded tray table on the back of Seat 5A
-        const trayTable = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.24, 0.02), seatGreyTrim);
-        trayTable.position.set(-1.08, 0.10, -3.66);
+        // Seat 6A armrests & folded tray table on back of Seat 5A
+        const trayTable = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.22, 0.02), seatGreyTrim);
+        trayTable.position.set(-1.08, 0.08, -3.88);
         pl.add(trayTable);
 
-        // Seat 6A armrest and seat base
-        const seat6Armrest = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.40), seatGreyTrim);
-        seat6Armrest.position.set(-0.76, 0.05, -2.80);
+        const seat6Armrest = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.06, 0.38), seatGreyTrim);
+        seat6Armrest.position.set(-0.82, -0.10, -2.80);
         pl.add(seat6Armrest);
 
-        const seat6WallArmrest = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.40), seatGreyTrim);
-        seat6WallArmrest.position.set(-1.42, 0.05, -2.80);
-        pl.add(seat6WallArmrest);
-
-        // Molded Seat 6A interior window reveal & trim bevel
-        const winReveal = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.46, 0.36), porterWhiteMat);
-        winReveal.position.set(-fuseR + 0.04, 0.36, -2.80);
-        pl.add(winReveal);
-
-        // Overhead passenger service unit (reading light and air vent nozzle)
-        const psu = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.06, 0.25), porterWhiteMat);
-        psu.position.set(-1.12, 1.25, -2.80);
+        // Overhead passenger service unit above Seat 6A
+        const psu = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.05, 0.25), porterWhiteMat);
+        psu.position.set(-1.08, 1.19, -2.80);
         pl.add(psu);
 
-        // --- Interior Flight Deck Cockpit Modeling ---
-        const cockpitPanelMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.55, metalness: 0.35 });
+        // --- Interior Flight Deck Cockpit Modeling (Ergonomic Below-Eye-Level Instrument Console & Controls!) ---
+        // Captain eye is at (-0.48, 0.56, -13.10), so Glareshield top is at y = 0.22 -> clear view out windows + full controls in view!
+        const cockpitPanelMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.55, metalness: 0.35, side: THREE.DoubleSide });
         const pfdScreenMat = new THREE.MeshBasicMaterial({ color: 0x0284c7, toneMapped: false });
+        const ndScreenMat = new THREE.MeshBasicMaterial({ color: 0x0369a1, toneMapped: false });
         const eicasScreenMat = new THREE.MeshBasicMaterial({ color: 0x10b981, toneMapped: false });
 
-        // Captain (left) and First Officer (right) high-back flight deck seats
-        [-0.52, 0.52].forEach(pilotX => {
-          const seatBack = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.72, 0.12), seatNavyCloth);
-          seatBack.position.set(pilotX, 0.15, -13.15);
+        // Captain (left) and First Officer (right) Flight Deck Seats (positioned slightly behind eye at z = -12.88)
+        [-0.48, 0.48].forEach(pilotX => {
+          const seatBack = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.68, 0.10), seatNavyCloth);
+          seatBack.position.set(pilotX, 0.08, -12.86);
           pl.add(seatBack);
-          const seatHead = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.18, 0.12), seatNavyCloth);
-          seatHead.position.set(pilotX, 0.56, -13.15);
+          const seatHead = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.18, 0.10), seatNavyCloth);
+          seatHead.position.set(pilotX, 0.48, -12.86);
           pl.add(seatHead);
-          const seatBase = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.14, 0.46), seatNavyCloth);
-          seatBase.position.set(pilotX, -0.15, -13.25);
+          const seatBase = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.12, 0.44), seatNavyCloth);
+          seatBase.position.set(pilotX, -0.28, -13.08);
           pl.add(seatBase);
         });
 
-        // Center throttle quadrant pedestal with dual thrust levers
-        const pedestal = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.45, 0.90), cockpitPanelMat);
-        pedestal.position.set(0, -0.05, -13.0);
-        pl.add(pedestal);
-
-        // Dual black thrust levers and propeller condition levers
-        [-0.06, 0.06].forEach(lx => {
-          const lever = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.14, 0.03), radomeMat);
-          lever.position.set(lx, 0.24, -13.1);
-          lever.rotation.x = -0.25;
-          pl.add(lever);
-        });
-
-        // Glareshield console
-        const glareshield = new THREE.Mesh(new THREE.BoxGeometry(1.58, 0.08, 0.42), cockpitPanelMat);
-        glareshield.position.set(0, 0.58, -13.72);
+        // Glareshield Autopilot Control Panel (top at y = 0.22, well below Captain eye at y = 0.56!)
+        const glareshield = new THREE.Mesh(new THREE.BoxGeometry(1.88, 0.07, 0.42), cockpitPanelMat);
+        glareshield.position.set(0, 0.19, -13.86);
         pl.add(glareshield);
 
-        // Main Electronic Flight Instrument System (EFIS) panel
-        const mainPanel = new THREE.Mesh(new THREE.BoxGeometry(1.54, 0.48, 0.06), cockpitPanelMat);
-        mainPanel.position.set(0, 0.34, -13.92);
+        // Main Electronic Flight Instrument System (EFIS) Dashboard (y = -0.22 to +0.18, tilted toward pilot)
+        const mainPanel = new THREE.Mesh(new THREE.BoxGeometry(1.84, 0.42, 0.08), cockpitPanelMat);
+        mainPanel.position.set(0, -0.02, -13.94);
+        mainPanel.rotation.x = -0.18;
         pl.add(mainPanel);
 
-        // 5 Glowing glass cockpit displays (Captain PFD/ND, Center EICAS, FO ND/PFD)
-        [-0.56, -0.28, 0, 0.28, 0.56].forEach((sx, idx) => {
-          const scrMat = (idx === 2) ? eicasScreenMat : pfdScreenMat;
-          const screen = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.18, 0.02), scrMat);
-          screen.position.set(sx, 0.35, -13.88);
+        // 5 Glowing Glass Cockpit Displays (Captain PFD, Captain ND, Center EICAS, FO ND, FO PFD)
+        [-0.64, -0.34, 0, 0.34, 0.64].forEach((sx, idx) => {
+          const scrMat = (idx === 2) ? eicasScreenMat : (idx % 2 === 1 ? ndScreenMat : pfdScreenMat);
+          const screen = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.22, 0.02), scrMat);
+          screen.position.set(sx, 0.02, -13.89);
+          screen.rotation.x = -0.18;
           pl.add(screen);
+          // Horizon line / artificial horizon bar on PFD screens
+          if (idx === 0 || idx === 4) {
+            const hBar = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.02, 0.025), porterGoldMat);
+            hBar.position.set(sx, 0.02, -13.88);
+            hBar.rotation.x = -0.18;
+            pl.add(hBar);
+          }
         });
 
-        // Dual W-shaped flight control yokes
-        [-0.52, 0.52].forEach(yx => {
-          const col = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.35, 8), seatGreyTrim);
-          col.position.set(yx, 0.12, -13.48);
-          col.rotation.x = -0.28;
+        // Center Throttle Quadrant Pedestal with Power & Condition Levers
+        const pedestal = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.42, 0.82), cockpitPanelMat);
+        pedestal.position.set(0, -0.28, -13.42);
+        pl.add(pedestal);
+
+        [-0.07, 0.07].forEach(lx => {
+          const lever = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.16, 0.03), radomeMat);
+          lever.position.set(lx, 0.0, -13.48);
+          lever.rotation.x = -0.32;
+          pl.add(lever);
+          const knob = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.04), porterWhiteMat);
+          knob.position.set(lx, 0.08, -13.51);
+          pl.add(knob);
+        });
+
+        // Dual W-Shaped Bombardier/De Havilland Flight Control Yokes
+        [-0.48, 0.48].forEach(yx => {
+          const col = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.42, 8), seatGreyTrim);
+          col.position.set(yx, -0.24, -13.55);
+          col.rotation.x = -0.22;
           pl.add(col);
-          const yoke = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.04, 0.05), radomeMat);
-          yoke.position.set(yx, 0.28, -13.42);
-          pl.add(yoke);
+          const yokeBar = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.04, 0.04), radomeMat);
+          yokeBar.position.set(yx, -0.02, -13.50);
+          pl.add(yokeBar);
+          [-0.12, 0.12].forEach(hx => {
+            const horn = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.13, 0.04), radomeMat);
+            horn.position.set(yx + hx, 0.04, -13.50);
+            pl.add(horn);
+          });
         });
 
         const porterBrandL = makeSign(['porter', 'DE HAVILLAND Q400 • C-GLQP'], 7.2, 0.95, { bg: '#f8fafc', fg: '#0f2557', borderColor: '#f8fafc', subFg: '#64748b', titleSize: 56, subSize: 22 });
@@ -19656,181 +19803,433 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
 
       const warmWinGlowMat = new THREE.MeshBasicMaterial({ color: 0xfef08a, fog: false });
       const chimneyBrickMat = new THREE.MeshStandardMaterial({ color: 0x991b1b, roughness: 0.85 });
-      const flowerColors = [0xef4444, 0xec4899, 0xfacc15, 0xa855f7, 0x3b82f6];
+      const flowerColors = [0xef4444, 0xec4899, 0xfacc15, 0xa855f7, 0x3b82f6, 0xf97316, 0x14b8a6];
+      const gardenSoilMat = new THREE.MeshStandardMaterial({ color: 0x3f2e21, roughness: 0.95 });
+      const flagstoneMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.85 });
+      const foliageGreenMat = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.8 });
+      const lushLeafMat = new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.78 });
+
+      // True triangular prism builder for flush gable walls (no rectangular steps!)
+      function makeGablePrismGeo(spanW, riseH, depthZ) {
+        const shape = new THREE.Shape();
+        shape.moveTo(-spanW / 2, 0);
+        shape.lineTo(spanW / 2, 0);
+        shape.lineTo(0, riseH);
+        shape.closePath();
+        const geo = new THREE.ExtrudeGeometry(shape, { depth: depthZ, bevelEnabled: false });
+        geo.translate(0, 0, -depthZ / 2);
+        return geo;
+      }
+
+      // Authentic Muskoka / Adirondack Chair helper
+      function buildMuskokaChair(mat) {
+        const ch = new THREE.Group();
+        const seat = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.06, 0.58), mat);
+        seat.position.set(0, 0.34, 0);
+        seat.rotation.x = -0.15;
+        ch.add(seat);
+        const back = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.72, 0.06), mat);
+        back.position.set(0, 0.64, -0.24);
+        back.rotation.x = -0.28;
+        ch.add(back);
+        [-0.28, 0.28].forEach(ax => {
+          const arm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.05, 0.68), mat);
+          arm.position.set(ax, 0.50, -0.02);
+          ch.add(arm);
+          const fLeg = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.48, 0.07), mat);
+          fLeg.position.set(ax, 0.24, 0.22);
+          ch.add(fLeg);
+          const bLeg = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.44, 0.07), mat);
+          bLeg.position.set(ax, 0.20, -0.24);
+          bLeg.rotation.x = 0.20;
+          ch.add(bLeg);
+        });
+        return ch;
+      }
 
       function addUniqueCottage(cDef, idx) {
         const st = COTTAGE_STYLES[idx % COTTAGE_STYLES.length];
+        const archType = idx % 4; // 4 Authentic Toronto Island Heritage Architectural Styles!
         const c = new THREE.Group();
 
-        // Slightly unique dimensions for each cottage
-        const w = 7.2 + (idx % 4) * 0.55;
-        const d = 6.2 + ((idx * 3) % 3) * 0.45;
-        const h = 3.2 + (idx % 3) * 0.25;
-        const roofH = 2.2 + (idx % 2) * 0.35;
+        // Unique proportions per cottage
+        const w = 7.4 + (idx % 4) * 0.55;
+        const d = 6.4 + ((idx * 3) % 3) * 0.45;
+        const h = (archType === 1 ? 3.85 : 3.25) + (idx % 3) * 0.22;
+        const roofH = (archType === 3 ? 2.95 : 2.35) + (idx % 2) * 0.35;
 
-        const sidingMat = new THREE.MeshStandardMaterial({ color: st.siding, roughness: 0.65 });
-        const roofMat = new THREE.MeshStandardMaterial({ color: st.roof, roughness: 0.78 });
-        const trimMat = new THREE.MeshStandardMaterial({ color: st.trim, roughness: 0.5 });
-        const doorMat = new THREE.MeshStandardMaterial({ color: st.door, roughness: 0.55 });
-        const shutterMat = new THREE.MeshStandardMaterial({ color: st.shutter, roughness: 0.6 });
+        const sidingMat = new THREE.MeshStandardMaterial({ color: st.siding, roughness: 0.62 });
+        const roofMat = new THREE.MeshStandardMaterial({ color: st.roof, roughness: 0.76 });
+        const trimMat = new THREE.MeshStandardMaterial({ color: st.trim, roughness: 0.48 });
+        const doorMat = new THREE.MeshStandardMaterial({ color: st.door, roughness: 0.52 });
+        const shutterMat = new THREE.MeshStandardMaterial({ color: st.shutter, roughness: 0.58 });
 
-        // 1. Stone foundation plinth & Main Clapboard Body
-        const found = new THREE.Mesh(new THREE.BoxGeometry(w + 0.3, 0.38, d + 0.3), stoneMat);
-        found.position.y = 0.19;
+        // 1. Fieldstone Foundation Plinth & Main Heritage Clapboard Body
+        const found = new THREE.Mesh(new THREE.BoxGeometry(w + 0.36, 0.42, d + 0.36), stoneMat);
+        found.position.y = 0.21;
         c.add(found);
 
         const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), sidingMat);
-        body.position.y = 0.38 + h / 2;
+        body.position.y = 0.42 + h / 2;
         c.add(body);
 
-        // Crisp white corner trim boards & fascia
+        // Horizontal Clapboard Belt Courses, Water Table Trim & Crisp Corner Pilasters
+        const waterTable = new THREE.Mesh(new THREE.BoxGeometry(w + 0.16, 0.12, d + 0.16), trimMat);
+        waterTable.position.y = 0.46;
+        c.add(waterTable);
+
+        const friezeBoard = new THREE.Mesh(new THREE.BoxGeometry(w + 0.18, 0.16, d + 0.18), trimMat);
+        friezeBoard.position.y = 0.42 + h - 0.08;
+        c.add(friezeBoard);
+
         [-w / 2, w / 2].forEach(tx => {
           [-d / 2, d / 2].forEach(tz => {
-            const corner = new THREE.Mesh(new THREE.BoxGeometry(0.18, h + 0.05, 0.18), trimMat);
-            corner.position.set(tx, 0.38 + h / 2, tz);
+            const corner = new THREE.Mesh(new THREE.BoxGeometry(0.20, h + 0.06, 0.20), trimMat);
+            corner.position.set(tx, 0.42 + h / 2, tz);
             c.add(corner);
           });
         });
 
-        // Optional side bay-window / sunroom wing on every 3rd cottage
-        if (idx % 3 === 0) {
-          const sideSign = (idx % 6 === 0) ? 1 : -1;
-          const bay = new THREE.Mesh(new THREE.BoxGeometry(1.6, h * 0.78, d * 0.52), sidingMat);
-          bay.position.set(sideSign * (w / 2 + 0.7), 0.38 + h * 0.39, 0);
-          c.add(bay);
-          const bayRoof = new THREE.Mesh(new THREE.ConeGeometry(1.65, 1.1, 4), roofMat);
-          bayRoof.rotation.y = Math.PI / 4;
-          bayRoof.position.set(sideSign * (w / 2 + 0.7), 0.38 + h * 0.78 + 0.5, 0);
-          c.add(bayRoof);
-          const bayWin = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.1, d * 0.36), warmWinGlowMat);
-          bayWin.position.set(sideSign * (w / 2 + 1.48), 0.38 + h * 0.42, 0);
-          c.add(bayWin);
-        }
+        // 2. Flush Extruded Triangular Gable Walls & Steep Pitched Roof with Decorative Bargeboards
+        const gablePrism = new THREE.Mesh(makeGablePrismGeo(w, roofH, d), sidingMat);
+        gablePrism.position.set(0, 0.42 + h, 0);
+        c.add(gablePrism);
 
-        // 2. Pitched Gabled Roof (Two sloped roof planes + ridge beam + front/back gable triangles)
-        const slopeLen = Math.hypot(w / 2 + 0.55, roofH);
-        const slopeAng = Math.atan2(roofH, w / 2 + 0.55);
+        const overhang = 0.58;
+        const slopeLen = Math.hypot(w / 2 + overhang, roofH);
+        const slopeAng = Math.atan2(roofH, w / 2 + overhang);
         [-1, 1].forEach(sd => {
-          const rPane = new THREE.Mesh(new THREE.BoxGeometry(slopeLen, 0.18, d + 0.9), roofMat);
-          rPane.position.set(sd * (w / 4 + 0.22), 0.38 + h + roofH / 2 - 0.05, 0);
+          const rPane = new THREE.Mesh(new THREE.BoxGeometry(slopeLen, 0.18, d + 0.95), roofMat);
+          rPane.position.set(sd * ((w / 2 + overhang) / 2), 0.42 + h + roofH / 2, 0);
           rPane.rotation.z = -sd * slopeAng;
           c.add(rPane);
+
+          // Decorative Victorian Gingerbread Bargeboard Trim on front & back eaves
+          [-d / 2 - 0.42, d / 2 + 0.42].forEach(bz => {
+            const barge = new THREE.Mesh(new THREE.BoxGeometry(slopeLen, 0.14, 0.08), trimMat);
+            barge.position.set(sd * ((w / 2 + overhang) / 2), 0.42 + h + roofH / 2 - 0.06, bz);
+            barge.rotation.z = -sd * slopeAng;
+            c.add(barge);
+          });
         });
-        const ridge = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.24, d + 0.96), trimMat);
-        ridge.position.set(0, 0.38 + h + roofH - 0.02, 0);
+
+        const ridge = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.24, d + 1.02), trimMat);
+        ridge.position.set(0, 0.42 + h + roofH, 0);
         c.add(ridge);
 
-        // Gable wall infill & round attic louver vent
-        const gableBox = new THREE.Mesh(new THREE.BoxGeometry(w * 0.56, roofH * 0.62, d - 0.1), sidingMat);
-        gableBox.position.set(0, 0.38 + h + roofH * 0.31, 0);
-        c.add(gableBox);
+        // Victorian Finial Spire & Gable Rose/Diamond Attic Window on Front Gable
+        const finial = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.09, 0.75, 8), trimMat);
+        finial.position.set(0, 0.42 + h + roofH + 0.32, d / 2 + 0.38);
+        c.add(finial);
 
-        // 3. Cute Attic Dormer Window on front roof slope (every 2nd cottage)
-        if (idx % 2 === 0) {
-          const dorm = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.25, 1.8), sidingMat);
-          dorm.position.set(0, 0.38 + h + roofH * 0.48, d * 0.25);
-          c.add(dorm);
-          const dormRoof = new THREE.Mesh(new THREE.ConeGeometry(1.4, 0.85, 4), roofMat);
-          dormRoof.rotation.y = Math.PI / 4;
-          dormRoof.position.set(0, 0.38 + h + roofH * 0.48 + 0.95, d * 0.25);
-          c.add(dormRoof);
-          const dormWin = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.72, 0.1), warmWinGlowMat);
-          dormWin.position.set(0, 0.38 + h + roofH * 0.48, d * 0.25 + 0.91);
-          c.add(dormWin);
+        const atticWinFrame = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.92, 0.12), trimMat);
+        atticWinFrame.position.set(0, 0.42 + h + roofH * 0.42, d / 2 + 0.02);
+        if (idx % 2 === 1) atticWinFrame.rotation.z = Math.PI / 4; // diamond gable window on odd cottages
+        c.add(atticWinFrame);
+        const atticWinGlass = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.72, 0.15), warmWinGlowMat);
+        atticWinGlass.position.set(0, 0.42 + h + roofH * 0.42, d / 2 + 0.03);
+        if (idx % 2 === 1) atticWinGlass.rotation.z = Math.PI / 4;
+        c.add(atticWinGlass);
+
+        // 3. Architectural Wings & Asymmetric Massing (L-Wings, Cross-Gables, Screened Sunrooms & Bay Windows)
+        const sideSign = (idx % 2 === 0) ? 1 : -1;
+        if (archType === 0 || archType === 2) {
+          // L-Shaped Side Cottage Wing with its own pitched gable roof & garden window
+          const wingW = 2.6, wingH = h * 0.86, wingD = d * 0.64, wingRoofH = roofH * 0.72;
+          const wingBody = new THREE.Mesh(new THREE.BoxGeometry(wingW, wingH, wingD), sidingMat);
+          wingBody.position.set(sideSign * (w / 2 + wingW / 2 - 0.1), 0.42 + wingH / 2, -0.35);
+          c.add(wingBody);
+          const wingFound = new THREE.Mesh(new THREE.BoxGeometry(wingW + 0.25, 0.42, wingD + 0.25), stoneMat);
+          wingFound.position.set(sideSign * (w / 2 + wingW / 2 - 0.1), 0.21, -0.35);
+          c.add(wingFound);
+          const wingRoof = new THREE.Mesh(new THREE.ConeGeometry(Math.hypot(wingW, wingD) * 0.62, wingRoofH, 4), roofMat);
+          wingRoof.rotation.y = Math.PI / 4;
+          wingRoof.position.set(sideSign * (w / 2 + wingW / 2 - 0.1), 0.42 + wingH + wingRoofH / 2 - 0.05, -0.35);
+          c.add(wingRoof);
+          const wingWin = new THREE.Mesh(new THREE.BoxGeometry(1.05, 1.15, 0.14), warmWinGlowMat);
+          wingWin.position.set(sideSign * (w / 2 + wingW * 0.48), 0.42 + wingH * 0.52, -0.35 + wingD / 2 + 0.02);
+          c.add(wingWin);
+        } else {
+          // Glazed Muskoka Sunroom / Conservatory Wing on the side
+          const sunW = 2.2, sunH = h * 0.78, sunD = d * 0.68;
+          const sunRoom = new THREE.Mesh(new THREE.BoxGeometry(sunW, sunH, sunD), trimMat);
+          sunRoom.position.set(sideSign * (w / 2 + sunW / 2 - 0.1), 0.42 + sunH / 2, 0.15);
+          c.add(sunRoom);
+          const sunGlass = new THREE.Mesh(new THREE.BoxGeometry(sunW + 0.06, sunH * 0.62, sunD * 0.86), warmWinGlowMat);
+          sunGlass.position.set(sideSign * (w / 2 + sunW / 2 - 0.08), 0.42 + sunH * 0.54, 0.15);
+          c.add(sunGlass);
+          const sunRoof = new THREE.Mesh(new THREE.BoxGeometry(sunW + 0.35, 0.16, sunD + 0.35), roofMat);
+          sunRoof.position.set(sideSign * (w / 2 + sunW / 2), 0.42 + sunH + 0.12, 0.15);
+          sunRoof.rotation.z = -sideSign * 0.18;
+          c.add(sunRoof);
         }
 
-        // 4. Red Brick Chimney with Chimney Pot
-        if (idx % 4 !== 3) {
-          const chSide = (idx % 2 === 0) ? -1 : 1;
-          const chim = new THREE.Mesh(new THREE.BoxGeometry(0.75, roofH + 1.4, 0.75), chimneyBrickMat);
-          chim.position.set(chSide * (w * 0.32), 0.38 + h + roofH * 0.55, -d * 0.18);
-          c.add(chim);
-          const chimCap = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.18, 0.92), stoneMat);
-          chimCap.position.set(chSide * (w * 0.32), 0.38 + h + roofH * 1.25, -d * 0.18);
-          c.add(chimCap);
-        }
+        // Upper Roof Dormer Windows on Both Slopes
+        [-1, 1].forEach(dSide => {
+          if ((idx + (dSide > 0 ? 1 : 0)) % 2 === 0) {
+            const dormX = dSide * (w * 0.24);
+            const dormY = 0.42 + h + roofH * 0.44;
+            const dorm = new THREE.Mesh(new THREE.BoxGeometry(1.35, 1.15, 1.65), sidingMat);
+            dorm.position.set(dormX, dormY, 0.15);
+            c.add(dorm);
+            const dormRoof = new THREE.Mesh(new THREE.ConeGeometry(1.25, 0.75, 4), roofMat);
+            dormRoof.rotation.y = Math.PI / 4;
+            dormRoof.position.set(dormX, dormY + 0.85, 0.15);
+            c.add(dormRoof);
+            const dormWin = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.68, 0.76), warmWinGlowMat);
+            dormWin.position.set(dormX + dSide * 0.66, dormY, 0.15);
+            c.add(dormWin);
+          }
+        });
 
-        // 5. Covered Timber Front Porch with Steps, Posts & Railing (+Z is front)
-        const porchD = 2.1, porchW = w - 0.4;
-        const porchDeck = new THREE.Mesh(new THREE.BoxGeometry(porchW, 0.36, porchD), woodMat);
-        porchDeck.position.set(0, 0.20, d / 2 + porchD / 2);
+        // 4. Tall Red-Brick or Fieldstone Chimney with Terracotta Chimney Pots
+        const chSide = (idx % 2 === 0) ? -1 : 1;
+        const chim = new THREE.Mesh(new THREE.BoxGeometry(0.82, h + roofH + 1.1, 0.82), idx % 3 === 0 ? stoneMat : chimneyBrickMat);
+        chim.position.set(chSide * (w * 0.34), 0.42 + (h + roofH + 1.1) / 2, -d * 0.22);
+        c.add(chim);
+        const chimCap = new THREE.Mesh(new THREE.BoxGeometry(1.02, 0.18, 1.02), stoneMat);
+        chimCap.position.set(chSide * (w * 0.34), 0.42 + h + roofH + 1.15, -d * 0.22);
+        c.add(chimCap);
+        const chimPot = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.20, 0.42, 8), chimneyBrickMat);
+        chimPot.position.set(chSide * (w * 0.34), 0.42 + h + roofH + 1.40, -d * 0.22);
+        c.add(chimPot);
+
+        // 5. Deep Covered Island Veranda Porch with Real Spindles, Turned Posts & Muskoka Chairs (+Z is front)
+        const porchD = 2.35, porchW = w + 0.15;
+        const porchDeck = new THREE.Mesh(new THREE.BoxGeometry(porchW, 0.38, porchD), woodMat);
+        porchDeck.position.set(0, 0.21, d / 2 + porchD / 2);
         c.add(porchDeck);
 
-        // Two front steps leading to garden path
-        const step1 = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.18, 0.45), woodMat);
-        step1.position.set(0, 0.11, d / 2 + porchD + 0.22);
+        // Two-tier wooden front steps leading to flagstone garden path
+        const step1 = new THREE.Mesh(new THREE.BoxGeometry(1.95, 0.24, 0.42), woodMat);
+        step1.position.set(0, 0.14, d / 2 + porchD + 0.20);
         c.add(step1);
+        const step2 = new THREE.Mesh(new THREE.BoxGeometry(2.05, 0.12, 0.42), woodMat);
+        step2.position.set(0, 0.06, d / 2 + porchD + 0.56);
+        c.add(step2);
 
-        // Sloped porch canopy roof & 4 turned white timber porch posts
-        const porchRoof = new THREE.Mesh(new THREE.BoxGeometry(porchW + 0.4, 0.16, porchD + 0.35), roofMat);
-        porchRoof.position.set(0, 2.75, d / 2 + porchD / 2);
-        porchRoof.rotation.x = 0.16;
+        // Sloped Veranda Roof Canopy & Decorative Gingerbread Frieze
+        const porchRoof = new THREE.Mesh(new THREE.BoxGeometry(porchW + 0.45, 0.16, porchD + 0.42), roofMat);
+        porchRoof.position.set(0, 2.82, d / 2 + porchD / 2 + 0.05);
+        porchRoof.rotation.x = 0.15;
         c.add(porchRoof);
 
-        [-porchW / 2 + 0.2, -1.0, 1.0, porchW / 2 - 0.2].forEach(px => {
-          const pPost = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.10, 2.45, 8), trimMat);
-          pPost.position.set(px, 1.50, d / 2 + porchD - 0.15);
+        const porchTrim = new THREE.Mesh(new THREE.BoxGeometry(porchW + 0.38, 0.14, 0.10), trimMat);
+        porchTrim.position.set(0, 2.58, d / 2 + porchD - 0.04);
+        c.add(porchTrim);
+
+        // Turned Veranda Columns with Decorative Brackets
+        [-porchW / 2 + 0.22, -1.05, 1.05, porchW / 2 - 0.22].forEach(px => {
+          const pPost = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 2.42, 8), trimMat);
+          pPost.position.set(px, 1.48, d / 2 + porchD - 0.14);
           c.add(pPost);
+          const pBase = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.32, 0.24), trimMat);
+          pBase.position.set(px, 0.52, d / 2 + porchD - 0.14);
+          c.add(pBase);
         });
 
-        // Porch railings Left & Right of center steps
+        // Open Baluster Porch Railings (Top Rail, Bottom Rail & Vertical Spindles)
         [-1, 1].forEach(rs => {
-          const rLen = porchW / 2 - 1.1;
-          const rail = new THREE.Mesh(new THREE.BoxGeometry(rLen, 0.72, 0.10), trimMat);
-          rail.position.set(rs * (1.0 + rLen / 2), 0.72, d / 2 + porchD - 0.15);
-          c.add(rail);
+          const rLen = porchW / 2 - 1.25;
+          const rCenterX = rs * (1.05 + rLen / 2);
+          const rZ = d / 2 + porchD - 0.14;
+          const topRail = new THREE.Mesh(new THREE.BoxGeometry(rLen, 0.08, 0.10), trimMat);
+          topRail.position.set(rCenterX, 0.96, rZ);
+          c.add(topRail);
+          const botRail = new THREE.Mesh(new THREE.BoxGeometry(rLen, 0.07, 0.09), trimMat);
+          botRail.position.set(rCenterX, 0.48, rZ);
+          c.add(botRail);
+          for (let bx = -rLen / 2 + 0.18; bx <= rLen / 2 - 0.14; bx += 0.24) {
+            const bal = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.46, 0.05), trimMat);
+            bal.position.set(rCenterX + bx, 0.72, rZ);
+            c.add(bal);
+          }
         });
 
-        // 6. Painted Front Door, Warm Lantern Sconce, Windows, Shutters & Flower Boxes
-        const doorFrame = new THREE.Mesh(new THREE.BoxGeometry(1.18, 2.22, 0.12), trimMat);
-        doorFrame.position.set(0, 1.48, d / 2 + 0.02);
+        // Pair of Painted Muskoka Chairs on the Front Veranda
+        const chairL = buildMuskokaChair(doorMat);
+        chairL.position.set(-porchW * 0.31, 0.40, d / 2 + porchD * 0.45);
+        chairL.rotation.y = 0.28;
+        c.add(chairL);
+        const chairR = buildMuskokaChair(shutterMat);
+        chairR.position.set(porchW * 0.31, 0.40, d / 2 + porchD * 0.45);
+        chairR.rotation.y = -0.28;
+        c.add(chairR);
+
+        // 6. Panelled Heritage Door with Transom Window, Warm Lanterns, Multi-Pane Windows & Flower Boxes
+        const doorFrame = new THREE.Mesh(new THREE.BoxGeometry(1.24, 2.38, 0.12), trimMat);
+        doorFrame.position.set(0, 1.56, d / 2 + 0.02);
         c.add(doorFrame);
-        const door = new THREE.Mesh(new THREE.BoxGeometry(0.98, 2.08, 0.16), doorMat);
+        const door = new THREE.Mesh(new THREE.BoxGeometry(1.00, 2.10, 0.15), doorMat);
         door.position.set(0, 1.44, d / 2 + 0.03);
         c.add(door);
+        const doorTransom = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.24, 0.16), warmWinGlowMat);
+        doorTransom.position.set(0, 2.58, d / 2 + 0.03);
+        c.add(doorTransom);
 
-        const sconce = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 8), lampGlowMat);
-        sconce.position.set(0.78, 2.15, d / 2 + 0.18);
-        c.add(sconce);
+        [-0.78, 0.78].forEach(lx => {
+          const sconce = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 8), lampGlowMat);
+          sconce.position.set(lx, 2.15, d / 2 + 0.18);
+          c.add(sconce);
+        });
 
-        // Front & side windows with shutters and blooming flower boxes
-        [-w * 0.30, w * 0.30].forEach((wx, wi) => {
-          const wFrame = new THREE.Mesh(new THREE.BoxGeometry(1.22, 1.32, 0.12), trimMat);
-          wFrame.position.set(wx, 1.78, d / 2 + 0.02);
+        // Front & Side Multi-Pane Windows with Muntins, Louvered Shutters & Lush Cedar Window Boxes
+        [-w * 0.31, w * 0.31].forEach((wx, wi) => {
+          const wFrame = new THREE.Mesh(new THREE.BoxGeometry(1.28, 1.38, 0.12), trimMat);
+          wFrame.position.set(wx, 1.80, d / 2 + 0.02);
           c.add(wFrame);
-          const wGlass = new THREE.Mesh(new THREE.BoxGeometry(1.02, 1.12, 0.15), warmWinGlowMat);
-          wGlass.position.set(wx, 1.78, d / 2 + 0.03);
+          const wGlass = new THREE.Mesh(new THREE.BoxGeometry(1.06, 1.16, 0.14), warmWinGlowMat);
+          wGlass.position.set(wx, 1.80, d / 2 + 0.03);
           c.add(wGlass);
+          // Window muntin crossbars
+          const mVert = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.18, 0.16), trimMat);
+          mVert.position.set(wx, 1.80, d / 2 + 0.04);
+          c.add(mVert);
+          const mHoriz = new THREE.Mesh(new THREE.BoxGeometry(1.08, 0.05, 0.16), trimMat);
+          mHoriz.position.set(wx, 1.80, d / 2 + 0.04);
+          c.add(mHoriz);
 
           // Louvered painted shutters
-          [-0.74, 0.74].forEach(sx => {
-            const shut = new THREE.Mesh(new THREE.BoxGeometry(0.24, 1.28, 0.08), shutterMat);
-            shut.position.set(wx + sx, 1.78, d / 2 + 0.05);
+          [-0.76, 0.76].forEach(sx => {
+            const shut = new THREE.Mesh(new THREE.BoxGeometry(0.26, 1.34, 0.08), shutterMat);
+            shut.position.set(wx + sx, 1.80, d / 2 + 0.05);
             c.add(shut);
           });
 
-          // Under-window cedar flower box with colorful blooms
-          const fBox = new THREE.Mesh(new THREE.BoxGeometry(1.26, 0.24, 0.28), darkWoodMat);
+          // Under-window cedar flower box overflowing with foliage & blooms
+          const fBox = new THREE.Mesh(new THREE.BoxGeometry(1.32, 0.24, 0.28), darkWoodMat);
           fBox.position.set(wx, 1.02, d / 2 + 0.16);
           c.add(fBox);
-          for (let fi = -0.42; fi <= 0.42; fi += 0.28) {
+          for (let fi = -0.48; fi <= 0.48; fi += 0.24) {
+            const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.15, 6, 6), foliageGreenMat);
+            leaf.position.set(wx + fi, 1.16, d / 2 + 0.18);
+            c.add(leaf);
             const bloom = new THREE.Mesh(
-              new THREE.SphereGeometry(0.15, 6, 6),
-              new THREE.MeshBasicMaterial({ color: flowerColors[(idx + wi + Math.round((fi + 1) * 3)) % flowerColors.length] })
+              new THREE.SphereGeometry(0.13, 6, 6),
+              new THREE.MeshBasicMaterial({ color: flowerColors[(idx + wi + Math.round((fi + 1) * 4)) % flowerColors.length] })
             );
-            bloom.position.set(wx + fi, 1.20, d / 2 + 0.18);
+            bloom.position.set(wx + fi, 1.24, d / 2 + 0.20);
             c.add(bloom);
           }
         });
 
-        // 7. Cute White Picket Fence with Open Garden Gate
+        // 7. LUSH ENGLISH COTTAGE GARDEN, FLAGSTONE WALKWAY, PICKET FENCE, ROSE ARBOR & CANOE!
+        const fenceZ = d / 2 + porchD + 2.65;
+        const gateHalfW = 0.92;
+
+        // Flagstone Stepping-Stone Garden Path from Arbor Gate to Porch Steps
+        for (let sz = d / 2 + porchD + 0.95; sz <= fenceZ + 0.35; sz += 0.52) {
+          const stone = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.36, 0.07, 7), flagstoneMat);
+          stone.position.set(Math.sin(sz * 3.1 + idx) * 0.08, 0.04, sz);
+          c.add(stone);
+        }
+
+        // Arched Timber Garden Arbor & Rose Trellis over the Front Gate
+        [-gateHalfW, gateHalfW].forEach(gx => {
+          const aPost = new THREE.Mesh(new THREE.BoxGeometry(0.14, 2.25, 0.14), trimMat);
+          aPost.position.set(gx, 1.12, fenceZ);
+          c.add(aPost);
+        });
+        const arborBeam = new THREE.Mesh(new THREE.BoxGeometry(gateHalfW * 2 + 0.55, 0.14, 0.45), trimMat);
+        arborBeam.position.set(0, 2.26, fenceZ);
+        c.add(arborBeam);
+        const arborCrown = new THREE.Mesh(new THREE.BoxGeometry(gateHalfW * 2 + 0.25, 0.18, 0.32), trimMat);
+        arborCrown.position.set(0, 2.40, fenceZ);
+        c.add(arborCrown);
+
+        // Climbing Roses & Green Vines on the Garden Arbor
+        [-gateHalfW - 0.05, -0.45, 0, 0.45, gateHalfW + 0.05].forEach((vx, vi) => {
+          const vine = new THREE.Mesh(new THREE.SphereGeometry(0.28, 7, 7), lushLeafMat);
+          vine.position.set(vx, vi === 0 || vi === 4 ? 1.85 : 2.38, fenceZ);
+          c.add(vine);
+          const rose = new THREE.Mesh(
+            new THREE.SphereGeometry(0.15, 6, 6),
+            new THREE.MeshBasicMaterial({ color: flowerColors[(idx + vi) % flowerColors.length] })
+          );
+          rose.position.set(vx + 0.06, (vi === 0 || vi === 4 ? 1.92 : 2.48), fenceZ + 0.14);
+          c.add(rose);
+        });
+
+        // Authentic White Picket Fence (Individual Pointed Pickets + Rails on Front & Side Returns)
         [-1, 1].forEach(fs => {
-          const fSeg = new THREE.Mesh(new THREE.BoxGeometry(w * 0.42, 0.78, 0.10), trimMat);
-          fSeg.position.set(fs * (w * 0.30 + 0.55), 0.39, d / 2 + porchD + 1.8);
-          c.add(fSeg);
-          const fPost = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.95, 0.18), trimMat);
-          fPost.position.set(fs * 0.85, 0.47, d / 2 + porchD + 1.8);
-          c.add(fPost);
+          const fStart = gateHalfW + 0.08;
+          const fEnd = w / 2 + 0.85;
+          const fSpan = fEnd - fStart;
+          const fMidX = fs * (fStart + fSpan / 2);
+
+          // Horizontal fence rails
+          [0.24, 0.68].forEach(ry => {
+            const fRail = new THREE.Mesh(new THREE.BoxGeometry(fSpan, 0.06, 0.06), trimMat);
+            fRail.position.set(fMidX, ry, fenceZ);
+            c.add(fRail);
+          });
+          // Individual vertical pickets
+          for (let px = fStart; px <= fEnd; px += 0.24) {
+            const picket = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.84, 0.04), trimMat);
+            picket.position.set(fs * px, 0.42, fenceZ);
+            c.add(picket);
+          }
+          // Corner fence post & side garden return rail
+          const cPost = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.96, 0.16), trimMat);
+          cPost.position.set(fs * fEnd, 0.48, fenceZ);
+          c.add(cPost);
+          const sideRail = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.72, 2.4), trimMat);
+          sideRail.position.set(fs * fEnd, 0.40, fenceZ - 1.2);
+          c.add(sideRail);
+        });
+
+        // Lush Multi-Layered Perennial Flower Beds (Hydrangeas, Hollyhock Spires, Sunflowers & Hostas)
+        [-1, 1].forEach((gs, gi) => {
+          const bedW = w * 0.34;
+          const bedX = gs * (gateHalfW + 0.35 + bedW / 2);
+          const bedZ = d / 2 + porchD + 1.35;
+
+          // Raised stone-edged garden bed soil mound
+          const bedFrame = new THREE.Mesh(new THREE.BoxGeometry(bedW + 0.16, 0.22, 1.45), stoneMat);
+          bedFrame.position.set(bedX, 0.11, bedZ);
+          c.add(bedFrame);
+          const bedSoil = new THREE.Mesh(new THREE.BoxGeometry(bedW, 0.25, 1.28), gardenSoilMat);
+          bedSoil.position.set(bedX, 0.13, bedZ);
+          c.add(bedSoil);
+
+          // Blooming Hydrangea / Peony Shrubs & Tall Hollyhock / Sunflower Stalks
+          for (let bx = -bedW * 0.36; bx <= bedW * 0.36; bx += 0.58) {
+            const bush = new THREE.Mesh(new THREE.SphereGeometry(0.36, 7, 7), foliageGreenMat);
+            bush.scale.set(1.1, 0.85, 1.1);
+            bush.position.set(bedX + bx, 0.38, bedZ - 0.12);
+            c.add(bush);
+
+            const colHex = flowerColors[(idx * 2 + gi + Math.round((bx + 2) * 3)) % flowerColors.length];
+            const bCluster = new THREE.Mesh(new THREE.SphereGeometry(0.24, 6, 6), new THREE.MeshBasicMaterial({ color: colHex }));
+            bCluster.position.set(bedX + bx, 0.58, bedZ - 0.08);
+            c.add(bCluster);
+
+            // Tall Hollyhock / Delphinium flower spike behind the shrubs
+            const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 1.15, 6), lushLeafMat);
+            stalk.position.set(bedX + bx * 0.85, 0.72, bedZ - 0.42);
+            c.add(stalk);
+            const topBloom = new THREE.Mesh(
+              new THREE.SphereGeometry(0.16, 6, 6),
+              new THREE.MeshBasicMaterial({ color: flowerColors[(idx + gi + 2) % flowerColors.length] })
+            );
+            topBloom.position.set(bedX + bx * 0.85, 1.28, bedZ - 0.42);
+            c.add(topBloom);
+          }
+        });
+
+        // Authentic Toronto Island Yard Props: Painted Cedar-Strip Canoe/Kayak on Rack or Stone Birdbath!
+        const canoeColors = [0xdc2626, 0x047857, 0xfacc15, 0x1d4ed8];
+        const canoeMat = new THREE.MeshStandardMaterial({ color: canoeColors[idx % canoeColors.length], roughness: 0.35 });
+        const canoeSide = -sideSign;
+        const canoeHull = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 3.8, 10), canoeMat);
+        canoeHull.rotation.x = Math.PI / 2;
+        canoeHull.scale.set(1.25, 0.75, 1.0);
+        canoeHull.position.set(canoeSide * (w / 2 + 0.95), 0.52, 0.4);
+        c.add(canoeHull);
+        [-1.1, 1.1].forEach(rz => {
+          const rack = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.42, 0.10), woodMat);
+          rack.position.set(canoeSide * (w / 2 + 0.95), 0.21, 0.4 + rz);
+          c.add(rack);
         });
 
         const cy = Math.max(GROUND_Y, terrainH(cDef.x, cDef.z));
@@ -19846,10 +20245,18 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       const cafe = new THREE.Mesh(new THREE.BoxGeometry(18, 4.2, 12), new THREE.MeshStandardMaterial({ color: 0xfef3c7, roughness: 0.6 }));
       cafe.position.set(1050, 2.65, Z(70));
       cottGrp.add(cafe);
-      const cafeRoof = new THREE.Mesh(new THREE.ConeGeometry(13.5, 2.6, 4), new THREE.MeshStandardMaterial({ color: 0x065f46, roughness: 0.7 }));
+      const cafeRoof = new THREE.Mesh(new THREE.ConeGeometry(13.5, 2.8, 4), new THREE.MeshStandardMaterial({ color: 0x065f46, roughness: 0.7 }));
       cafeRoof.rotation.y = Math.PI / 4;
-      cafeRoof.position.set(1050, 6.0, Z(70));
+      cafeRoof.position.set(1050, 6.1, Z(70));
       cottGrp.add(cafeRoof);
+      const cafeVeranda = new THREE.Mesh(new THREE.BoxGeometry(18.8, 0.35, 3.6), woodMat);
+      cafeVeranda.position.set(1050, GROUND_Y + 0.18, Z(62.4));
+      cottGrp.add(cafeVeranda);
+      [-6.0, -2.0, 2.0, 6.0].forEach(wx => {
+        const cWin = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.8, 0.16), warmWinGlowMat);
+        cWin.position.set(1050 + wx, 2.6, Z(63.98));
+        cottGrp.add(cWin);
+      });
       const cafeSign = makeSign(
         ['WARD\'S ISLAND CAFE', 'GARDEN PATIO • ARTISAN BAKERY • WOOD-FIRED PIZZA'],
         14, 2.0,
@@ -23913,9 +24320,7 @@ window.AI_MODEL_WEIGHTS_FIGHTER = {"version":2,"arch":"ego-cnn-lstm-v1","dtype":
             if (!isFirst) {
               console.log(`🧠 AI Copilot: newer weights available (step ${status.step.toLocaleString()}). Hot-reloading...`);
               await this.loadWeights(true);
-              if (window.showAnnouncement) {
-                window.showAnnouncement(`🧠 AI UPDATED: STEP ${status.step.toLocaleString()}`, 2000);
-              }
+              console.log(`🧠 AI UPDATED: STEP ${status.step.toLocaleString()}`);
             }
           }
         } catch (e) { /* local file/offline */ }
@@ -23929,8 +24334,6 @@ window.AI_MODEL_WEIGHTS_FIGHTER = {"version":2,"arch":"ego-cnn-lstm-v1","dtype":
       this.lastGoalKey = '';
       this.resetMemory();
       this.updateModePill();
-      const label = this.mode === 'neural' ? '🧠 NEURAL RL' : '⚡ TACTICAL EXPERT';
-      if (window.showAnnouncement) window.showAnnouncement(`AI MODE: ${label}`, 2000);
     }
 
     cyclePersona() {
@@ -23946,8 +24349,6 @@ window.AI_MODEL_WEIGHTS_FIGHTER = {"version":2,"arch":"ego-cnn-lstm-v1","dtype":
         this.lastGoalKey = '';
         this.resetMemory();
         this.updateModePill();
-        const label = persona === 'fighter' ? '🥊 BRAWLER MODE' : '📦 CRATE HUNTER';
-        if (window.showAnnouncement) window.showAnnouncement(`AI PERSONA: ${label}`, 2000);
         console.log(`🤖 AI Copilot: switched persona to ${persona.toUpperCase()}`);
       } else {
         console.log(`🤖 AI Copilot: persona ${persona} not loaded yet.`);
@@ -24001,8 +24402,8 @@ window.AI_MODEL_WEIGHTS_FIGHTER = {"version":2,"arch":"ego-cnn-lstm-v1","dtype":
       if (!topBar) topBar = document.body;
       const btn = document.createElement('button');
       btn.id = 'ai-watch-btn'; btn.className = 'ai-toggle-btn';
-      btn.innerHTML = '🤖 WATCH AI <span class="ai-key-hint">[V]</span>';
-      btn.title = 'Let the trained AI play (V)';
+      btn.innerHTML = '🤖 AI <span class="ai-key-hint">[V]</span>';
+      btn.title = 'Toggle AI Copilot (V)';
       btn.onclick = () => this.toggle();
       topBar.appendChild(btn); this.btnEl = btn;
 
@@ -24010,34 +24411,28 @@ window.AI_MODEL_WEIGHTS_FIGHTER = {"version":2,"arch":"ego-cnn-lstm-v1","dtype":
       personaBtn.id = 'ai-persona-top-btn'; personaBtn.className = 'ai-toggle-btn';
       personaBtn.innerHTML = 'AI: 📦 CRATE <span class="ai-key-hint">[N]</span>';
       personaBtn.title = 'Switch AI Persona: Crate Hunter vs Brawler (N)';
+      personaBtn.style.display = 'none';
       personaBtn.onclick = () => this.cyclePersona();
       topBar.appendChild(personaBtn); this.personaBtnEl = personaBtn;
 
       const muteBtn = document.createElement('button');
       muteBtn.id = 'audio-mute-btn'; muteBtn.className = 'ai-toggle-btn';
       const isMuted = (window.audio && window.audio.isMuted) || (new URLSearchParams(window.location.search).get('muted') === '1');
-      muteBtn.innerHTML = isMuted ? '🔇 MUTED <span class="ai-key-hint">[M]</span>' : '🔊 SOUND <span class="ai-key-hint">[M]</span>';
+      muteBtn.innerHTML = isMuted ? '🔇 <span class="ai-key-hint">[M]</span>' : '🔊 <span class="ai-key-hint">[M]</span>';
       if (isMuted) muteBtn.classList.add('active');
       muteBtn.onclick = () => { if (window.audio && window.audio.toggleMute) window.audio.toggleMute(); };
       topBar.appendChild(muteBtn);
-
-      const boardBtn = document.createElement('a');
-      boardBtn.id = 'ai-leaderboard-btn'; boardBtn.className = 'ai-toggle-btn';
-      boardBtn.innerHTML = '📊 RL TRAINING'; boardBtn.href = 'dashboard.html'; boardBtn.target = '_blank';
-      boardBtn.style.textDecoration = 'none';
-      topBar.appendChild(boardBtn);
 
       const banner = document.createElement('div');
       banner.id = 'ai-pilot-hud'; banner.className = 'ai-pilot-banner hidden';
       banner.innerHTML = `
         <div class="ai-pilot-indicator">
           <span class="ai-pulse-dot"></span>
-          <span class="ai-title">AI COPILOT ACTIVE</span>
+          <span class="ai-title">AI</span>
           <span id="ai-persona-pill" class="ai-mode-pill" style="cursor:pointer;background:rgba(0,0,0,0.5);border:1px solid #38bdf8;color:#7dd3fc;padding:3px 8px;border-radius:4px;margin-left:8px;font-size:11px;font-weight:700;text-transform:uppercase;"></span>
           <span id="ai-mode-pill" class="ai-mode-pill" style="cursor:pointer;background:rgba(0,0,0,0.5);border:1px solid #10b981;color:#6ee7b7;padding:3px 8px;border-radius:4px;margin-left:8px;font-size:11px;font-weight:700;text-transform:uppercase;"></span>
-          <span class="ai-cancel-prompt">[PRESS V TO TAKE OVER]</span>
         </div>
-        <div id="ai-intent-status" class="ai-intent-sub">INITIALIZING...</div>`;
+        <div id="ai-intent-status" class="ai-intent-sub" style="display:none;"></div>`;
       document.body.appendChild(banner);
       this.bannerEl = banner;
       this.intentEl = document.getElementById('ai-intent-status');
@@ -24062,7 +24457,10 @@ window.AI_MODEL_WEIGHTS_FIGHTER = {"version":2,"arch":"ego-cnn-lstm-v1","dtype":
       }
       if (this.btnEl) {
         this.btnEl.classList.toggle('active', this.isActive);
-        this.btnEl.innerHTML = this.isActive ? '🤖 AI ACTIVE <span class="ai-key-hint">[V]</span>' : '🤖 WATCH AI <span class="ai-key-hint">[V]</span>';
+        this.btnEl.innerHTML = this.isActive ? '🤖 AI ON <span class="ai-key-hint">[V]</span>' : '🤖 AI <span class="ai-key-hint">[V]</span>';
+      }
+      if (this.personaBtnEl) {
+        this.personaBtnEl.style.display = this.isActive ? '' : 'none';
       }
       if (this.bannerEl) this.bannerEl.classList.toggle('hidden', !this.isActive);
       this.moveDir.set(0, 0, 0); this.moveLocal = [0, 0]; this.turnRate = 0; this.sprint = false;
@@ -27944,7 +28342,6 @@ function selectFerryDock(idx) {
   const here = currentFerryDockIndex();
   closeFerryPanel();
   if (idx === here) {
-    showAnnouncement(`🚢 YOU ARE ALREADY AT ${FERRY_DOCKS[idx].name.toUpperCase()}`, 1800);
     return;
   }
   const destId = FERRY_DOCKS[idx].id;
@@ -28138,17 +28535,6 @@ function startFerryRide(dir, explicitFromId) {
   camera.rotation.y = forwardYaw;
   camera.rotation.x = player.pitch;
 
-  let msg = '🚢 TORONTO ISLAND FERRY: DEPARTING...';
-  if (isAirport) {
-    msg = toId === 'airport_island'
-      ? '✈️ BILLY BISHOP AIRPORT FERRY: CROSSING WESTERN GAP TO ISLAND AIRPORT (CYTZ)...'
-      : '🏙️ BILLY BISHOP AIRPORT FERRY: CROSSING WESTERN GAP TO MAINLAND BATHURST QUAY...';
-  } else {
-    const destObj = FERRY_DOCKS.find(d => d.id === toId);
-    msg = `🚢 TORONTO ISLAND FERRY: DEPARTING FOR ${destObj ? destObj.name.toUpperCase() : 'CENTRE ISLAND'}...`;
-  }
-  showAnnouncement(msg, 3500);
-
   const ferry = isAirport ? city.islandFerry.airportFerryMesh : city.islandFerry.ferryMesh;
   if (ferry) {
     ferry.isPlayerFerry = true;
@@ -28227,7 +28613,6 @@ function arriveFerry(dir) {
         aFerry.position.set(-1060, waterY, 842);
         aFerry.rotation.y = 0;
       }
-      showAnnouncement('✈️ WELCOME TO BILLY BISHOP TORONTO CITY AIRPORT (CYTZ)!\nExplore the Passenger Terminal, Runway 08/26 & Porter Dash-8 Q400 Aircraft!', 5000);
       populateCentreIslandCitizens();
     } else {
       state.onIsland = false;
@@ -28243,7 +28628,6 @@ function arriveFerry(dir) {
         aFerry.position.set(-1060, waterY, 720);
         aFerry.rotation.y = Math.PI;
       }
-      showAnnouncement('🏙️ WELCOME BACK TO TORONTO MAINLAND • BATHURST QUAY TERMINAL', 4000);
     }
     return;
   }
@@ -28267,12 +28651,6 @@ function arriveFerry(dir) {
       ferry.rotation.y = 0;
     }
 
-    const welcomeMap = {
-      centre: '🌳 WELCOME TO CENTRE ISLAND • TORONTO ISLAND PARK 🌸\nEnjoy the beaches, Centreville rides, Pizza Pizza & Hedge Maze!',
-      hanlans: '✈️ WELCOME TO HANLAN\'S POINT • WEST TORONTO ISLAND 🏖️\nWalk west to Billy Bishop Airport & Porter Q400s or south to Hanlan\'s Beach!',
-      wards: '🏡 WELCOME TO WARD\'S ISLAND • EAST ISLAND VILLAGE 🌲\nExplore the unique forest cottages, woodland paths, Ward\'s Cafe & Boardwalk!'
-    };
-    showAnnouncement(welcomeMap[destDock.id] || welcomeMap.centre, 5000);
     populateCentreIslandCitizens();
   } else {
     state.onIsland = false;
@@ -28289,8 +28667,6 @@ function arriveFerry(dir) {
       ferry.position.set(726, waterY, 330);
       ferry.rotation.y = 0.05;
     }
-
-    showAnnouncement('🏙️ WELCOME BACK TO TORONTO MAINLAND • QUEENS QUAY WEST', 4000);
   }
 }
 
@@ -28378,10 +28754,6 @@ function startPorterFlight(viewMode) {
   camera.rotation.x = player.pitch;
 
   if (audio && audio.playFerryHorn) audio.playFerryHorn();
-  showAnnouncement(
-    '✈️ PORTER AIRLINES DASH 8-400 (Q400): CLEARED FOR TAKEOFF RUNWAY 08!\n[V] Cycle Window (Seat 6A) / Cockpit / Chase • [C] Toggle Free-Pilot Stick • [E] Land at Billy Bishop',
-    5200
-  );
 }
 
 function cyclePorterFlightView() {
@@ -28389,17 +28761,13 @@ function cyclePorterFlightView() {
   const modes = ['window', 'cockpit', 'chase'];
   const nextIdx = (modes.indexOf(porterFlightController.viewMode) + 1) % modes.length;
   porterFlightController.viewMode = modes[nextIdx];
-  const labels = {
-    window: '🪟 CABIN WINDOW SEAT 6A (LOOKING OUT OVER LEFT WING & TURBOPROP)',
-    cockpit: '👨‍✈️ FLIGHT DECK COCKPIT (CAPTAIN SEAT LOOKING OUT WINDSHIELD)',
-    chase: '🎥 EXTERNAL AERIAL CHASE CAMERA VIEW'
-  };
   if (porterFlightController.viewMode === 'window') {
     player.yaw = porterFlightController.heading - Math.PI / 2;
+    player.pitch = -0.06;
   } else {
     player.yaw = porterFlightController.heading + Math.PI;
+    player.pitch = -0.08;
   }
-  showAnnouncement(labels[porterFlightController.viewMode], 2600);
   return true;
 }
 
@@ -28409,12 +28777,6 @@ function togglePorterFreePilot() {
   if (porterFlightController.freePilot && porterFlightController.y < 80) {
     porterFlightController.y = 220;
   }
-  showAnnouncement(
-    porterFlightController.freePilot
-      ? '🕹️ FREE-PILOT MODE ENGAGED! Use [W/S] to Climb/Descend & [A/D] to Bank Around Toronto!'
-      : '🧭 AUTOPILOT SCENIC CITY LOOP RESUMED!',
-    3200
-  );
   return true;
 }
 
@@ -28492,14 +28854,14 @@ function updatePorterFlight(dt) {
   // Exact 3D local eye position relative to the aircraft coordinate frame
   const eyeLocal = new THREE.Vector3();
   if (porterFlightController.viewMode === 'cockpit') {
-    // Flight deck captain's seat looking out the front windshield
-    eyeLocal.set(-0.52, 0.42, -13.20);
+    // Flight deck captain's seat looking over the glareshield (y=0.22) and EFIS controls out the front/side windshields!
+    eyeLocal.set(-0.48, 0.56, -13.10);
   } else if (porterFlightController.viewMode === 'chase') {
     // Smooth third-person aerial chase perspective
     eyeLocal.set(0, 5.8, 28.0);
   } else {
-    // Cabin Seat 6A window seat (inside fuselage wall at x = -1.08, window eye level at y = 0.38, z = -2.80)
-    eyeLocal.set(-1.08, 0.38, -2.80);
+    // Cabin Seat 6A window seat (inside fuselage at x = -1.08, window eye level at y = 0.40, z = -2.80)
+    eyeLocal.set(-1.08, 0.40, -2.80);
   }
 
   if (planeMesh && planeMesh.rotation) {
@@ -28544,8 +28906,6 @@ function landPorterFlight() {
   camera.rotation.y = 0;
   camera.rotation.x = 0;
   camera.rotation.z = 0;
-
-  showAnnouncement('🛬 TOUCHDOWN AT BILLY BISHOP TORONTO CITY AIRPORT (CYTZ) • WELCOME BACK!', 4200);
 }
 
 window.startPorterFlight = startPorterFlight;
@@ -28603,9 +28963,6 @@ function boardStreetcar(sc) {
   camera.rotation.order = 'YXZ';
   camera.rotation.y = player.yaw;
   camera.rotation.x = player.pitch;
-
-  const routeLabel = car.sign || '504 KING';
-  showAnnouncement(`🚋 BOARDED TTC FLEXITY STREETCAR (${routeLabel})!\nEnjoy 360° panoramic street views • Press [E] at any time to pull the yellow stop cord & step off!`, 4500);
   return true;
 }
 
@@ -28659,7 +29016,6 @@ function disembarkStreetcar() {
   }
   player.velocity.set(0, 0, 0);
   player.isGrounded = true;
-  showAnnouncement('🔔 STOP REQUESTED • DISEMBARKED TTC STREETCAR!', 2800);
   return true;
 }
 
@@ -28776,7 +29132,6 @@ function selectElevatorFloor(idx) {
   if (idx < 0 || idx >= stops.length) return;
   closeElevatorPanel();
   if (idx === currentStopIndex()) {
-    showAnnouncement(`🛗 YOU'RE ALREADY ON ${stops[idx].label}`, 1800);
     return;
   }
   startElevatorRide(idx);
@@ -28821,7 +29176,6 @@ function startElevatorRide(targetIdx) {
     const levelName = document.getElementById('elev-level-name');
     if (levelName) levelName.innerText = `${verb} TO ${target.label} • ${target.name}`;
   }
-  showAnnouncement(`🚀 GLASS ELEVATOR ${verb}: ${target.label} • ${target.name}`, 3000);
 }
 
 function updateElevator(dt) {
@@ -28896,15 +29250,6 @@ function arriveElevator() {
   state.onObservationDeck = idx > 0;
   state.deckFloor = Math.max(1, idx);
   if (scene.fog && idx === 0) scene.fog.density = 0.0021;
-
-  const msgs = [
-    '🕊️ BACK ON THE PLAZA • CN TOWER PEACE SANCTUARY',
-    '🌟 LEVEL 1 • 342m GLASS FLOOR & OUTDOOR SKYTERRACE 🌟',
-    '🔭 LEVEL 2 • 348m MAIN LOOKOUT & TELESCOPES 🔭',
-    '🍽️ LEVEL 3 • 354m 360 RESTAURANT 🍽️',
-    '🧗 LEVEL 4 • 356m CN TOWER EDGEWALK • GUINNESS WORLD RECORD HANDS-FREE SKYWALK 🧗'
-  ];
-  showAnnouncement(msgs[idx] || stop.name, 4000);
 }
 
 // Kept for older callers: floor under (x, z) given EYE height
@@ -28940,13 +29285,14 @@ function updateObservationDeck(dt) {
 
   if (state.onPlane) {
     activeDeckAction = 'land_porter_flight';
-    setDeckPrompt('[E] LAND • [V] VIEW • [C] PILOT', 'PORTER Q400 FLIGHT • [V] WINDOW/COCKPIT/CHASE • [C] FREE-PILOT • [E] LAND');
+    const modeLabel = porterFlightController.viewMode === 'cockpit' ? 'COCKPIT' : (porterFlightController.viewMode === 'chase' ? 'CHASE' : 'WINDOW');
+    setDeckPrompt('[E] LAND • [V] VIEW • [C] PILOT', `PORTER Q400 (${modeLabel})`);
     return;
   }
 
   if (state.onStreetcar) {
     activeDeckAction = 'disembark_streetcar';
-    setDeckPrompt('[E]', 'PULL YELLOW CORD • DISEMBARK TTC STREETCAR AT CURB');
+    setDeckPrompt('[E]', 'DISEMBARK STREETCAR');
     return;
   }
 
@@ -28959,7 +29305,7 @@ function updateObservationDeck(dt) {
     const dPorterRwy = Math.hypot(player.pos.x - (-1360), player.pos.z - 1030);
     if (dPorterGate < 26 || dPorterApron < 24 || dPorterRwy < 26) {
       activeDeckAction = 'board_porter_flight';
-      setDeckPrompt('[E]', 'BOARD PORTER Q400 TURBOPROP • SCENIC FLIGHT LOOP AROUND TORONTO');
+      setDeckPrompt('[E]', 'BOARD PORTER Q400 FLIGHT');
       return;
     }
 
@@ -28967,7 +29313,7 @@ function updateObservationDeck(dt) {
     const nearSc = findNearbyStreetcar(10.5);
     if (nearSc) {
       activeDeckAction = { type: 'board_streetcar', sc: nearSc };
-      setDeckPrompt('[E]', `BOARD TTC STREETCAR • ${nearSc.sign || '504 KING'}`);
+      setDeckPrompt('[E]', `BOARD STREETCAR (${nearSc.sign || '504 KING'})`);
       return;
     }
 
@@ -28975,7 +29321,7 @@ function updateObservationDeck(dt) {
     const dSpeakers = Math.hypot(player.pos.x - (-558), player.pos.z - (-602));
     if (dSpeakers < 8.5) {
       activeDeckAction = 'speakers_corner';
-      setDeckPrompt('[E]', 'DROP A LOONIE ($1) • RECORD AT MUCHMUSIC / CITYTV SPEAKERS CORNER');
+      setDeckPrompt('[E]', 'SPEAKERS CORNER BOOTH ($1)');
       return;
     }
 
@@ -28984,7 +29330,7 @@ function updateObservationDeck(dt) {
       const dRoundhouse = Math.hypot(player.pos.x - city.landmarks.roundhouse[0], player.pos.z - city.landmarks.roundhouse[1]);
       if (dRoundhouse < 18.0) {
         activeDeckAction = 'roundhouse_whistle';
-        setDeckPrompt('[E]', 'BLOW 5:00 PM STEAM WHISTLE & OPERATE ROUNDHOUSE TURNTABLE');
+        setDeckPrompt('[E]', 'STEAM WHISTLE & TURNTABLE');
         return;
       }
     }
@@ -28993,7 +29339,7 @@ function updateObservationDeck(dt) {
     const dRogers = Math.hypot(player.pos.x - (-485), player.pos.z - 235);
     if (dRogers < 18.0) {
       activeDeckAction = 'rogers_dome_toggle';
-      setDeckPrompt('[E]', 'OPERATE ROGERS CENTRE RETRACTABLE ROOF & BLUE JAYS HOME RUN HORN');
+      setDeckPrompt('[E]', 'ROGERS CENTRE RETRACTABLE ROOF');
       return;
     }
 
@@ -29001,7 +29347,7 @@ function updateObservationDeck(dt) {
     const dBerczy = Math.hypot(player.pos.x - 642, player.pos.z - (-428));
     if (dBerczy < 8.5) {
       activeDeckAction = 'berczy_dog_fountain';
-      setDeckPrompt('[E]', 'TOSS A COIN IN THE 27-DOG FOUNTAIN & GREET SCULPTED CAT');
+      setDeckPrompt('[E]', 'TOSS COIN IN DOG FOUNTAIN');
       return;
     }
 
@@ -29009,7 +29355,7 @@ function updateObservationDeck(dt) {
     const dStLawrence = Math.hypot(player.pos.x - 840, player.pos.z - (-455));
     if (dStLawrence < 9.5) {
       activeDeckAction = 'st_lawrence_peameal';
-      setDeckPrompt('[E]', 'ORDER CAROUSEL BAKERY WORLD-FAMOUS PEAMEAL BACON ON A KAISER');
+      setDeckPrompt('[E]', 'CAROUSEL BAKERY PEAMEAL BACON');
       return;
     }
 
@@ -29017,7 +29363,7 @@ function updateObservationDeck(dt) {
     const dLhDoor = Math.hypot(player.pos.x - (-480), player.pos.z - 1515.7);
     if (dLhDoor < 4.2) {
       activeDeckAction = 'climb_lighthouse';
-      setDeckPrompt('[E]', 'CLIMB 1808 LIGHTHOUSE SPIRAL STAIRCASE • MEET KEEPER RADELMÜLLER\'S GHOST');
+      setDeckPrompt('[E]', 'CLIMB 1808 LIGHTHOUSE');
       return;
     }
 
@@ -29027,7 +29373,7 @@ function updateObservationDeck(dt) {
         const dSub = Math.hypot(player.pos.x - st.streetX, player.pos.z - st.streetZ);
         if (dSub < 6.5) {
           activeDeckAction = 'enter_subway_' + st.id;
-          setDeckPrompt('[E]', 'ENTER TTC SUBWAY • LINE 1 (' + st.name.toUpperCase() + ')');
+          setDeckPrompt('[E]', 'ENTER ' + st.name.toUpperCase() + ' SUBWAY');
           return;
         }
       }
@@ -29039,21 +29385,21 @@ function updateObservationDeck(dt) {
     if (state.onSubway) {
       activeDeckAction = 'disembark_subway_train';
       const curStop = city.subway.stations[city.subway.state.currentStopIdx] || city.subway.stations[0];
-      setDeckPrompt('[E]', 'DISEMBARK TTC TORONTO ROCKET AT ' + curStop.name.toUpperCase());
+      setDeckPrompt('[E]', 'EXIT TRAIN (' + curStop.name.toUpperCase() + ')');
       return;
     }
     const tState = city.subway.state;
     const dTrain = Math.hypot(player.pos.x - tState.x, player.pos.z - tState.z);
     if (tState.isStopped && tState.doorsOpen && dTrain < 16.0) {
       activeDeckAction = 'board_subway_train';
-      setDeckPrompt('[E]', 'BOARD TTC TORONTO ROCKET • LINE 1 SUBWAY TRAIN');
+      setDeckPrompt('[E]', 'BOARD LINE 1 SUBWAY');
       return;
     }
     for (const st of city.subway.stations) {
       const dExit = Math.hypot(player.pos.x - st.x, player.pos.z - (st.z + 32));
       if (dExit < 7.5) {
         activeDeckAction = 'exit_subway_' + st.id;
-        setDeckPrompt('[E]', 'EXIT TO STREET LEVEL (' + st.name.toUpperCase() + ')');
+        setDeckPrompt('[E]', 'EXIT TO STREET (' + st.name.toUpperCase() + ')');
         return;
       }
     }
@@ -29065,7 +29411,7 @@ function updateObservationDeck(dt) {
     const inMainDock = dMainDock < 22 || (player.pos.x >= 695 && player.pos.x <= 738 && player.pos.z >= 295 && player.pos.z <= 348);
     if (inMainDock) {
       activeDeckAction = 'ferry_to_island';
-      setDeckPrompt('[E]', 'TORONTO ISLAND FERRIES • CHOOSE DOCK (CENTRE / HANLAN\'S / WARD\'S)');
+      setDeckPrompt('[E]', 'ISLAND FERRY TERMINAL');
       return;
     }
     const dArchDock = Math.hypot(player.pos.x - 0, player.pos.z - 1200);
@@ -29074,21 +29420,21 @@ function updateObservationDeck(dt) {
     const inIslandDock = inArchDock || dIslandDock < 22 || (player.pos.x >= 165 && player.pos.x <= 195 && player.pos.z >= 1060 && player.pos.z <= 1095);
     if (inIslandDock) {
       activeDeckAction = 'ferry_to_mainland';
-      setDeckPrompt('[E]', 'CENTRE ISLAND DOCK • CHOOSE DESTINATION DOCK');
+      setDeckPrompt('[E]', 'CENTRE ISLAND FERRY DOCK');
       return;
     }
     const dHanlansDock = Math.hypot(player.pos.x - (-720), player.pos.z - 1090);
     const inHanlansDock = dHanlansDock < 28 || (player.pos.x >= -745 && player.pos.x <= -695 && player.pos.z >= 1055 && player.pos.z <= 1125);
     if (inHanlansDock) {
       activeDeckAction = 'ferry_from_hanlans';
-      setDeckPrompt('[E]', 'HANLAN\'S POINT DOCK • CHOOSE DESTINATION DOCK');
+      setDeckPrompt('[E]', 'HANLAN\'S POINT FERRY DOCK');
       return;
     }
     const dWardsDock = Math.hypot(player.pos.x - 1140, player.pos.z - 1180);
     const inWardsDock = dWardsDock < 28 || (player.pos.x >= 1115 && player.pos.x <= 1165 && player.pos.z >= 1145 && player.pos.z <= 1215);
     if (inWardsDock) {
       activeDeckAction = 'ferry_from_wards';
-      setDeckPrompt('[E]', 'WARD\'S ISLAND DOCK • CHOOSE DESTINATION DOCK');
+      setDeckPrompt('[E]', 'WARD\'S ISLAND FERRY DOCK');
       return;
     }
     // Billy Bishop Airport Ferry (Western Gap Channel: Bathurst Quay <-> Island Airport)
@@ -29096,14 +29442,14 @@ function updateObservationDeck(dt) {
     const inAirportMain = dAirportMain < 24 || (player.pos.x >= -1076 && player.pos.x <= -1044 && player.pos.z >= 668 && player.pos.z <= 718);
     if (inAirportMain) {
       activeDeckAction = 'airport_ferry_to_island';
-      setDeckPrompt('[E]', 'BOARD BILLY BISHOP AIRPORT FERRY (TO ISLAND AIRPORT TERMINAL)');
+      setDeckPrompt('[E]', 'AIRPORT FERRY TO ISLAND');
       return;
     }
     const dAirportIsland = Math.hypot(player.pos.x - (-1060), player.pos.z - 870);
     const inAirportIsland = dAirportIsland < 24 || (player.pos.x >= -1076 && player.pos.x <= -1044 && player.pos.z >= 848 && player.pos.z <= 900);
     if (inAirportIsland) {
       activeDeckAction = 'airport_ferry_to_mainland';
-      setDeckPrompt('[E]', 'BOARD BILLY BISHOP AIRPORT FERRY (TO MAINLAND BATHURST QUAY)');
+      setDeckPrompt('[E]', 'AIRPORT FERRY TO MAINLAND');
       return;
     }
     if (ferryPanel.open && dMainDock > 32 && dArchDock > 34 && dHanlansDock > 34 && dWardsDock > 34) {
@@ -29116,7 +29462,7 @@ function updateObservationDeck(dt) {
     const dLhCatwalk = Math.hypot(player.pos.x - (-480), player.pos.z - 1520);
     if (dLhCatwalk < 4.8) {
       activeDeckAction = 'descend_lighthouse';
-      setDeckPrompt('[E]', 'DESCEND SPIRAL STAIRCASE TO ISLAND GROUND');
+      setDeckPrompt('[E]', 'DESCEND LIGHTHOUSE');
       return;
     }
   }
@@ -29131,7 +29477,7 @@ function updateObservationDeck(dt) {
     const dPav = Math.hypot(player.pos.x - city.cnElevator.entrancePavilion.doorX, player.pos.z - city.cnElevator.entrancePavilion.doorZ);
     if (dElev < elevCallR || dPav < 4.5) {
       activeDeckAction = 'elevator';
-      setDeckPrompt('[E]', 'CN TOWER ELEVATOR • CHOOSE A FLOOR');
+      setDeckPrompt('[E]', 'CN TOWER ELEVATOR');
       return;
     }
     // Only auto-close if player has walked well away from the elevator entrance (> 8m)
@@ -29144,23 +29490,12 @@ function updateObservationDeck(dt) {
     state.onObservationDeck = true;
     state.deckFloor = feet > 356.0 ? 4 : (feet > 351.0 ? 3 : (feet > 345.0 ? 2 : 1));
 
-    const cx = city.landmarks.cnTower[0];
-    const cz = city.landmarks.cnTower[1];
-    const dx = player.pos.x - cx;
-    const dz = player.pos.z - cz;
-    const r = Math.hypot(dx, dz);
-
-    // Glass floor mesh sits on the SOUTH side (+z) of Level 1, r 9.5 to 17.5
-    const onSouthGlassFloor = (state.deckFloor === 1 && dz > 5.0 && Math.abs(dx) < 7.8 && r >= 9.5 && r <= 17.5);
     const glassFloorEl = document.getElementById('glass-floor-indicator');
-    if (glassFloorEl) {
-      if (!onSouthGlassFloor) glassFloorEl.classList.add('hidden');
-      else glassFloorEl.classList.remove('hidden');
-    }
+    if (glassFloorEl) glassFloorEl.classList.add('hidden');
 
     if (dElev < elevCallR && [342, 348, 354, 358.6].some(y => Math.abs(feet - y) < 0.8)) {
       activeDeckAction = 'elevator';
-      setDeckPrompt('[E]', 'GLASS ELEVATOR • CHOOSE A FLOOR');
+      setDeckPrompt('[E]', 'CN TOWER ELEVATOR');
       return;
     }
     // Only auto-close if player has walked away (> 8m)
@@ -29169,8 +29504,7 @@ function updateObservationDeck(dt) {
     }
 
     if (state.deckFloor === 4) {
-      activeDeckAction = 'cn_edgewalk';
-      setDeckPrompt('356M', 'CN TOWER EDGEWALK • 356m / 1,168ft OPEN-AIR CATWALK • [W/A/S/D] CIRCLE 360°');
+      if (promptEl) promptEl.classList.add('hidden');
       return;
     }
 
@@ -29180,7 +29514,7 @@ function updateObservationDeck(dt) {
         const dVf = Math.hypot(player.pos.x - vf.worldX, player.pos.z - vf.worldZ);
         if (dVf < 2.5) {
           activeDeckAction = { type: 'telescope', vf };
-          setDeckPrompt('[E] / [V]', `PEER THROUGH TELESCOPE: ${vf.name}`);
+          setDeckPrompt('[E]', `TELESCOPE: ${vf.name}`);
           return;
         }
       }
@@ -29191,7 +29525,7 @@ function updateObservationDeck(dt) {
       const dTerm = Math.hypot(player.pos.x - term.x, player.pos.z - term.z);
       if (dTerm < 2.6) {
         activeDeckAction = 'start_showdown';
-        setDeckPrompt('[G]', 'START SKY SHOWDOWN MINI-GAME');
+        setDeckPrompt('[G]', 'SKY SHOWDOWN');
         return;
       }
     }
@@ -29246,27 +29580,23 @@ function handleDeckAction() {
     updateHUDHealth();
     audio.playPickup();
     const quotes = [
-      '📹 SPEAKERS CORNER [REC ●]: "299 QUEEN WEST FOREVER! BRING BACK ELECTRIC CIRCUS & THE CHUM CITY BUILDING!" (+35 HP & ARMOR)',
-      '📹 SPEAKERS CORNER [REC ●]: "WHY DOES THE 504 KING STREETCAR ALWAYS BUNCH UP IN THREES?! LOVE YOU TORONTO!" (+35 HP & ARMOR)',
-      '📹 SPEAKERS CORNER [REC ●]: "SHOUTOUT TO THE RACCOONS OF KENSINGTON MARKET AND PEAMEAL BACON AT ST. LAWRENCE!" (+35 HP & ARMOR)'
+      '📹 SPEAKERS CORNER: "299 Queen West forever!" (+35 HP)',
+      '📹 SPEAKERS CORNER: "Why does the 504 King always bunch up in threes?!" (+35 HP)',
+      '📹 SPEAKERS CORNER: "Shoutout to the raccoons of Kensington Market!" (+35 HP)'
     ];
-    showAnnouncement(quotes[Math.floor(Math.random() * quotes.length)], 4800);
+    showAnnouncement(quotes[Math.floor(Math.random() * quotes.length)], 3200);
     return true;
   }
   if (activeDeckAction === 'roundhouse_whistle') {
     if (audio && audio.playFerryHorn) audio.playFerryHorn();
     createFireworkBurst(player.pos.x, player.pos.y + 12, player.pos.z);
-    showAnnouncement('🚂 CHOO-CHOO! STEAM WHISTLE PILSNER 5:00 PM WHISTLE & CPR #5930 TURNTABLE ACTIVATED!', 4000);
     return true;
   }
   if (activeDeckAction === 'rogers_dome_toggle') {
     if (city && city.rogersCentreDome) {
-      const open = city.rogersCentreDome.toggleRoof();
+      city.rogersCentreDome.toggleRoof();
       if (audio && audio.playHomeRunHorn) audio.playHomeRunHorn();
       createFireworkBurst(-485, 45, 235);
-      showAnnouncement(open
-        ? '🏟️ ROGERS CENTRE SKYDOME • RETRACTABLE ROOF OPENING TO THE TORONTO SKY! ⚾ HOME RUN HORN SOUNDS!'
-        : '🏟️ ROGERS CENTRE SKYDOME • RETRACTABLE ROOF CLOSING OVER BALLPARK! ⚾ HOME RUN HORN SOUNDS!', 4600);
     }
     return true;
   }
@@ -29274,7 +29604,6 @@ function handleDeckAction() {
     if (audio && audio.playCoinSplash) audio.playCoinSplash();
     state.health = Math.min(state.maxHealth, state.health + 25);
     updateHUDHealth();
-    showAnnouncement('🪙 BERCZY PARK • You tossed a lucky loonie into the 27-Dog Fountain! The golden bone glimmers in the sun as 27 dogs spout water. The sculpted cat blinks aloofly.', 4800);
     return true;
   }
   if (activeDeckAction === 'st_lawrence_peameal') {
@@ -29283,7 +29612,6 @@ function handleDeckAction() {
     state.armor = state.maxArmor;
     state.peamealBoostTimer = 30.0;
     updateHUDHealth();
-    showAnnouncement('🥓 CAROUSEL BAKERY • World-Famous Peameal Bacon on a Kaiser! 100% Health & Armor Restored + 30s Toronto Sprint Speed Boost!', 4800);
     return true;
   }
   if (activeDeckAction === 'climb_lighthouse') {
@@ -29291,14 +29619,12 @@ function handleDeckAction() {
     player.velocity.set(0, 0, 0);
     player.yaw = Math.PI;
     if (audio && audio.playElevatorDing) audio.playElevatorDing();
-    showAnnouncement('👻 1808 GIBRALTAR POINT LIGHTHOUSE • Keeper Radelmüller’s Ghost whispers: "Still watching the shoals of Lake Ontario since 1815... Beware the midnight squalls."', 5200);
     return true;
   }
   if (activeDeckAction === 'descend_lighthouse') {
     player.pos.set(-480, 0.55 + EYE_HEIGHT, 1514.0);
     player.velocity.set(0, 0, 0);
     player.yaw = 0;
-    showAnnouncement('🌲 BACK ON GIBRALTAR POINT • Returned to the island grounds beneath the 1808 limestone tower.', 3500);
     return true;
   }
   // TTC Line 1 Subway System Interactions
@@ -29313,7 +29639,6 @@ function handleDeckAction() {
       player.yaw = 0;
       player.pitch = 0;
       state.isUnderground = true;
-      showAnnouncement(`🚇 ENTERED ${st.name.toUpperCase()} (TTC LINE 1) • PRESTO CARD TAPPED ($3.35 FARE)`, 4000);
       return true;
     }
   }
@@ -29324,13 +29649,11 @@ function handleDeckAction() {
       player.pos.set(st.streetX, 1.7, st.streetZ);
       player.velocity.set(0, 0, 0);
       state.isUnderground = false;
-      showAnnouncement(`🏙️ RETURNED TO STREET LEVEL • ${st.name.toUpperCase()}`, 3200);
       return true;
     }
   }
   if (activeDeckAction === 'board_subway_train') {
     state.onSubway = true;
-    showAnnouncement('🚇 BOARDED TTC TORONTO ROCKET SUBWAY TRAIN • STAND CLEAR OF THE CLOSING DOORS!', 3600);
     return true;
   }
   if (activeDeckAction === 'disembark_subway_train') {
@@ -29340,7 +29663,6 @@ function handleDeckAction() {
       : { name: 'Station', x: 265, z: -140 };
     player.pos.set(curStop.x, (city && city.subway) ? city.subway.platformY + EYE_HEIGHT : -14.0 + EYE_HEIGHT, curStop.z);
     player.velocity.set(0, 0, 0);
-    showAnnouncement(`🚇 DISEMBARKED AT ${curStop.name.toUpperCase()} PLATFORM`, 3200);
     return true;
   }
   if (activeDeckAction === 'elevator') {
@@ -30171,18 +30493,7 @@ function resumeGame(usePointerLock = true) {
   state.freeMouseMode = !usePointerLock;
   const overlay = document.getElementById('menu-overlay');
   if (overlay) overlay.classList.add('hidden');
-
-  try {
-    if (!state.hasShownSpawnIntro && city && city.spawnLocations) {
-      state.hasShownSpawnIntro = true;
-      const currentLoc = city.spawnLocations[currentTourIndex] || city.start;
-      if (currentLoc) {
-        showAnnouncement(`📍 EXPLORING TORONTO: ${currentLoc.name.toUpperCase()}\n${currentLoc.desc || ''}`, 3600);
-      }
-    }
-  } catch (err) {
-    console.warn('Spawn announcement error:', err);
-  }
+  state.hasShownSpawnIntro = true;
 
   try {
     if (usePointerLock && container && container.requestPointerLock) {
@@ -31177,6 +31488,8 @@ function updateKickLeg(prog) {
 }
 
 function updateArmsRig(dt) {
+  armsRig.visible = !(state.onPlane || state.telescopeActive);
+  if (!armsRig.visible) return;
   vm.time += dt;
 
   // --- Look sway: hands lag behind camera rotation ---
@@ -31356,35 +31669,11 @@ function triggerSlamFlash() {
   setTimeout(() => f.style.opacity = '0', 180);
 }
 
-// Peace Sanctuary Banner Controller
+// Peace Sanctuary Banner Controller (handled quietly via top-right pill indicator)
 var peaceBannerTimer = null;
 function triggerPeaceZoneBanner(insidePeace) {
   const banner = document.getElementById('peace-zone-banner');
-  if (!banner) return;
-
-  clearTimeout(peaceBannerTimer);
-  banner.classList.remove('hidden');
-
-  const title = banner.querySelector('.peace-banner-title');
-  const sub = banner.querySelector('.peace-banner-sub');
-  const icon = banner.querySelector('.peace-banner-icon');
-
-  if (insidePeace) {
-    banner.classList.remove('combat-alert');
-    if (title) title.innerText = 'CN TOWER PEACE SANCTUARY';
-    if (sub) sub.innerText = 'NO COMBAT PERMITTED • SAFE HAVEN • VITALITY REGENERATING';
-    if (icon) icon.innerText = '🕊️';
-    audio.playPeaceChime?.();
-  } else {
-    banner.classList.add('combat-alert');
-    if (title) title.innerText = 'EXITING PEACE SANCTUARY';
-    if (sub) sub.innerText = 'COMBAT ZONE ACTIVE • WATCH YOUR BACK!';
-    if (icon) icon.innerText = '⚠️';
-  }
-
-  peaceBannerTimer = setTimeout(() => {
-    banner.classList.add('hidden');
-  }, 3800);
+  if (banner) banner.classList.add('hidden');
 }
 
 function registerCombo() {
@@ -32698,7 +32987,6 @@ function resetGame() {
     camera.rotation.order = 'YXZ';
     camera.rotation.y = nextSpawn.yaw;
     currentTourIndex = nextSpawn.index !== undefined ? nextSpawn.index : currentTourIndex;
-    showAnnouncement(`📍 SPAWNED: ${nextSpawn.name.toUpperCase()}\n${nextSpawn.desc}`, 3600);
   } else if (city && city.start) {
     player.pos.set(city.start.x, 1.7, city.start.z);
     player.yaw = city.startYaw;

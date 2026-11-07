@@ -3620,7 +3620,6 @@ function selectFerryDock(idx) {
   const here = currentFerryDockIndex();
   closeFerryPanel();
   if (idx === here) {
-    showAnnouncement(`🚢 YOU ARE ALREADY AT ${FERRY_DOCKS[idx].name.toUpperCase()}`, 1800);
     return;
   }
   const destId = FERRY_DOCKS[idx].id;
@@ -3814,17 +3813,6 @@ function startFerryRide(dir, explicitFromId) {
   camera.rotation.y = forwardYaw;
   camera.rotation.x = player.pitch;
 
-  let msg = '🚢 TORONTO ISLAND FERRY: DEPARTING...';
-  if (isAirport) {
-    msg = toId === 'airport_island'
-      ? '✈️ BILLY BISHOP AIRPORT FERRY: CROSSING WESTERN GAP TO ISLAND AIRPORT (CYTZ)...'
-      : '🏙️ BILLY BISHOP AIRPORT FERRY: CROSSING WESTERN GAP TO MAINLAND BATHURST QUAY...';
-  } else {
-    const destObj = FERRY_DOCKS.find(d => d.id === toId);
-    msg = `🚢 TORONTO ISLAND FERRY: DEPARTING FOR ${destObj ? destObj.name.toUpperCase() : 'CENTRE ISLAND'}...`;
-  }
-  showAnnouncement(msg, 3500);
-
   const ferry = isAirport ? city.islandFerry.airportFerryMesh : city.islandFerry.ferryMesh;
   if (ferry) {
     ferry.isPlayerFerry = true;
@@ -3903,7 +3891,6 @@ function arriveFerry(dir) {
         aFerry.position.set(-1060, waterY, 842);
         aFerry.rotation.y = 0;
       }
-      showAnnouncement('✈️ WELCOME TO BILLY BISHOP TORONTO CITY AIRPORT (CYTZ)!\nExplore the Passenger Terminal, Runway 08/26 & Porter Dash-8 Q400 Aircraft!', 5000);
       populateCentreIslandCitizens();
     } else {
       state.onIsland = false;
@@ -3919,7 +3906,6 @@ function arriveFerry(dir) {
         aFerry.position.set(-1060, waterY, 720);
         aFerry.rotation.y = Math.PI;
       }
-      showAnnouncement('🏙️ WELCOME BACK TO TORONTO MAINLAND • BATHURST QUAY TERMINAL', 4000);
     }
     return;
   }
@@ -3943,12 +3929,6 @@ function arriveFerry(dir) {
       ferry.rotation.y = 0;
     }
 
-    const welcomeMap = {
-      centre: '🌳 WELCOME TO CENTRE ISLAND • TORONTO ISLAND PARK 🌸\nEnjoy the beaches, Centreville rides, Pizza Pizza & Hedge Maze!',
-      hanlans: '✈️ WELCOME TO HANLAN\'S POINT • WEST TORONTO ISLAND 🏖️\nWalk west to Billy Bishop Airport & Porter Q400s or south to Hanlan\'s Beach!',
-      wards: '🏡 WELCOME TO WARD\'S ISLAND • EAST ISLAND VILLAGE 🌲\nExplore the unique forest cottages, woodland paths, Ward\'s Cafe & Boardwalk!'
-    };
-    showAnnouncement(welcomeMap[destDock.id] || welcomeMap.centre, 5000);
     populateCentreIslandCitizens();
   } else {
     state.onIsland = false;
@@ -3965,8 +3945,6 @@ function arriveFerry(dir) {
       ferry.position.set(726, waterY, 330);
       ferry.rotation.y = 0.05;
     }
-
-    showAnnouncement('🏙️ WELCOME BACK TO TORONTO MAINLAND • QUEENS QUAY WEST', 4000);
   }
 }
 
@@ -4054,10 +4032,6 @@ function startPorterFlight(viewMode) {
   camera.rotation.x = player.pitch;
 
   if (audio && audio.playFerryHorn) audio.playFerryHorn();
-  showAnnouncement(
-    '✈️ PORTER AIRLINES DASH 8-400 (Q400): CLEARED FOR TAKEOFF RUNWAY 08!\n[V] Cycle Window (Seat 6A) / Cockpit / Chase • [C] Toggle Free-Pilot Stick • [E] Land at Billy Bishop',
-    5200
-  );
 }
 
 function cyclePorterFlightView() {
@@ -4065,17 +4039,13 @@ function cyclePorterFlightView() {
   const modes = ['window', 'cockpit', 'chase'];
   const nextIdx = (modes.indexOf(porterFlightController.viewMode) + 1) % modes.length;
   porterFlightController.viewMode = modes[nextIdx];
-  const labels = {
-    window: '🪟 CABIN WINDOW SEAT 6A (LOOKING OUT OVER LEFT WING & TURBOPROP)',
-    cockpit: '👨‍✈️ FLIGHT DECK COCKPIT (CAPTAIN SEAT LOOKING OUT WINDSHIELD)',
-    chase: '🎥 EXTERNAL AERIAL CHASE CAMERA VIEW'
-  };
   if (porterFlightController.viewMode === 'window') {
     player.yaw = porterFlightController.heading - Math.PI / 2;
+    player.pitch = -0.06;
   } else {
     player.yaw = porterFlightController.heading + Math.PI;
+    player.pitch = -0.08;
   }
-  showAnnouncement(labels[porterFlightController.viewMode], 2600);
   return true;
 }
 
@@ -4085,12 +4055,6 @@ function togglePorterFreePilot() {
   if (porterFlightController.freePilot && porterFlightController.y < 80) {
     porterFlightController.y = 220;
   }
-  showAnnouncement(
-    porterFlightController.freePilot
-      ? '🕹️ FREE-PILOT MODE ENGAGED! Use [W/S] to Climb/Descend & [A/D] to Bank Around Toronto!'
-      : '🧭 AUTOPILOT SCENIC CITY LOOP RESUMED!',
-    3200
-  );
   return true;
 }
 
@@ -4168,14 +4132,14 @@ function updatePorterFlight(dt) {
   // Exact 3D local eye position relative to the aircraft coordinate frame
   const eyeLocal = new THREE.Vector3();
   if (porterFlightController.viewMode === 'cockpit') {
-    // Flight deck captain's seat looking out the front windshield
-    eyeLocal.set(-0.52, 0.42, -13.20);
+    // Flight deck captain's seat looking over the glareshield (y=0.22) and EFIS controls out the front/side windshields!
+    eyeLocal.set(-0.48, 0.56, -13.10);
   } else if (porterFlightController.viewMode === 'chase') {
     // Smooth third-person aerial chase perspective
     eyeLocal.set(0, 5.8, 28.0);
   } else {
-    // Cabin Seat 6A window seat (inside fuselage wall at x = -1.08, window eye level at y = 0.38, z = -2.80)
-    eyeLocal.set(-1.08, 0.38, -2.80);
+    // Cabin Seat 6A window seat (inside fuselage at x = -1.08, window eye level at y = 0.40, z = -2.80)
+    eyeLocal.set(-1.08, 0.40, -2.80);
   }
 
   if (planeMesh && planeMesh.rotation) {
@@ -4220,8 +4184,6 @@ function landPorterFlight() {
   camera.rotation.y = 0;
   camera.rotation.x = 0;
   camera.rotation.z = 0;
-
-  showAnnouncement('🛬 TOUCHDOWN AT BILLY BISHOP TORONTO CITY AIRPORT (CYTZ) • WELCOME BACK!', 4200);
 }
 
 window.startPorterFlight = startPorterFlight;
@@ -4279,9 +4241,6 @@ function boardStreetcar(sc) {
   camera.rotation.order = 'YXZ';
   camera.rotation.y = player.yaw;
   camera.rotation.x = player.pitch;
-
-  const routeLabel = car.sign || '504 KING';
-  showAnnouncement(`🚋 BOARDED TTC FLEXITY STREETCAR (${routeLabel})!\nEnjoy 360° panoramic street views • Press [E] at any time to pull the yellow stop cord & step off!`, 4500);
   return true;
 }
 
@@ -4335,7 +4294,6 @@ function disembarkStreetcar() {
   }
   player.velocity.set(0, 0, 0);
   player.isGrounded = true;
-  showAnnouncement('🔔 STOP REQUESTED • DISEMBARKED TTC STREETCAR!', 2800);
   return true;
 }
 
@@ -4452,7 +4410,6 @@ function selectElevatorFloor(idx) {
   if (idx < 0 || idx >= stops.length) return;
   closeElevatorPanel();
   if (idx === currentStopIndex()) {
-    showAnnouncement(`🛗 YOU'RE ALREADY ON ${stops[idx].label}`, 1800);
     return;
   }
   startElevatorRide(idx);
@@ -4497,7 +4454,6 @@ function startElevatorRide(targetIdx) {
     const levelName = document.getElementById('elev-level-name');
     if (levelName) levelName.innerText = `${verb} TO ${target.label} • ${target.name}`;
   }
-  showAnnouncement(`🚀 GLASS ELEVATOR ${verb}: ${target.label} • ${target.name}`, 3000);
 }
 
 function updateElevator(dt) {
@@ -4572,15 +4528,6 @@ function arriveElevator() {
   state.onObservationDeck = idx > 0;
   state.deckFloor = Math.max(1, idx);
   if (scene.fog && idx === 0) scene.fog.density = 0.0021;
-
-  const msgs = [
-    '🕊️ BACK ON THE PLAZA • CN TOWER PEACE SANCTUARY',
-    '🌟 LEVEL 1 • 342m GLASS FLOOR & OUTDOOR SKYTERRACE 🌟',
-    '🔭 LEVEL 2 • 348m MAIN LOOKOUT & TELESCOPES 🔭',
-    '🍽️ LEVEL 3 • 354m 360 RESTAURANT 🍽️',
-    '🧗 LEVEL 4 • 356m CN TOWER EDGEWALK • GUINNESS WORLD RECORD HANDS-FREE SKYWALK 🧗'
-  ];
-  showAnnouncement(msgs[idx] || stop.name, 4000);
 }
 
 // Kept for older callers: floor under (x, z) given EYE height
@@ -4616,13 +4563,14 @@ function updateObservationDeck(dt) {
 
   if (state.onPlane) {
     activeDeckAction = 'land_porter_flight';
-    setDeckPrompt('[E] LAND • [V] VIEW • [C] PILOT', 'PORTER Q400 FLIGHT • [V] WINDOW/COCKPIT/CHASE • [C] FREE-PILOT • [E] LAND');
+    const modeLabel = porterFlightController.viewMode === 'cockpit' ? 'COCKPIT' : (porterFlightController.viewMode === 'chase' ? 'CHASE' : 'WINDOW');
+    setDeckPrompt('[E] LAND • [V] VIEW • [C] PILOT', `PORTER Q400 (${modeLabel})`);
     return;
   }
 
   if (state.onStreetcar) {
     activeDeckAction = 'disembark_streetcar';
-    setDeckPrompt('[E]', 'PULL YELLOW CORD • DISEMBARK TTC STREETCAR AT CURB');
+    setDeckPrompt('[E]', 'DISEMBARK STREETCAR');
     return;
   }
 
@@ -4635,7 +4583,7 @@ function updateObservationDeck(dt) {
     const dPorterRwy = Math.hypot(player.pos.x - (-1360), player.pos.z - 1030);
     if (dPorterGate < 26 || dPorterApron < 24 || dPorterRwy < 26) {
       activeDeckAction = 'board_porter_flight';
-      setDeckPrompt('[E]', 'BOARD PORTER Q400 TURBOPROP • SCENIC FLIGHT LOOP AROUND TORONTO');
+      setDeckPrompt('[E]', 'BOARD PORTER Q400 FLIGHT');
       return;
     }
 
@@ -4643,7 +4591,7 @@ function updateObservationDeck(dt) {
     const nearSc = findNearbyStreetcar(10.5);
     if (nearSc) {
       activeDeckAction = { type: 'board_streetcar', sc: nearSc };
-      setDeckPrompt('[E]', `BOARD TTC STREETCAR • ${nearSc.sign || '504 KING'}`);
+      setDeckPrompt('[E]', `BOARD STREETCAR (${nearSc.sign || '504 KING'})`);
       return;
     }
 
@@ -4651,7 +4599,7 @@ function updateObservationDeck(dt) {
     const dSpeakers = Math.hypot(player.pos.x - (-558), player.pos.z - (-602));
     if (dSpeakers < 8.5) {
       activeDeckAction = 'speakers_corner';
-      setDeckPrompt('[E]', 'DROP A LOONIE ($1) • RECORD AT MUCHMUSIC / CITYTV SPEAKERS CORNER');
+      setDeckPrompt('[E]', 'SPEAKERS CORNER BOOTH ($1)');
       return;
     }
 
@@ -4660,7 +4608,7 @@ function updateObservationDeck(dt) {
       const dRoundhouse = Math.hypot(player.pos.x - city.landmarks.roundhouse[0], player.pos.z - city.landmarks.roundhouse[1]);
       if (dRoundhouse < 18.0) {
         activeDeckAction = 'roundhouse_whistle';
-        setDeckPrompt('[E]', 'BLOW 5:00 PM STEAM WHISTLE & OPERATE ROUNDHOUSE TURNTABLE');
+        setDeckPrompt('[E]', 'STEAM WHISTLE & TURNTABLE');
         return;
       }
     }
@@ -4669,7 +4617,7 @@ function updateObservationDeck(dt) {
     const dRogers = Math.hypot(player.pos.x - (-485), player.pos.z - 235);
     if (dRogers < 18.0) {
       activeDeckAction = 'rogers_dome_toggle';
-      setDeckPrompt('[E]', 'OPERATE ROGERS CENTRE RETRACTABLE ROOF & BLUE JAYS HOME RUN HORN');
+      setDeckPrompt('[E]', 'ROGERS CENTRE RETRACTABLE ROOF');
       return;
     }
 
@@ -4677,7 +4625,7 @@ function updateObservationDeck(dt) {
     const dBerczy = Math.hypot(player.pos.x - 642, player.pos.z - (-428));
     if (dBerczy < 8.5) {
       activeDeckAction = 'berczy_dog_fountain';
-      setDeckPrompt('[E]', 'TOSS A COIN IN THE 27-DOG FOUNTAIN & GREET SCULPTED CAT');
+      setDeckPrompt('[E]', 'TOSS COIN IN DOG FOUNTAIN');
       return;
     }
 
@@ -4685,7 +4633,7 @@ function updateObservationDeck(dt) {
     const dStLawrence = Math.hypot(player.pos.x - 840, player.pos.z - (-455));
     if (dStLawrence < 9.5) {
       activeDeckAction = 'st_lawrence_peameal';
-      setDeckPrompt('[E]', 'ORDER CAROUSEL BAKERY WORLD-FAMOUS PEAMEAL BACON ON A KAISER');
+      setDeckPrompt('[E]', 'CAROUSEL BAKERY PEAMEAL BACON');
       return;
     }
 
@@ -4693,7 +4641,7 @@ function updateObservationDeck(dt) {
     const dLhDoor = Math.hypot(player.pos.x - (-480), player.pos.z - 1515.7);
     if (dLhDoor < 4.2) {
       activeDeckAction = 'climb_lighthouse';
-      setDeckPrompt('[E]', 'CLIMB 1808 LIGHTHOUSE SPIRAL STAIRCASE • MEET KEEPER RADELMÜLLER\'S GHOST');
+      setDeckPrompt('[E]', 'CLIMB 1808 LIGHTHOUSE');
       return;
     }
 
@@ -4703,7 +4651,7 @@ function updateObservationDeck(dt) {
         const dSub = Math.hypot(player.pos.x - st.streetX, player.pos.z - st.streetZ);
         if (dSub < 6.5) {
           activeDeckAction = 'enter_subway_' + st.id;
-          setDeckPrompt('[E]', 'ENTER TTC SUBWAY • LINE 1 (' + st.name.toUpperCase() + ')');
+          setDeckPrompt('[E]', 'ENTER ' + st.name.toUpperCase() + ' SUBWAY');
           return;
         }
       }
@@ -4715,21 +4663,21 @@ function updateObservationDeck(dt) {
     if (state.onSubway) {
       activeDeckAction = 'disembark_subway_train';
       const curStop = city.subway.stations[city.subway.state.currentStopIdx] || city.subway.stations[0];
-      setDeckPrompt('[E]', 'DISEMBARK TTC TORONTO ROCKET AT ' + curStop.name.toUpperCase());
+      setDeckPrompt('[E]', 'EXIT TRAIN (' + curStop.name.toUpperCase() + ')');
       return;
     }
     const tState = city.subway.state;
     const dTrain = Math.hypot(player.pos.x - tState.x, player.pos.z - tState.z);
     if (tState.isStopped && tState.doorsOpen && dTrain < 16.0) {
       activeDeckAction = 'board_subway_train';
-      setDeckPrompt('[E]', 'BOARD TTC TORONTO ROCKET • LINE 1 SUBWAY TRAIN');
+      setDeckPrompt('[E]', 'BOARD LINE 1 SUBWAY');
       return;
     }
     for (const st of city.subway.stations) {
       const dExit = Math.hypot(player.pos.x - st.x, player.pos.z - (st.z + 32));
       if (dExit < 7.5) {
         activeDeckAction = 'exit_subway_' + st.id;
-        setDeckPrompt('[E]', 'EXIT TO STREET LEVEL (' + st.name.toUpperCase() + ')');
+        setDeckPrompt('[E]', 'EXIT TO STREET (' + st.name.toUpperCase() + ')');
         return;
       }
     }
@@ -4741,7 +4689,7 @@ function updateObservationDeck(dt) {
     const inMainDock = dMainDock < 22 || (player.pos.x >= 695 && player.pos.x <= 738 && player.pos.z >= 295 && player.pos.z <= 348);
     if (inMainDock) {
       activeDeckAction = 'ferry_to_island';
-      setDeckPrompt('[E]', 'TORONTO ISLAND FERRIES • CHOOSE DOCK (CENTRE / HANLAN\'S / WARD\'S)');
+      setDeckPrompt('[E]', 'ISLAND FERRY TERMINAL');
       return;
     }
     const dArchDock = Math.hypot(player.pos.x - 0, player.pos.z - 1200);
@@ -4750,21 +4698,21 @@ function updateObservationDeck(dt) {
     const inIslandDock = inArchDock || dIslandDock < 22 || (player.pos.x >= 165 && player.pos.x <= 195 && player.pos.z >= 1060 && player.pos.z <= 1095);
     if (inIslandDock) {
       activeDeckAction = 'ferry_to_mainland';
-      setDeckPrompt('[E]', 'CENTRE ISLAND DOCK • CHOOSE DESTINATION DOCK');
+      setDeckPrompt('[E]', 'CENTRE ISLAND FERRY DOCK');
       return;
     }
     const dHanlansDock = Math.hypot(player.pos.x - (-720), player.pos.z - 1090);
     const inHanlansDock = dHanlansDock < 28 || (player.pos.x >= -745 && player.pos.x <= -695 && player.pos.z >= 1055 && player.pos.z <= 1125);
     if (inHanlansDock) {
       activeDeckAction = 'ferry_from_hanlans';
-      setDeckPrompt('[E]', 'HANLAN\'S POINT DOCK • CHOOSE DESTINATION DOCK');
+      setDeckPrompt('[E]', 'HANLAN\'S POINT FERRY DOCK');
       return;
     }
     const dWardsDock = Math.hypot(player.pos.x - 1140, player.pos.z - 1180);
     const inWardsDock = dWardsDock < 28 || (player.pos.x >= 1115 && player.pos.x <= 1165 && player.pos.z >= 1145 && player.pos.z <= 1215);
     if (inWardsDock) {
       activeDeckAction = 'ferry_from_wards';
-      setDeckPrompt('[E]', 'WARD\'S ISLAND DOCK • CHOOSE DESTINATION DOCK');
+      setDeckPrompt('[E]', 'WARD\'S ISLAND FERRY DOCK');
       return;
     }
     // Billy Bishop Airport Ferry (Western Gap Channel: Bathurst Quay <-> Island Airport)
@@ -4772,14 +4720,14 @@ function updateObservationDeck(dt) {
     const inAirportMain = dAirportMain < 24 || (player.pos.x >= -1076 && player.pos.x <= -1044 && player.pos.z >= 668 && player.pos.z <= 718);
     if (inAirportMain) {
       activeDeckAction = 'airport_ferry_to_island';
-      setDeckPrompt('[E]', 'BOARD BILLY BISHOP AIRPORT FERRY (TO ISLAND AIRPORT TERMINAL)');
+      setDeckPrompt('[E]', 'AIRPORT FERRY TO ISLAND');
       return;
     }
     const dAirportIsland = Math.hypot(player.pos.x - (-1060), player.pos.z - 870);
     const inAirportIsland = dAirportIsland < 24 || (player.pos.x >= -1076 && player.pos.x <= -1044 && player.pos.z >= 848 && player.pos.z <= 900);
     if (inAirportIsland) {
       activeDeckAction = 'airport_ferry_to_mainland';
-      setDeckPrompt('[E]', 'BOARD BILLY BISHOP AIRPORT FERRY (TO MAINLAND BATHURST QUAY)');
+      setDeckPrompt('[E]', 'AIRPORT FERRY TO MAINLAND');
       return;
     }
     if (ferryPanel.open && dMainDock > 32 && dArchDock > 34 && dHanlansDock > 34 && dWardsDock > 34) {
@@ -4792,7 +4740,7 @@ function updateObservationDeck(dt) {
     const dLhCatwalk = Math.hypot(player.pos.x - (-480), player.pos.z - 1520);
     if (dLhCatwalk < 4.8) {
       activeDeckAction = 'descend_lighthouse';
-      setDeckPrompt('[E]', 'DESCEND SPIRAL STAIRCASE TO ISLAND GROUND');
+      setDeckPrompt('[E]', 'DESCEND LIGHTHOUSE');
       return;
     }
   }
@@ -4807,7 +4755,7 @@ function updateObservationDeck(dt) {
     const dPav = Math.hypot(player.pos.x - city.cnElevator.entrancePavilion.doorX, player.pos.z - city.cnElevator.entrancePavilion.doorZ);
     if (dElev < elevCallR || dPav < 4.5) {
       activeDeckAction = 'elevator';
-      setDeckPrompt('[E]', 'CN TOWER ELEVATOR • CHOOSE A FLOOR');
+      setDeckPrompt('[E]', 'CN TOWER ELEVATOR');
       return;
     }
     // Only auto-close if player has walked well away from the elevator entrance (> 8m)
@@ -4820,23 +4768,12 @@ function updateObservationDeck(dt) {
     state.onObservationDeck = true;
     state.deckFloor = feet > 356.0 ? 4 : (feet > 351.0 ? 3 : (feet > 345.0 ? 2 : 1));
 
-    const cx = city.landmarks.cnTower[0];
-    const cz = city.landmarks.cnTower[1];
-    const dx = player.pos.x - cx;
-    const dz = player.pos.z - cz;
-    const r = Math.hypot(dx, dz);
-
-    // Glass floor mesh sits on the SOUTH side (+z) of Level 1, r 9.5 to 17.5
-    const onSouthGlassFloor = (state.deckFloor === 1 && dz > 5.0 && Math.abs(dx) < 7.8 && r >= 9.5 && r <= 17.5);
     const glassFloorEl = document.getElementById('glass-floor-indicator');
-    if (glassFloorEl) {
-      if (!onSouthGlassFloor) glassFloorEl.classList.add('hidden');
-      else glassFloorEl.classList.remove('hidden');
-    }
+    if (glassFloorEl) glassFloorEl.classList.add('hidden');
 
     if (dElev < elevCallR && [342, 348, 354, 358.6].some(y => Math.abs(feet - y) < 0.8)) {
       activeDeckAction = 'elevator';
-      setDeckPrompt('[E]', 'GLASS ELEVATOR • CHOOSE A FLOOR');
+      setDeckPrompt('[E]', 'CN TOWER ELEVATOR');
       return;
     }
     // Only auto-close if player has walked away (> 8m)
@@ -4845,8 +4782,7 @@ function updateObservationDeck(dt) {
     }
 
     if (state.deckFloor === 4) {
-      activeDeckAction = 'cn_edgewalk';
-      setDeckPrompt('356M', 'CN TOWER EDGEWALK • 356m / 1,168ft OPEN-AIR CATWALK • [W/A/S/D] CIRCLE 360°');
+      if (promptEl) promptEl.classList.add('hidden');
       return;
     }
 
@@ -4856,7 +4792,7 @@ function updateObservationDeck(dt) {
         const dVf = Math.hypot(player.pos.x - vf.worldX, player.pos.z - vf.worldZ);
         if (dVf < 2.5) {
           activeDeckAction = { type: 'telescope', vf };
-          setDeckPrompt('[E] / [V]', `PEER THROUGH TELESCOPE: ${vf.name}`);
+          setDeckPrompt('[E]', `TELESCOPE: ${vf.name}`);
           return;
         }
       }
@@ -4867,7 +4803,7 @@ function updateObservationDeck(dt) {
       const dTerm = Math.hypot(player.pos.x - term.x, player.pos.z - term.z);
       if (dTerm < 2.6) {
         activeDeckAction = 'start_showdown';
-        setDeckPrompt('[G]', 'START SKY SHOWDOWN MINI-GAME');
+        setDeckPrompt('[G]', 'SKY SHOWDOWN');
         return;
       }
     }
@@ -4922,27 +4858,23 @@ function handleDeckAction() {
     updateHUDHealth();
     audio.playPickup();
     const quotes = [
-      '📹 SPEAKERS CORNER [REC ●]: "299 QUEEN WEST FOREVER! BRING BACK ELECTRIC CIRCUS & THE CHUM CITY BUILDING!" (+35 HP & ARMOR)',
-      '📹 SPEAKERS CORNER [REC ●]: "WHY DOES THE 504 KING STREETCAR ALWAYS BUNCH UP IN THREES?! LOVE YOU TORONTO!" (+35 HP & ARMOR)',
-      '📹 SPEAKERS CORNER [REC ●]: "SHOUTOUT TO THE RACCOONS OF KENSINGTON MARKET AND PEAMEAL BACON AT ST. LAWRENCE!" (+35 HP & ARMOR)'
+      '📹 SPEAKERS CORNER: "299 Queen West forever!" (+35 HP)',
+      '📹 SPEAKERS CORNER: "Why does the 504 King always bunch up in threes?!" (+35 HP)',
+      '📹 SPEAKERS CORNER: "Shoutout to the raccoons of Kensington Market!" (+35 HP)'
     ];
-    showAnnouncement(quotes[Math.floor(Math.random() * quotes.length)], 4800);
+    showAnnouncement(quotes[Math.floor(Math.random() * quotes.length)], 3200);
     return true;
   }
   if (activeDeckAction === 'roundhouse_whistle') {
     if (audio && audio.playFerryHorn) audio.playFerryHorn();
     createFireworkBurst(player.pos.x, player.pos.y + 12, player.pos.z);
-    showAnnouncement('🚂 CHOO-CHOO! STEAM WHISTLE PILSNER 5:00 PM WHISTLE & CPR #5930 TURNTABLE ACTIVATED!', 4000);
     return true;
   }
   if (activeDeckAction === 'rogers_dome_toggle') {
     if (city && city.rogersCentreDome) {
-      const open = city.rogersCentreDome.toggleRoof();
+      city.rogersCentreDome.toggleRoof();
       if (audio && audio.playHomeRunHorn) audio.playHomeRunHorn();
       createFireworkBurst(-485, 45, 235);
-      showAnnouncement(open
-        ? '🏟️ ROGERS CENTRE SKYDOME • RETRACTABLE ROOF OPENING TO THE TORONTO SKY! ⚾ HOME RUN HORN SOUNDS!'
-        : '🏟️ ROGERS CENTRE SKYDOME • RETRACTABLE ROOF CLOSING OVER BALLPARK! ⚾ HOME RUN HORN SOUNDS!', 4600);
     }
     return true;
   }
@@ -4950,7 +4882,6 @@ function handleDeckAction() {
     if (audio && audio.playCoinSplash) audio.playCoinSplash();
     state.health = Math.min(state.maxHealth, state.health + 25);
     updateHUDHealth();
-    showAnnouncement('🪙 BERCZY PARK • You tossed a lucky loonie into the 27-Dog Fountain! The golden bone glimmers in the sun as 27 dogs spout water. The sculpted cat blinks aloofly.', 4800);
     return true;
   }
   if (activeDeckAction === 'st_lawrence_peameal') {
@@ -4959,7 +4890,6 @@ function handleDeckAction() {
     state.armor = state.maxArmor;
     state.peamealBoostTimer = 30.0;
     updateHUDHealth();
-    showAnnouncement('🥓 CAROUSEL BAKERY • World-Famous Peameal Bacon on a Kaiser! 100% Health & Armor Restored + 30s Toronto Sprint Speed Boost!', 4800);
     return true;
   }
   if (activeDeckAction === 'climb_lighthouse') {
@@ -4967,14 +4897,12 @@ function handleDeckAction() {
     player.velocity.set(0, 0, 0);
     player.yaw = Math.PI;
     if (audio && audio.playElevatorDing) audio.playElevatorDing();
-    showAnnouncement('👻 1808 GIBRALTAR POINT LIGHTHOUSE • Keeper Radelmüller’s Ghost whispers: "Still watching the shoals of Lake Ontario since 1815... Beware the midnight squalls."', 5200);
     return true;
   }
   if (activeDeckAction === 'descend_lighthouse') {
     player.pos.set(-480, 0.55 + EYE_HEIGHT, 1514.0);
     player.velocity.set(0, 0, 0);
     player.yaw = 0;
-    showAnnouncement('🌲 BACK ON GIBRALTAR POINT • Returned to the island grounds beneath the 1808 limestone tower.', 3500);
     return true;
   }
   // TTC Line 1 Subway System Interactions
@@ -4989,7 +4917,6 @@ function handleDeckAction() {
       player.yaw = 0;
       player.pitch = 0;
       state.isUnderground = true;
-      showAnnouncement(`🚇 ENTERED ${st.name.toUpperCase()} (TTC LINE 1) • PRESTO CARD TAPPED ($3.35 FARE)`, 4000);
       return true;
     }
   }
@@ -5000,13 +4927,11 @@ function handleDeckAction() {
       player.pos.set(st.streetX, 1.7, st.streetZ);
       player.velocity.set(0, 0, 0);
       state.isUnderground = false;
-      showAnnouncement(`🏙️ RETURNED TO STREET LEVEL • ${st.name.toUpperCase()}`, 3200);
       return true;
     }
   }
   if (activeDeckAction === 'board_subway_train') {
     state.onSubway = true;
-    showAnnouncement('🚇 BOARDED TTC TORONTO ROCKET SUBWAY TRAIN • STAND CLEAR OF THE CLOSING DOORS!', 3600);
     return true;
   }
   if (activeDeckAction === 'disembark_subway_train') {
@@ -5016,7 +4941,6 @@ function handleDeckAction() {
       : { name: 'Station', x: 265, z: -140 };
     player.pos.set(curStop.x, (city && city.subway) ? city.subway.platformY + EYE_HEIGHT : -14.0 + EYE_HEIGHT, curStop.z);
     player.velocity.set(0, 0, 0);
-    showAnnouncement(`🚇 DISEMBARKED AT ${curStop.name.toUpperCase()} PLATFORM`, 3200);
     return true;
   }
   if (activeDeckAction === 'elevator') {
@@ -5847,18 +5771,7 @@ function resumeGame(usePointerLock = true) {
   state.freeMouseMode = !usePointerLock;
   const overlay = document.getElementById('menu-overlay');
   if (overlay) overlay.classList.add('hidden');
-
-  try {
-    if (!state.hasShownSpawnIntro && city && city.spawnLocations) {
-      state.hasShownSpawnIntro = true;
-      const currentLoc = city.spawnLocations[currentTourIndex] || city.start;
-      if (currentLoc) {
-        showAnnouncement(`📍 EXPLORING TORONTO: ${currentLoc.name.toUpperCase()}\n${currentLoc.desc || ''}`, 3600);
-      }
-    }
-  } catch (err) {
-    console.warn('Spawn announcement error:', err);
-  }
+  state.hasShownSpawnIntro = true;
 
   try {
     if (usePointerLock && container && container.requestPointerLock) {
@@ -6853,6 +6766,8 @@ function updateKickLeg(prog) {
 }
 
 function updateArmsRig(dt) {
+  armsRig.visible = !(state.onPlane || state.telescopeActive);
+  if (!armsRig.visible) return;
   vm.time += dt;
 
   // --- Look sway: hands lag behind camera rotation ---
@@ -7032,35 +6947,11 @@ function triggerSlamFlash() {
   setTimeout(() => f.style.opacity = '0', 180);
 }
 
-// Peace Sanctuary Banner Controller
+// Peace Sanctuary Banner Controller (handled quietly via top-right pill indicator)
 var peaceBannerTimer = null;
 function triggerPeaceZoneBanner(insidePeace) {
   const banner = document.getElementById('peace-zone-banner');
-  if (!banner) return;
-
-  clearTimeout(peaceBannerTimer);
-  banner.classList.remove('hidden');
-
-  const title = banner.querySelector('.peace-banner-title');
-  const sub = banner.querySelector('.peace-banner-sub');
-  const icon = banner.querySelector('.peace-banner-icon');
-
-  if (insidePeace) {
-    banner.classList.remove('combat-alert');
-    if (title) title.innerText = 'CN TOWER PEACE SANCTUARY';
-    if (sub) sub.innerText = 'NO COMBAT PERMITTED • SAFE HAVEN • VITALITY REGENERATING';
-    if (icon) icon.innerText = '🕊️';
-    audio.playPeaceChime?.();
-  } else {
-    banner.classList.add('combat-alert');
-    if (title) title.innerText = 'EXITING PEACE SANCTUARY';
-    if (sub) sub.innerText = 'COMBAT ZONE ACTIVE • WATCH YOUR BACK!';
-    if (icon) icon.innerText = '⚠️';
-  }
-
-  peaceBannerTimer = setTimeout(() => {
-    banner.classList.add('hidden');
-  }, 3800);
+  if (banner) banner.classList.add('hidden');
 }
 
 function registerCombo() {
@@ -8374,7 +8265,6 @@ function resetGame() {
     camera.rotation.order = 'YXZ';
     camera.rotation.y = nextSpawn.yaw;
     currentTourIndex = nextSpawn.index !== undefined ? nextSpawn.index : currentTourIndex;
-    showAnnouncement(`📍 SPAWNED: ${nextSpawn.name.toUpperCase()}\n${nextSpawn.desc}`, 3600);
   } else if (city && city.start) {
     player.pos.set(city.start.x, 1.7, city.start.z);
     player.yaw = city.startYaw;

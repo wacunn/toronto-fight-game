@@ -367,9 +367,7 @@
             if (!isFirst) {
               console.log(`🧠 AI Copilot: newer weights available (step ${status.step.toLocaleString()}). Hot-reloading...`);
               await this.loadWeights(true);
-              if (window.showAnnouncement) {
-                window.showAnnouncement(`🧠 AI UPDATED: STEP ${status.step.toLocaleString()}`, 2000);
-              }
+              console.log(`🧠 AI UPDATED: STEP ${status.step.toLocaleString()}`);
             }
           }
         } catch (e) { /* local file/offline */ }
@@ -383,8 +381,6 @@
       this.lastGoalKey = '';
       this.resetMemory();
       this.updateModePill();
-      const label = this.mode === 'neural' ? '🧠 NEURAL RL' : '⚡ TACTICAL EXPERT';
-      if (window.showAnnouncement) window.showAnnouncement(`AI MODE: ${label}`, 2000);
     }
 
     cyclePersona() {
@@ -400,8 +396,6 @@
         this.lastGoalKey = '';
         this.resetMemory();
         this.updateModePill();
-        const label = persona === 'fighter' ? '🥊 BRAWLER MODE' : '📦 CRATE HUNTER';
-        if (window.showAnnouncement) window.showAnnouncement(`AI PERSONA: ${label}`, 2000);
         console.log(`🤖 AI Copilot: switched persona to ${persona.toUpperCase()}`);
       } else {
         console.log(`🤖 AI Copilot: persona ${persona} not loaded yet.`);
@@ -455,8 +449,8 @@
       if (!topBar) topBar = document.body;
       const btn = document.createElement('button');
       btn.id = 'ai-watch-btn'; btn.className = 'ai-toggle-btn';
-      btn.innerHTML = '🤖 WATCH AI <span class="ai-key-hint">[V]</span>';
-      btn.title = 'Let the trained AI play (V)';
+      btn.innerHTML = '🤖 AI <span class="ai-key-hint">[V]</span>';
+      btn.title = 'Toggle AI Copilot (V)';
       btn.onclick = () => this.toggle();
       topBar.appendChild(btn); this.btnEl = btn;
 
@@ -464,34 +458,28 @@
       personaBtn.id = 'ai-persona-top-btn'; personaBtn.className = 'ai-toggle-btn';
       personaBtn.innerHTML = 'AI: 📦 CRATE <span class="ai-key-hint">[N]</span>';
       personaBtn.title = 'Switch AI Persona: Crate Hunter vs Brawler (N)';
+      personaBtn.style.display = 'none';
       personaBtn.onclick = () => this.cyclePersona();
       topBar.appendChild(personaBtn); this.personaBtnEl = personaBtn;
 
       const muteBtn = document.createElement('button');
       muteBtn.id = 'audio-mute-btn'; muteBtn.className = 'ai-toggle-btn';
       const isMuted = (window.audio && window.audio.isMuted) || (new URLSearchParams(window.location.search).get('muted') === '1');
-      muteBtn.innerHTML = isMuted ? '🔇 MUTED <span class="ai-key-hint">[M]</span>' : '🔊 SOUND <span class="ai-key-hint">[M]</span>';
+      muteBtn.innerHTML = isMuted ? '🔇 <span class="ai-key-hint">[M]</span>' : '🔊 <span class="ai-key-hint">[M]</span>';
       if (isMuted) muteBtn.classList.add('active');
       muteBtn.onclick = () => { if (window.audio && window.audio.toggleMute) window.audio.toggleMute(); };
       topBar.appendChild(muteBtn);
-
-      const boardBtn = document.createElement('a');
-      boardBtn.id = 'ai-leaderboard-btn'; boardBtn.className = 'ai-toggle-btn';
-      boardBtn.innerHTML = '📊 RL TRAINING'; boardBtn.href = 'dashboard.html'; boardBtn.target = '_blank';
-      boardBtn.style.textDecoration = 'none';
-      topBar.appendChild(boardBtn);
 
       const banner = document.createElement('div');
       banner.id = 'ai-pilot-hud'; banner.className = 'ai-pilot-banner hidden';
       banner.innerHTML = `
         <div class="ai-pilot-indicator">
           <span class="ai-pulse-dot"></span>
-          <span class="ai-title">AI COPILOT ACTIVE</span>
+          <span class="ai-title">AI</span>
           <span id="ai-persona-pill" class="ai-mode-pill" style="cursor:pointer;background:rgba(0,0,0,0.5);border:1px solid #38bdf8;color:#7dd3fc;padding:3px 8px;border-radius:4px;margin-left:8px;font-size:11px;font-weight:700;text-transform:uppercase;"></span>
           <span id="ai-mode-pill" class="ai-mode-pill" style="cursor:pointer;background:rgba(0,0,0,0.5);border:1px solid #10b981;color:#6ee7b7;padding:3px 8px;border-radius:4px;margin-left:8px;font-size:11px;font-weight:700;text-transform:uppercase;"></span>
-          <span class="ai-cancel-prompt">[PRESS V TO TAKE OVER]</span>
         </div>
-        <div id="ai-intent-status" class="ai-intent-sub">INITIALIZING...</div>`;
+        <div id="ai-intent-status" class="ai-intent-sub" style="display:none;"></div>`;
       document.body.appendChild(banner);
       this.bannerEl = banner;
       this.intentEl = document.getElementById('ai-intent-status');
@@ -516,7 +504,10 @@
       }
       if (this.btnEl) {
         this.btnEl.classList.toggle('active', this.isActive);
-        this.btnEl.innerHTML = this.isActive ? '🤖 AI ACTIVE <span class="ai-key-hint">[V]</span>' : '🤖 WATCH AI <span class="ai-key-hint">[V]</span>';
+        this.btnEl.innerHTML = this.isActive ? '🤖 AI ON <span class="ai-key-hint">[V]</span>' : '🤖 AI <span class="ai-key-hint">[V]</span>';
+      }
+      if (this.personaBtnEl) {
+        this.personaBtnEl.style.display = this.isActive ? '' : 'none';
       }
       if (this.bannerEl) this.bannerEl.classList.toggle('hidden', !this.isActive);
       this.moveDir.set(0, 0, 0); this.moveLocal = [0, 0]; this.turnRate = 0; this.sprint = false;
