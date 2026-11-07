@@ -4461,16 +4461,23 @@ function teleportToRandomSubwayEntrance() {
   const st = candidates[Math.floor(Math.random() * candidates.length)];
   const stIdx = stations.indexOf(st);
 
-  // Place player 4.2m south of the subway stairwell entrance, facing north (yaw = 0) straight at the stairs & red SUBWAY sign
-  const stFloor = (city && city.floorAt) ? city.floorAt(st.streetX, st.streetZ + 4.2, 0) : 0;
-  player.pos.set(st.streetX, stFloor + EYE_HEIGHT, st.streetZ + 4.2);
-  player.yaw = 0;
-  player.pitch = -0.05;
+  // Place player right at the street-level entrance doorway (s = -2.2m along the staircase axis),
+  // facing directly down the open physical stairs into the subway station!
+  const sDx = st.x - st.streetX;
+  const sDz = (st.z + 32) - st.streetZ;
+  const sLen = Math.hypot(sDx, sDz) || 1;
+  const entX = st.streetX - (sDx / sLen) * 2.2;
+  const entZ = st.streetZ - (sDz / sLen) * 2.2;
+  const downStairsYaw = Math.atan2(sDx, sDz) + Math.PI;
+  const stFloor = (city && city.floorAt) ? city.floorAt(entX, entZ, 0) : 0;
+  player.pos.set(entX, stFloor + EYE_HEIGHT, entZ);
+  player.yaw = downStairsYaw;
+  player.pitch = -0.18;
   player.velocity.set(0, 0, 0);
   player.isGrounded = true;
   camera.rotation.order = 'YXZ';
-  camera.rotation.y = 0;
-  camera.rotation.x = -0.05;
+  camera.rotation.y = downStairsYaw;
+  camera.rotation.x = -0.18;
   state.onIsland = false;
   state.isUnderground = false;
   if (scene.fog) scene.fog.density = 0.0021;
@@ -7599,13 +7606,46 @@ function updatePlayer(dt) {
   const minPlayerY = floorY + 1.7;
 
   player.pos.y += player.velocity.y * dt;
+  const onSubwayStair = !!(city && city.subway && city.subway.getStairInfo && city.subway.getStairInfo(player.pos.x, player.pos.z));
   if (player.pos.y <= minPlayerY) {
     player.pos.y = minPlayerY;
     player.velocity.y = 0;
     player.isGrounded = true;
-  } else if (player.isGrounded && player.pos.y - minPlayerY < 0.65 && !keys['Space']) {
+  } else if (player.isGrounded && (player.pos.y - minPlayerY < 0.65 || onSubwayStair) && !keys['Space']) {
     player.pos.y = minPlayerY;
     player.velocity.y = 0;
+  }
+
+  // Automatically sync underground state when walking down or up the physical subway stairs!
+  const nowUnderground = (player.pos.y < -4.0);
+  if (nowUnderground && !state.isUnderground) {
+    state.isUnderground = true;
+    // Have the 6-car TTC Line 1 train waiting at the nearest station platform when walking down the stairs!
+    if (city && city.subway && city.subway.stations && city.subway.state) {
+      const stations = city.subway.stations;
+      let bestIdx = 0, bestD = Infinity;
+      for (let i = 0; i < stations.length; i++) {
+        const d = Math.hypot(player.pos.x - stations[i].x, player.pos.z - stations[i].z);
+        if (d < bestD) { bestD = d; bestIdx = i; }
+      }
+      const st = stations[bestIdx];
+      const tState = city.subway.state;
+      tState.currentStopIdx = bestIdx;
+      tState.nextStopIdx = (bestIdx + 1) % stations.length;
+      tState.isStopped = true;
+      tState.doorsOpen = true;
+      tState.stopTimer = 9.0;
+      tState.progress = 0;
+      tState.x = st.x - 7.4;
+      tState.z = st.z;
+      tState.heading = Math.PI;
+      if (city.subway.train) {
+        city.subway.train.position.set(tState.x, tState.y, tState.z);
+        city.subway.train.rotation.y = 0;
+      }
+    }
+  } else if (!nowUnderground && state.isUnderground && !state.onSubway) {
+    state.isUnderground = false;
   }
 
   if (isMoving && player.isGrounded) {
