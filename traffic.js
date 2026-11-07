@@ -985,7 +985,14 @@
         pedLensMesh.instanceColor.needsUpdate = true;
       }
       const people = [{ x: P.x, z: P.z, isPlayer: true, y: P.y }];
-      ctx.enemies.forEach(e => { if (!e.isDead && e.rig) people.push({ x: e.rig.root.position.x, z: e.rig.root.position.z, enemy: e }); });
+      ctx.enemies.forEach(e => {
+        if (!e.isDead && e.rig) {
+          const ep = e.rig.root.position;
+          if (ep.z < 650 && Math.abs(ep.x - P.x) < 170 && Math.abs(ep.z - P.z) < 170) {
+            people.push({ x: ep.x, z: ep.z, enemy: e });
+          }
+        }
+      });
       let nearest = Infinity, nearestSpeed = 0;
 
       cars.forEach(c => {

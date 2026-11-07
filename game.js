@@ -2507,8 +2507,18 @@ function create3DHumanFighter(x, z, kind = 'robot', archetypeIndex = 0) {
   root.add(nameplateSprite);
 
   let fighterEnemyObj = null;
+  let lastNpHp = NaN, lastNpMaxHp = NaN, lastNpStagger = null, lastNpUnmasked = null;
 
   function updateNameplate(hp, maxHp, isStaggered) {
+    const isUnmasked = !!(fighterEnemyObj && fighterEnemyObj.unmasked);
+    if (hp === lastNpHp && maxHp === lastNpMaxHp && !!isStaggered === lastNpStagger && isUnmasked === lastNpUnmasked) {
+      return;
+    }
+    lastNpHp = hp;
+    lastNpMaxHp = maxHp;
+    lastNpStagger = !!isStaggered;
+    lastNpUnmasked = isUnmasked;
+
     npCtx.clearRect(0, 0, 256, 72);
 
     // Background square/pill container
@@ -2722,6 +2732,8 @@ function spawnEnemy(x, z, kind = 'robot', archIdx = 0, isGuard = false, guardTit
 
   // Provide enemyObj reference to rig for nameplate updates
   fighterRig.enemyObj = enemyObj;
+  fighterRig.setEnemyObj = (obj) => { fighterEnemyObj = obj; };
+  fighterRig.setEnemyObj(enemyObj);
   enemies.push(enemyObj);
   return enemyObj;
 }
@@ -6623,8 +6635,14 @@ function updateRageBar() {
 const faceCanvas = document.getElementById('hud-face-canvas');
 const faceCtx = faceCanvas.getContext('2d');
 faceCtx.imageSmoothingEnabled = false;
+let lastFaceStateKey = '';
 
 function drawFace() {
+  const lookOffset = Math.sin(Date.now() * 0.003) > 0.4 ? 2 : 0;
+  const faceKey = `${state.faceExpression}|${state.isBerserk ? 1 : 0}|${state.health < 50 ? 1 : 0}|${lookOffset}`;
+  if (faceKey === lastFaceStateKey) return;
+  lastFaceStateKey = faceKey;
+
   faceCtx.fillStyle = '#101217';
   faceCtx.fillRect(0, 0, 72, 72);
 
@@ -6639,7 +6657,6 @@ function drawFace() {
   faceCtx.fillRect(50, 12, 6, 26);
 
   // Eyes
-  const lookOffset = Math.sin(Date.now() * 0.003) > 0.4 ? 2 : 0;
   faceCtx.fillStyle = '#fff';
   faceCtx.fillRect(22, 28, 9, 6);
   faceCtx.fillRect(41, 28, 9, 6);
@@ -7170,16 +7187,19 @@ function animate(now) {
     const towerDist = Math.round(Math.hypot(player.pos.x - city.landmarks.cnTower[0], player.pos.z - city.landmarks.cnTower[1]));
     const towerDistEl = document.getElementById('tower-distance');
     if (towerDistEl) {
+      let nextTowerText, nextTowerCol;
       if (player.pos.y > 50) {
-        towerDistEl.innerText = player.pos.y > 345.5 ? '348m LOOKOUT' : '342m GLASS FLR';
-        towerDistEl.style.color = '#38bdf8';
+        nextTowerText = player.pos.y > 345.5 ? '348m LOOKOUT' : '342m GLASS FLR';
+        nextTowerCol = '#38bdf8';
       } else if (city.isInsidePeaceZone(player.pos.x, player.pos.z)) {
-        towerDistEl.innerText = 'INSIDE';
-        towerDistEl.style.color = '#34d399';
+        nextTowerText = 'INSIDE';
+        nextTowerCol = '#34d399';
       } else {
-        towerDistEl.innerText = `${towerDist}m`;
-        towerDistEl.style.color = '#34d399';
+        nextTowerText = `${towerDist}m`;
+        nextTowerCol = '#34d399';
       }
+      if (towerDistEl.innerText !== nextTowerText) towerDistEl.innerText = nextTowerText;
+      if (towerDistEl.style.color !== nextTowerCol) towerDistEl.style.color = nextTowerCol;
     }
 
     // 2. Pointer & distance to Mission Goal
@@ -7201,16 +7221,18 @@ function animate(now) {
         else if (norm < -0.1) arrow = '↖';
 
         const shortName = missionState.landmark.name.length > 10 ? missionState.landmark.name.slice(0, 9) + '.' : missionState.landmark.name;
-        goalLabelEl.innerText = `${shortName.toUpperCase()}:`;
-        goalDistEl.innerText = `${mDist}m ${arrow}`;
-        goalDistEl.style.color = missionState.color.hex;
-        goalRowEl.style.borderColor = missionState.color.hex;
-        goalRowEl.style.display = 'flex';
+        const nextLabel = `${shortName.toUpperCase()}:`;
+        const nextDist = `${mDist}m ${arrow}`;
+        if (goalLabelEl.innerText !== nextLabel) goalLabelEl.innerText = nextLabel;
+        if (goalDistEl.innerText !== nextDist) goalDistEl.innerText = nextDist;
+        if (goalDistEl.style.color !== missionState.color.hex) goalDistEl.style.color = missionState.color.hex;
+        if (goalRowEl.style.borderColor !== missionState.color.hex) goalRowEl.style.borderColor = missionState.color.hex;
+        if (goalRowEl.style.display !== 'flex') goalRowEl.style.display = 'flex';
       } else {
-        goalLabelEl.innerText = 'GOAL:';
-        goalDistEl.innerText = 'NEXT SOON...';
-        goalDistEl.style.color = '#f59e0b';
-        goalRowEl.style.borderColor = 'rgba(245, 158, 11, 0.3)';
+        if (goalLabelEl.innerText !== 'GOAL:') goalLabelEl.innerText = 'GOAL:';
+        if (goalDistEl.innerText !== 'NEXT SOON...') goalDistEl.innerText = 'NEXT SOON...';
+        if (goalDistEl.style.color !== '#f59e0b') goalDistEl.style.color = '#f59e0b';
+        if (goalRowEl.style.borderColor !== 'rgba(245, 158, 11, 0.3)') goalRowEl.style.borderColor = 'rgba(245, 158, 11, 0.3)';
       }
     }
   }
@@ -7398,13 +7420,13 @@ function updatePlayer(dt) {
       updateHUDHealth();
     }
     const statusPill = document.getElementById('peace-zone-status');
-    if (statusPill) {
+    if (statusPill && statusPill.innerText !== '🕊️ PEACE SANCTUARY') {
       statusPill.className = 'peace-status-pill safe';
       statusPill.innerText = '🕊️ PEACE SANCTUARY';
     }
   } else {
     const statusPill = document.getElementById('peace-zone-status');
-    if (statusPill) {
+    if (statusPill && statusPill.innerText !== '⚔️ COMBAT ZONE') {
       statusPill.className = 'peace-status-pill danger';
       statusPill.innerText = '⚔️ COMBAT ZONE';
     }
@@ -7515,11 +7537,11 @@ function keepPeopleOutOfRailCut() {
     const e = enemies[i];
     if (!e.rig || e.isDeckEnemy) continue;
     const p = e.rig.root.position;
-    if (p.y > 20) continue;
+    if (p.z > 250 || p.z < -250 || p.y > 20) continue;
     const fix = city.pushOutOfTrench(p.x, p.z, 1.2);
     if (fix) { p.x = fix[0]; p.z = fix[1]; }
   }
-  if (player.pos.y < 20 && !state.inElevator) {
+  if (player.pos.y < 20 && player.pos.z <= 250 && player.pos.z >= -250 && !state.inElevator) {
     const fix = city.pushOutOfTrench(player.pos.x, player.pos.z, 1.2);
     if (fix && player.pos.y > -1) { player.pos.x = fix[0]; player.pos.z = fix[1]; }
   }
@@ -7563,13 +7585,14 @@ function updateEnemies(dt) {
 
     for (let i = enemies.length - 1; i >= 0; i--) {
       const e = enemies[i];
-      if (e.isDead || e.isKnockedOut || e.isMissionGuard || e.isDeckEnemy || e.isRemoteMirror || e.kind === 'civilian' || e.isIslandCitizen) continue;
+      if (e.isDead || e.isKnockedOut || e.isMissionGuard || e.isDeckEnemy || e.isRemoteMirror) continue;
+      if ((e.kind === 'civilian' || e.isIslandCitizen) && !e.isDynamicIslandSpawn) continue;
 
       const d = nearestPlayerDist(e.rig.root.position.x, e.rig.root.position.z);
-      if (d > 115) {
+      if (d > (e.isDynamicIslandSpawn ? 140 : 115)) {
         if (e.rig && e.rig.root) scene.remove(e.rig.root);
         enemies.splice(i, 1);
-        spawnSingleReinforcement();
+        if (!e.isDynamicIslandSpawn) spawnSingleReinforcement();
       }
     }
 
@@ -7582,7 +7605,7 @@ function updateEnemies(dt) {
     // When player is on the island, guarantee vibrant, bustling park life around the player
     if (player.pos.z > 840 || (typeof islands !== 'undefined' && islands && islands.isInsideIslands && islands.isInsideIslands(player.pos.x, player.pos.z))) {
       const nearbyCitizens = enemies.filter(e => !e.isDead && (e.kind === 'civilian' || e.isIslandCitizen) && nearestPlayerDist(e.rig.root.position.x, e.rig.root.position.z) < 65).length;
-      if (nearbyCitizens < 24) {
+      if (nearbyCitizens < 24 && enemies.length < 235) {
         const toSpawn = Math.min(4, 24 - nearbyCitizens);
         for (let s = 0; s < toSpawn; s++) {
           const angle = Math.random() * Math.PI * 2;
@@ -7596,7 +7619,10 @@ function updateEnemies(dt) {
           if (city && city.canMoveTo && city.canMoveTo(sx, sz, 0.5, 0.55)) {
             const archIdx = Math.floor(Math.random() * CIVILIAN_ARCHETYPES.length);
             const cit = spawnEnemy(sx, sz, 'civilian', archIdx);
-            if (cit) cit.isIslandCitizen = true;
+            if (cit) {
+              cit.isIslandCitizen = true;
+              cit.isDynamicIslandSpawn = true;
+            }
           }
         }
       }
@@ -7604,18 +7630,6 @@ function updateEnemies(dt) {
   }
 
   enemies.forEach(enemy => {
-    // Safety escort: keep citizens strictly off active airport runways and taxiways (players can walk freely!)
-    if (enemy.kind === 'civilian' && !enemy.isDead) {
-      const ePos = enemy.rig.root.position;
-      const onRunway = (typeof islands !== 'undefined' && islands && islands.isAirportRunway && islands.isAirportRunway(ePos.x, ePos.z)) ||
-        (typeof city !== 'undefined' && city && city.isAirportRunway && city.isAirportRunway(ePos.x, ePos.z));
-      if (onRunway) {
-        // Escort civilian off active runway back to safe passenger terminal entrance plaza
-        ePos.set(-1060 + (Math.random() - 0.5) * 16, 0.55, 938 + (Math.random() - 0.5) * 6);
-        enemy.wanderAngle = Math.PI; // Face north toward terminal/ferry
-        enemy.wanderTimer = 3.0;
-      }
-    }
     // 1. Knockout knockdown animation
     if (enemy.isKnockedOut) {
       if (enemy.koProgress < 1.0) {
@@ -7632,28 +7646,59 @@ function updateEnemies(dt) {
 
     if (enemy.isDead) return;
 
+    const ePos = enemy.rig.root.position;
+    const distToPlayer = Math.hypot(ePos.x - player.pos.x, ePos.y - player.pos.y, ePos.z - player.pos.z);
+    enemy.rig.root.visible = (distToPlayer < 210);
+    if (enemy.rig.nameplateSprite) {
+      enemy.rig.nameplateSprite.visible = (distToPlayer < 58);
+    }
+
+    // Safety escort: keep citizens strictly off active airport runways and taxiways (players can walk freely!)
+    if (enemy.kind === 'civilian' && ePos.x < -900 && ePos.z > 840) {
+      const onRunway = (typeof islands !== 'undefined' && islands && islands.isAirportRunway && islands.isAirportRunway(ePos.x, ePos.z)) ||
+        (typeof city !== 'undefined' && city && city.isAirportRunway && city.isAirportRunway(ePos.x, ePos.z));
+      if (onRunway) {
+        // Escort civilian off active runway back to safe passenger terminal entrance plaza
+        ePos.set(-1060 + (Math.random() - 0.5) * 16, 0.55, 938 + (Math.random() - 0.5) * 6);
+        enemy.wanderAngle = Math.PI; // Face north toward terminal/ferry
+        enemy.wanderTimer = 3.0;
+      }
+    }
+
     // Network mirror of a host-owned NPC: render only, no AI
     if (enemy.isRemoteMirror) {
       updateMirrorEnemy(enemy, dt);
       if (enemy.isStaggered) {
-        const d = enemy.rig.root.position.distanceTo(player.pos);
-        if (d < minDist) { nearestStaggered = enemy; minDist = d; }
+        if (distToPlayer < minDist) { nearestStaggered = enemy; minDist = distToPlayer; }
       }
       return;
     }
 
-    // Apply knockback velocity (with wall collision check so enemies don't get punched into buildings)
-    const nextKx = enemy.rig.root.position.x + enemy.vx * dt;
-    const nextKz = enemy.rig.root.position.z + enemy.vz * dt;
-    if (!city || city.canMoveTo(nextKx, nextKz, 0.45, enemy.rig.root.position.y)) {
-      enemy.rig.root.position.x = nextKx;
-      enemy.rig.root.position.z = nextKz;
-    } else {
-      enemy.vx = 0;
-      enemy.vz = 0;
+    // Pick the nearest living player to chase / face / punch
+    const tgt = pickTarget(ePos);
+    const tpos = tgt.pos;
+    const targetInPeace = tgt.inPeace;
+    const distToTarget = Math.hypot(ePos.x - tpos.x, ePos.y - tpos.y, ePos.z - tpos.z);
+
+    // Distance LOD: skip per-frame physics, collision & limb matrix animations for NPCs > 135m from any player
+    if (distToPlayer > 135 && distToTarget > 135 && Math.abs(enemy.vx) < 0.05 && Math.abs(enemy.vz) < 0.05 && !enemy.isStaggered) {
+      return;
     }
-    enemy.vx *= 0.86;
-    enemy.vz *= 0.86;
+
+    // Apply knockback velocity (with wall collision check so enemies don't get punched into buildings)
+    if (Math.abs(enemy.vx) > 0.001 || Math.abs(enemy.vz) > 0.001) {
+      const nextKx = ePos.x + enemy.vx * dt;
+      const nextKz = ePos.z + enemy.vz * dt;
+      if (!city || city.canMoveTo(nextKx, nextKz, 0.45, ePos.y)) {
+        ePos.x = nextKx;
+        ePos.z = nextKz;
+      } else {
+        enemy.vx = 0;
+        enemy.vz = 0;
+      }
+      enemy.vx *= 0.86;
+      enemy.vz *= 0.86;
+    }
 
     // Keep within world bounds
     if (enemy.isDeckEnemy && city && city.landmarks && city.landmarks.cnTower) {
@@ -7708,11 +7753,6 @@ function updateEnemies(dt) {
       }
     }
 
-    // Pick the nearest living player to chase / face / punch
-    const tgt = pickTarget(enemy.rig.root.position);
-    const tpos = tgt.pos;
-    const targetInPeace = tgt.inPeace;
-
     // Rotate whole body to face the target (only Y yaw, perfectly upright!)
     const targetAngle = Math.atan2(tpos.x - enemy.rig.root.position.x, tpos.z - enemy.rig.root.position.z);
     enemy.rig.root.rotation.y = targetAngle;
@@ -7733,6 +7773,7 @@ function updateEnemies(dt) {
       if (enemy.staggerTimer <= 0) {
         enemy.isStaggered = false;
         restoreEnemyTint(enemy);
+        enemy.rig.updateNameplate(enemy.hp, enemy.maxHp, false);
       } else {
         const flash = Math.sin(Date.now() * 0.02) > 0;
         setEnemyTint(enemy, flash ? 0xffea00 : 0xef4444);
@@ -7741,11 +7782,8 @@ function updateEnemies(dt) {
       enemy.rig.headPivot.rotation.z = Math.sin(Date.now() * 0.007) * 0.25;
       enemy.rig.leftArmPivot.rotation.x = -0.3;
       enemy.rig.rightArmPivot.rotation.x = -0.3;
-      enemy.rig.updateNameplate(enemy.hp, enemy.maxHp, true);
+      if (enemy.staggerTimer > 0) enemy.rig.updateNameplate(enemy.hp, enemy.maxHp, true);
     }
-
-    const distToPlayer = enemy.rig.root.position.distanceTo(player.pos);   // local player (glory prompt)
-    const distToTarget = enemy.rig.root.position.distanceTo(tpos);
 
     // Track Glory Target
     if (enemy.isStaggered && distToPlayer < minDist) {
@@ -7997,10 +8035,12 @@ function updateEnemies(dt) {
   });
 
   // Mutual enemy-enemy physical body blocking (sentry guards & crowd spacing)
+  const minSep = 1.25;
   for (let i = 0; i < enemies.length; i++) {
     const e1 = enemies[i];
     if (e1.isDead || e1.isKnockedOut || !e1.rig || !e1.rig.root || e1.isRemoteMirror) continue;
     const p1 = e1.rig.root.position;
+    if (Math.abs(p1.x - player.pos.x) > 95 || Math.abs(p1.z - player.pos.z) > 95) continue;
 
     for (let j = i + 1; j < enemies.length; j++) {
       const e2 = enemies[j];
@@ -8008,9 +8048,10 @@ function updateEnemies(dt) {
       const p2 = e2.rig.root.position;
 
       const sepDx = p2.x - p1.x;
+      if (sepDx >= minSep || sepDx <= -minSep) continue;
       const sepDz = p2.z - p1.z;
+      if (sepDz >= minSep || sepDz <= -minSep) continue;
       const sepDist = Math.hypot(sepDx, sepDz);
-      const minSep = 1.25;
 
       if (sepDist < minSep && sepDist > 0.01) {
         const push = (minSep - sepDist) * 0.5;

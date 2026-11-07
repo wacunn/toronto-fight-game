@@ -12456,6 +12456,9 @@
       if (playerPos) {
         sky.position.set(playerPos.x, 0, playerPos.z);
         stars.position.set(playerPos.x, 0, playerPos.z);
+        if (subwayUndergroundGroup) {
+          subwayUndergroundGroup.visible = (playerPos.y < -1.5);
+        }
       }
       // Blink warning lights
       warnLights.visible = (Math.floor(t * 1.1) % 2) === 0;
@@ -13380,6 +13383,9 @@
     //    and Animated 6-Car Toronto Rocket Subway Train Loop
     // ==========================================================================
     const subwayGroup = new THREE.Group();
+    const subwayUndergroundGroup = new THREE.Group();
+    subwayUndergroundGroup.visible = false;
+    subwayGroup.add(subwayUndergroundGroup);
     const SUBWAY_PLATFORM_Y = -14.0;
 
     // Materials
@@ -13526,7 +13532,7 @@
       exitSign.position.set(0, 3.4, 33);
       stUnder.add(exitSign);
 
-      subwayGroup.add(stUnder);
+      subwayUndergroundGroup.add(stUnder);
     });
 
     // 2. Animated 6-Car Toronto Rocket Subway Train
@@ -13572,7 +13578,7 @@
       rocketTrain.add(car);
       trainCars.push(car);
     }
-    subwayGroup.add(rocketTrain);
+    subwayUndergroundGroup.add(rocketTrain);
     scene.add(subwayGroup);
 
     // 3. Subway Circuit Simulation Machinery
