@@ -780,9 +780,9 @@
     const SUBWAY_STATIONS = [
       { id: 'union', name: 'Union Station', line: 'Line 1 (Yonge-University)', x: 265, z: -140, streetX: 258, streetZ: -128, tileColor: 0xca8a04, fontColor: '#000000', label: 'UNION' },
       { id: 'king', name: 'King Station', line: 'Line 1 (Yonge)', x: 485, z: -586, streetX: 476, streetZ: -578, tileColor: 0xfef3c7, fontColor: '#991b1b', label: 'KING' },
-      { id: 'queen', name: 'Queen Station', line: 'Line 1 (Yonge)', x: 410, z: -915, streetX: 402, streetZ: -905, tileColor: 0xf8fafc, fontColor: '#1d4ed8', label: 'QUEEN' },
-      { id: 'osgoode', name: 'Osgoode Station', line: 'Line 1 (University)', x: -310, z: -705, streetX: -302, streetZ: -695, tileColor: 0xfde047, fontColor: '#000000', label: 'OSGOODE' },
-      { id: 'standrew', name: 'St. Andrew Station', line: 'Line 1 (University)', x: -125, z: -402, streetX: -118, streetZ: -394, tileColor: 0xffffff, fontColor: '#0f172a', label: 'ST. ANDREW' }
+      { id: 'queen', name: 'Queen Station', line: 'Line 1 (Yonge)', x: 390, z: -650, streetX: 390, streetZ: -716, tileColor: 0xf8fafc, fontColor: '#1d4ed8', label: 'QUEEN' },
+      { id: 'osgoode', name: 'Osgoode Station', line: 'Line 1 (University)', x: -230, z: -625, streetX: -230, streetZ: -691, tileColor: 0xfde047, fontColor: '#000000', label: 'OSGOODE' },
+      { id: 'standrew', name: 'St. Andrew Station', line: 'Line 1 (University)', x: -125, z: -360, streetX: -125, streetZ: -426, tileColor: 0xffffff, fontColor: '#0f172a', label: 'ST. ANDREW' }
     ];
 
     function getSubwayStairInfo(x, z) {
@@ -792,7 +792,7 @@
         if (!sr) continue;
         const s = (x - sr.ax) * sr.ux + (z - sr.az) * sr.uz;
         const lat = (x - sr.ax) * (-sr.uz) + (z - sr.az) * sr.ux;
-        if (Math.abs(lat) <= 3.0 && s >= -2.5 && s <= sr.total) {
+        if (Math.abs(lat) <= 3.0 && s >= -6.5 && s <= sr.total) {
           const t = Math.max(0, Math.min(1, s / sr.len));
           return {
             station: st,
@@ -1337,7 +1337,7 @@
       const subStairMove = getSubwayStairInfo(x, z);
       if (subStairMove) {
         const inTubeDepth = (y !== undefined && y < 0.8 && y > -13.5);
-        if (Math.abs(subStairMove.lat) <= 1.55 && subStairMove.s >= -2.4 && subStairMove.s <= subStairMove.total) {
+        if (Math.abs(subStairMove.lat) <= 1.55 && subStairMove.s >= -6.5 && subStairMove.s <= subStairMove.total) {
           if (subStairMove.s <= 5.5 || y === undefined || Math.abs(y - subStairMove.y) < 4.8 || Math.abs((y - 1.7) - subStairMove.y) < 4.8) {
             return true;
           }
@@ -14426,19 +14426,18 @@
     scene.add(subwayGroup);
 
     // 3. Subway Circuit Simulation Machinery
-    const SUBWAY_LOOP_STOPS = [
-      { id: 'union', name: 'Union Station', x: 257.6, z: -140 },
-      { id: 'king', name: 'King Station', x: 477.6, z: -586 },
-      { id: 'queen', name: 'Queen Station', x: 402.6, z: -915 },
-      { id: 'osgoode', name: 'Osgoode Station', x: -317.4, z: -705 },
-      { id: 'standrew', name: 'St. Andrew Station', x: -132.4, z: -402 }
-    ];
+    const SUBWAY_LOOP_STOPS = SUBWAY_STATIONS.map(st => ({
+      id: st.id,
+      name: st.name,
+      x: st.x - 7.4,
+      z: st.z
+    }));
 
     const subwayTrainState = {
       currentStopIdx: 0,
       nextStopIdx: 1,
       progress: 0,
-      speed: 24.0, // 24 m/s (86 km/h cruising speed)
+      speed: 28.0, // 28 m/s (~100 km/h brisk cruising speed)
       isStopped: true,
       stopTimer: 8.0,
       doorsOpen: true,
@@ -14452,6 +14451,13 @@
     };
     rocketTrain.position.set(subwayTrainState.x, subwayTrainState.y, subwayTrainState.z);
     rocketTrain.rotation.y = 0;
+
+    function lerpSubwayAngle(a, b, t) {
+      let diff = (b - a) % (Math.PI * 2);
+      if (diff < -Math.PI) diff += Math.PI * 2;
+      if (diff > Math.PI) diff -= Math.PI * 2;
+      return a + diff * t;
+    }
 
     updateSubwayTrain = function(dt, playerPos) {
       // Smoothly animate sliding pocket doors (open = 0.66m offset, closed = 0m)
@@ -14468,9 +14474,6 @@
         if (!subwayTrainState.hasPlayer && playerPos && playerPos.y < -1.5 &&
             Math.abs(playerPos.x - subwayTrainState.x) < 28 && Math.abs(playerPos.z - subwayTrainState.z) < 72) {
           subwayTrainState.stopTimer = Math.max(subwayTrainState.stopTimer, 3.5);
-        }
-        if (subwayTrainState.hasPlayer && subwayTrainState.stopTimer > 2.2) {
-          subwayTrainState.stopTimer = 2.2;
         }
         subwayTrainState.stopTimer -= dt;
         subwayTrainState.doorsOpen = true;
@@ -14500,7 +14503,7 @@
         subwayTrainState.currentStopIdx = subwayTrainState.nextStopIdx;
         subwayTrainState.nextStopIdx = (subwayTrainState.currentStopIdx + 1) % SUBWAY_LOOP_STOPS.length;
         subwayTrainState.isStopped = true;
-        subwayTrainState.stopTimer = 8.0;
+        subwayTrainState.stopTimer = 9.0; // Ample 9-second station stop with doors open to walk out onto platform!
         subwayTrainState.doorsOpen = true;
         subwayTrainState.x = toStop.x;
         subwayTrainState.z = toStop.z;
@@ -14517,9 +14520,15 @@
       const curZ = fromStop.z + (toStop.z - fromStop.z) * p;
       const rawHeading = Math.atan2(toStop.x - fromStop.x, toStop.z - fromStop.z);
 
-      // Align parallel to north-south station track beds when departing/entering stations (p < 0.12 or p > 0.88)
-      const inTunnel = p > 0.09 && p < 0.91;
-      const heading = inTunnel ? rawHeading : Math.PI;
+      // Smoothly transition heading between departure track (Math.PI), tunnel line-of-sight, and arrival track
+      let heading = rawHeading;
+      if (p < 0.15) {
+        const t = p / 0.15;
+        heading = lerpSubwayAngle(Math.PI, rawHeading, t * t * (3 - 2 * t));
+      } else if (p > 0.85) {
+        const t = (p - 0.85) / 0.15;
+        heading = lerpSubwayAngle(rawHeading, Math.PI, t * t * (3 - 2 * t));
+      }
 
       subwayTrainState.x = curX;
       subwayTrainState.z = curZ;
@@ -14528,14 +14537,12 @@
       rocketTrain.position.set(curX, subwayTrainState.y, curZ);
       rocketTrain.rotation.y = heading + Math.PI;
 
-      // Show streaming concrete tunnel outside windows while between stations!
-      subwayTunnelRunner.visible = inTunnel;
-      if (inTunnel) {
-        subwayTunnelRunner.position.set(curX, subwayTrainState.y, curZ);
-        subwayTunnelRunner.rotation.y = heading + Math.PI;
-        subwayTrainState.tunnelScroll = (subwayTrainState.tunnelScroll + subwayTrainState.speed * dt) % 3.2;
-        tunnelScrollGroup.position.z = subwayTrainState.tunnelScroll;
-      }
+      // Keep concrete tunnel runner continuously visible while between stations to enclose the train!
+      subwayTunnelRunner.visible = true;
+      subwayTunnelRunner.position.set(curX, subwayTrainState.y, curZ);
+      subwayTunnelRunner.rotation.y = heading + Math.PI;
+      subwayTrainState.tunnelScroll = (subwayTrainState.tunnelScroll + subwayTrainState.speed * dt) % 3.2;
+      tunnelScrollGroup.position.z = subwayTrainState.tunnelScroll;
     };
 
     return {
@@ -14663,6 +14670,7 @@
       subway: {
         stations: SUBWAY_STATIONS,
         train: rocketTrain,
+        cars: trainCars,
         state: subwayTrainState,
         platformY: SUBWAY_PLATFORM_Y,
         isUnderground: (y) => y < -6.0,

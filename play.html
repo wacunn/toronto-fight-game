@@ -3431,9 +3431,9 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     const SUBWAY_STATIONS = [
       { id: 'union', name: 'Union Station', line: 'Line 1 (Yonge-University)', x: 265, z: -140, streetX: 258, streetZ: -128, tileColor: 0xca8a04, fontColor: '#000000', label: 'UNION' },
       { id: 'king', name: 'King Station', line: 'Line 1 (Yonge)', x: 485, z: -586, streetX: 476, streetZ: -578, tileColor: 0xfef3c7, fontColor: '#991b1b', label: 'KING' },
-      { id: 'queen', name: 'Queen Station', line: 'Line 1 (Yonge)', x: 410, z: -915, streetX: 402, streetZ: -905, tileColor: 0xf8fafc, fontColor: '#1d4ed8', label: 'QUEEN' },
-      { id: 'osgoode', name: 'Osgoode Station', line: 'Line 1 (University)', x: -310, z: -705, streetX: -302, streetZ: -695, tileColor: 0xfde047, fontColor: '#000000', label: 'OSGOODE' },
-      { id: 'standrew', name: 'St. Andrew Station', line: 'Line 1 (University)', x: -125, z: -402, streetX: -118, streetZ: -394, tileColor: 0xffffff, fontColor: '#0f172a', label: 'ST. ANDREW' }
+      { id: 'queen', name: 'Queen Station', line: 'Line 1 (Yonge)', x: 390, z: -650, streetX: 390, streetZ: -716, tileColor: 0xf8fafc, fontColor: '#1d4ed8', label: 'QUEEN' },
+      { id: 'osgoode', name: 'Osgoode Station', line: 'Line 1 (University)', x: -230, z: -625, streetX: -230, streetZ: -691, tileColor: 0xfde047, fontColor: '#000000', label: 'OSGOODE' },
+      { id: 'standrew', name: 'St. Andrew Station', line: 'Line 1 (University)', x: -125, z: -360, streetX: -125, streetZ: -426, tileColor: 0xffffff, fontColor: '#0f172a', label: 'ST. ANDREW' }
     ];
 
     function getSubwayStairInfo(x, z) {
@@ -3443,7 +3443,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         if (!sr) continue;
         const s = (x - sr.ax) * sr.ux + (z - sr.az) * sr.uz;
         const lat = (x - sr.ax) * (-sr.uz) + (z - sr.az) * sr.ux;
-        if (Math.abs(lat) <= 3.0 && s >= -2.5 && s <= sr.total) {
+        if (Math.abs(lat) <= 3.0 && s >= -6.5 && s <= sr.total) {
           const t = Math.max(0, Math.min(1, s / sr.len));
           return {
             station: st,
@@ -3988,7 +3988,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       const subStairMove = getSubwayStairInfo(x, z);
       if (subStairMove) {
         const inTubeDepth = (y !== undefined && y < 0.8 && y > -13.5);
-        if (Math.abs(subStairMove.lat) <= 1.55 && subStairMove.s >= -2.4 && subStairMove.s <= subStairMove.total) {
+        if (Math.abs(subStairMove.lat) <= 1.55 && subStairMove.s >= -6.5 && subStairMove.s <= subStairMove.total) {
           if (subStairMove.s <= 5.5 || y === undefined || Math.abs(y - subStairMove.y) < 4.8 || Math.abs((y - 1.7) - subStairMove.y) < 4.8) {
             return true;
           }
@@ -17077,19 +17077,18 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     scene.add(subwayGroup);
 
     // 3. Subway Circuit Simulation Machinery
-    const SUBWAY_LOOP_STOPS = [
-      { id: 'union', name: 'Union Station', x: 257.6, z: -140 },
-      { id: 'king', name: 'King Station', x: 477.6, z: -586 },
-      { id: 'queen', name: 'Queen Station', x: 402.6, z: -915 },
-      { id: 'osgoode', name: 'Osgoode Station', x: -317.4, z: -705 },
-      { id: 'standrew', name: 'St. Andrew Station', x: -132.4, z: -402 }
-    ];
+    const SUBWAY_LOOP_STOPS = SUBWAY_STATIONS.map(st => ({
+      id: st.id,
+      name: st.name,
+      x: st.x - 7.4,
+      z: st.z
+    }));
 
     const subwayTrainState = {
       currentStopIdx: 0,
       nextStopIdx: 1,
       progress: 0,
-      speed: 24.0, // 24 m/s (86 km/h cruising speed)
+      speed: 28.0, // 28 m/s (~100 km/h brisk cruising speed)
       isStopped: true,
       stopTimer: 8.0,
       doorsOpen: true,
@@ -17103,6 +17102,13 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     };
     rocketTrain.position.set(subwayTrainState.x, subwayTrainState.y, subwayTrainState.z);
     rocketTrain.rotation.y = 0;
+
+    function lerpSubwayAngle(a, b, t) {
+      let diff = (b - a) % (Math.PI * 2);
+      if (diff < -Math.PI) diff += Math.PI * 2;
+      if (diff > Math.PI) diff -= Math.PI * 2;
+      return a + diff * t;
+    }
 
     updateSubwayTrain = function(dt, playerPos) {
       // Smoothly animate sliding pocket doors (open = 0.66m offset, closed = 0m)
@@ -17119,9 +17125,6 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         if (!subwayTrainState.hasPlayer && playerPos && playerPos.y < -1.5 &&
             Math.abs(playerPos.x - subwayTrainState.x) < 28 && Math.abs(playerPos.z - subwayTrainState.z) < 72) {
           subwayTrainState.stopTimer = Math.max(subwayTrainState.stopTimer, 3.5);
-        }
-        if (subwayTrainState.hasPlayer && subwayTrainState.stopTimer > 2.2) {
-          subwayTrainState.stopTimer = 2.2;
         }
         subwayTrainState.stopTimer -= dt;
         subwayTrainState.doorsOpen = true;
@@ -17151,7 +17154,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         subwayTrainState.currentStopIdx = subwayTrainState.nextStopIdx;
         subwayTrainState.nextStopIdx = (subwayTrainState.currentStopIdx + 1) % SUBWAY_LOOP_STOPS.length;
         subwayTrainState.isStopped = true;
-        subwayTrainState.stopTimer = 8.0;
+        subwayTrainState.stopTimer = 9.0; // Ample 9-second station stop with doors open to walk out onto platform!
         subwayTrainState.doorsOpen = true;
         subwayTrainState.x = toStop.x;
         subwayTrainState.z = toStop.z;
@@ -17168,9 +17171,15 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       const curZ = fromStop.z + (toStop.z - fromStop.z) * p;
       const rawHeading = Math.atan2(toStop.x - fromStop.x, toStop.z - fromStop.z);
 
-      // Align parallel to north-south station track beds when departing/entering stations (p < 0.12 or p > 0.88)
-      const inTunnel = p > 0.09 && p < 0.91;
-      const heading = inTunnel ? rawHeading : Math.PI;
+      // Smoothly transition heading between departure track (Math.PI), tunnel line-of-sight, and arrival track
+      let heading = rawHeading;
+      if (p < 0.15) {
+        const t = p / 0.15;
+        heading = lerpSubwayAngle(Math.PI, rawHeading, t * t * (3 - 2 * t));
+      } else if (p > 0.85) {
+        const t = (p - 0.85) / 0.15;
+        heading = lerpSubwayAngle(rawHeading, Math.PI, t * t * (3 - 2 * t));
+      }
 
       subwayTrainState.x = curX;
       subwayTrainState.z = curZ;
@@ -17179,14 +17188,12 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       rocketTrain.position.set(curX, subwayTrainState.y, curZ);
       rocketTrain.rotation.y = heading + Math.PI;
 
-      // Show streaming concrete tunnel outside windows while between stations!
-      subwayTunnelRunner.visible = inTunnel;
-      if (inTunnel) {
-        subwayTunnelRunner.position.set(curX, subwayTrainState.y, curZ);
-        subwayTunnelRunner.rotation.y = heading + Math.PI;
-        subwayTrainState.tunnelScroll = (subwayTrainState.tunnelScroll + subwayTrainState.speed * dt) % 3.2;
-        tunnelScrollGroup.position.z = subwayTrainState.tunnelScroll;
-      }
+      // Keep concrete tunnel runner continuously visible while between stations to enclose the train!
+      subwayTunnelRunner.visible = true;
+      subwayTunnelRunner.position.set(curX, subwayTrainState.y, curZ);
+      subwayTunnelRunner.rotation.y = heading + Math.PI;
+      subwayTrainState.tunnelScroll = (subwayTrainState.tunnelScroll + subwayTrainState.speed * dt) % 3.2;
+      tunnelScrollGroup.position.z = subwayTrainState.tunnelScroll;
     };
 
     return {
@@ -17314,6 +17321,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       subway: {
         stations: SUBWAY_STATIONS,
         train: rocketTrain,
+        cars: trainCars,
         state: subwayTrainState,
         platformY: SUBWAY_PLATFORM_Y,
         isUnderground: (y) => y < -6.0,
@@ -28505,11 +28513,13 @@ const ALL_TORONTO_STREET_TARGETS = [
   { x: 60, z: 240, idx: 3 }, { x: 120, z: 250, idx: 0 }, { x: 180, z: 260, idx: 1 }
 ];
 
+var subwayTrainPassengers = [];
+
 function populateEnemies() {
-  // Clear any existing ambient enemies (preserve alive mission guards and network mirrors)
+  // Clear any existing ambient enemies (preserve alive mission guards, network mirrors and subway platform citizens)
   for (let i = enemies.length - 1; i >= 0; i--) {
     const e = enemies[i];
-    if (!e.isMissionGuard && !e.isRemoteMirror) {
+    if (!e.isMissionGuard && !e.isRemoteMirror && !e.isSubwayCitizen) {
       if (e.rig && e.rig.root) scene.remove(e.rig.root);
       enemies.splice(i, 1);
     }
@@ -28552,6 +28562,8 @@ function populateEnemies() {
     }
     // Pre-populate peaceful citizens and tourists on Centre Island
     populateCentreIslandCitizens();
+    // Pre-populate peaceful commuters across TTC Subway stations & train cars
+    populateSubwayCitizens();
   } else {
     const spawns = [
       [-8, -18, 0], [8, -18, 1], [-20, 16, 2], [20, 16, 3],
@@ -30094,8 +30106,8 @@ function boardSubwayTrainAtWorldPos(wx, wz, snapLook) {
   state.isUnderground = true;
   const tState = city.subway.state;
   tState.hasPlayer = true;
-  if (tState.isStopped && tState.stopTimer < 2.2) {
-    tState.stopTimer = 2.2;
+  if (tState.isStopped && tState.stopTimer > 2.5) {
+    tState.stopTimer = 2.5;
   }
   const h = tState.heading !== undefined ? tState.heading : Math.PI;
   subwayController.lastHeading = h;
@@ -30269,6 +30281,83 @@ function teleportToRandomSubwayEntrance() {
   return st;
 }
 
+function populateSubwayCitizens() {
+  if (!city || !city.subway) return;
+
+  // 1. Platform Commuters across all 5 TTC Line 1 Subway Stations (3 per platform = 15 total)
+  if (Array.isArray(city.subway.stations)) {
+    city.subway.stations.forEach((st, sIdx) => {
+      const spots = [
+        { dx: -2.0, dz: -18.0, arch: (sIdx * 3 + 0) % CIVILIAN_ARCHETYPES.length },
+        { dx:  1.6, dz:   4.0, arch: (sIdx * 3 + 1) % CIVILIAN_ARCHETYPES.length },
+        { dx: -1.2, dz:  21.0, arch: (sIdx * 3 + 2) % CIVILIAN_ARCHETYPES.length }
+      ];
+      spots.forEach(sp => {
+        const px = st.x + sp.dx;
+        const pz = st.z + sp.dz;
+        const already = enemies.some(e => !e.isDead && e.isSubwayCitizen && Math.hypot(e.rig.root.position.x - px, e.rig.root.position.z - pz) < 3.0);
+        if (!already) {
+          const cit = spawnEnemy(px, pz, 'civilian', sp.arch);
+          if (cit) {
+            cit.isSubwayCitizen = true;
+            cit.subwayStationId = st.id;
+            cit.platformY = city.subway.platformY;
+            cit.rig.root.position.y = city.subway.platformY;
+          }
+        }
+      });
+    });
+  }
+
+  // 2. Train Passengers inside the Toronto Rocket Subway Cars (3 per car = 12 total passengers)
+  if (Array.isArray(city.subway.cars) && subwayTrainPassengers.length === 0) {
+    city.subway.cars.forEach((car, cIdx) => {
+      // Commuter 1: Seated on crimson velvet bench (facing right)
+      const seatLeft = create3DHumanFighter(0, 0, 'civilian', (cIdx * 2) % CIVILIAN_ARCHETYPES.length);
+      seatLeft.root.position.set(-1.08, 0.95, -2.5);
+      seatLeft.root.rotation.y = Math.PI / 2;
+      seatLeft.leftLegPivot.rotation.x = -Math.PI / 2;
+      seatLeft.leftCalfPivot.rotation.x = Math.PI / 2;
+      seatLeft.rightLegPivot.rotation.x = -Math.PI / 2;
+      seatLeft.rightCalfPivot.rotation.x = Math.PI / 2;
+      seatLeft.pelvisGroup.position.set(0, 0.52, 0);
+      seatLeft.torsoPivot.position.set(0, 0.52, 0);
+      seatLeft.leftArmPivot.rotation.set(-0.2, 0, 0.15);
+      seatLeft.rightArmPivot.rotation.set(-0.2, 0, -0.15);
+      if (seatLeft.nameplateSprite) seatLeft.nameplateSprite.visible = false;
+      car.add(seatLeft.root);
+      subwayTrainPassengers.push(seatLeft);
+
+      // Commuter 2: Seated on priority blue bench (facing left)
+      const seatRight = create3DHumanFighter(0, 0, 'civilian', (cIdx * 2 + 1) % CIVILIAN_ARCHETYPES.length);
+      seatRight.root.position.set(1.08, 0.95, 2.5);
+      seatRight.root.rotation.y = -Math.PI / 2;
+      seatRight.leftLegPivot.rotation.x = -Math.PI / 2;
+      seatRight.leftCalfPivot.rotation.x = Math.PI / 2;
+      seatRight.rightLegPivot.rotation.x = -Math.PI / 2;
+      seatRight.rightCalfPivot.rotation.x = Math.PI / 2;
+      seatRight.pelvisGroup.position.set(0, 0.52, 0);
+      seatRight.torsoPivot.position.set(0, 0.52, 0);
+      seatRight.leftArmPivot.rotation.set(-0.2, 0, 0.15);
+      seatRight.rightArmPivot.rotation.set(-0.2, 0, -0.15);
+      if (seatRight.nameplateSprite) seatRight.nameplateSprite.visible = false;
+      car.add(seatRight.root);
+      subwayTrainPassengers.push(seatRight);
+
+      // Commuter 3: Standing holding central stanchion pole
+      const standing = create3DHumanFighter(0, 0, 'civilian', (cIdx * 2 + 2) % CIVILIAN_ARCHETYPES.length);
+      standing.root.position.set(0.24, 1.04, 0.0);
+      standing.root.rotation.y = -Math.PI / 4;
+      standing.rightArmPivot.rotation.set(-1.6, 0, 0.25);
+      standing.rightForearmPivot.rotation.set(-0.5, 0, 0);
+      if (standing.nameplateSprite) standing.nameplateSprite.visible = false;
+      car.add(standing.root);
+      subwayTrainPassengers.push(standing);
+    });
+  }
+}
+
+window.populateSubwayCitizens = populateSubwayCitizens;
 window.boardSubwayTrain = boardSubwayTrain;
 window.updateSubwayRide = updateSubwayRide;
 window.disembarkSubwayTrain = disembarkSubwayTrain;
@@ -33599,6 +33688,17 @@ function updateEnemies(dt) {
   let minDist = 4.0;
   const playerInPeace = (city && player.pos.y <= 50) ? city.isInsidePeaceZone(player.pos.x, player.pos.z, player.pos.y) : false;
 
+  // Ambient subway train passenger animations (breathing & natural head turning)
+  if (subwayTrainPassengers.length > 0) {
+    const pTime = Date.now() * 0.0018;
+    for (let i = 0; i < subwayTrainPassengers.length; i++) {
+      const sp = subwayTrainPassengers[i];
+      if (sp && sp.headPivot) {
+        sp.headPivot.rotation.y = Math.sin(pTime + i * 1.5) * 0.18;
+      }
+    }
+  }
+
   // Who can NPCs go after? Just us in single-player; every living player when hosting.
   // A paused / dead / in-menu player isn't a valid target (matters once the world keeps running for others)
   const localAway = state.isDead || state.isPaused || !state.inGame;
@@ -33632,7 +33732,7 @@ function updateEnemies(dt) {
 
     for (let i = enemies.length - 1; i >= 0; i--) {
       const e = enemies[i];
-      if (e.isDead || e.isKnockedOut || e.isMissionGuard || e.isDeckEnemy || e.isRemoteMirror) continue;
+      if (e.isDead || e.isKnockedOut || e.isMissionGuard || e.isDeckEnemy || e.isRemoteMirror || e.isSubwayCitizen) continue;
       if ((e.kind === 'civilian' || e.isIslandCitizen) && !e.isDynamicIslandSpawn) continue;
 
       const d = nearestPlayerDist(e.rig.root.position.x, e.rig.root.position.z);
@@ -33644,7 +33744,7 @@ function updateEnemies(dt) {
     }
 
     // Maintain ambient target count
-    const aliveAmbient = enemies.filter(e => !e.isDead && !e.isMissionGuard && !e.isDeckEnemy && e.kind !== 'civilian' && !e.isIslandCitizen).length;
+    const aliveAmbient = enemies.filter(e => !e.isDead && !e.isMissionGuard && !e.isDeckEnemy && e.kind !== 'civilian' && !e.isIslandCitizen && !e.isSubwayCitizen).length;
     if (aliveAmbient < cfg.targetEnemies) {
       spawnSingleReinforcement();
     }
@@ -33762,6 +33862,17 @@ function updateEnemies(dt) {
         enemy.rig.root.position.x = cx + (edx / er) * 21.2;
         enemy.rig.root.position.z = cz + (edz / er) * 21.2;
       }
+    } else if (enemy.isSubwayCitizen) {
+      // Platform commuters stay peacefully on their station platform
+      const pY = (city && city.subway) ? city.subway.platformY : -14.0;
+      enemy.rig.root.position.y = pY;
+      if (city && city.subway && Array.isArray(city.subway.stations)) {
+        const st = city.subway.stations.find(s => s.id === enemy.subwayStationId);
+        if (st) {
+          enemy.rig.root.position.x = Math.max(st.x - 4.5, Math.min(st.x + 4.5, enemy.rig.root.position.x));
+          enemy.rig.root.position.z = Math.max(st.z - 30.0, Math.min(st.z + 30.0, enemy.rig.root.position.z));
+        }
+      }
     } else if (enemy.isIslandCitizen || enemy.rig.root.position.z > 840 || (typeof islands !== 'undefined' && islands && islands.isInsideIslands && islands.isInsideIslands(enemy.rig.root.position.x, enemy.rig.root.position.z))) {
       // Keep within Toronto Islands archipelago boundaries: preserve full archipelago exploration!
       const izBase = (typeof islands !== 'undefined' && islands && islands.Z_BASE) ? islands.Z_BASE : 1200;
@@ -33776,7 +33887,7 @@ function updateEnemies(dt) {
     }
 
     // Update ground NPCs vertical elevation to match bridges, piers, and terrain
-    if (!enemy.isDeckEnemy && city && city.floorAt) {
+    if (!enemy.isDeckEnemy && !enemy.isSubwayCitizen && city && city.floorAt) {
       const gFloor = city.floorAt(enemy.rig.root.position.x, enemy.rig.root.position.z, enemy.rig.root.position.y);
       enemy.rig.root.position.y = gFloor;
     }

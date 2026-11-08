@@ -2783,11 +2783,13 @@ const ALL_TORONTO_STREET_TARGETS = [
   { x: 60, z: 240, idx: 3 }, { x: 120, z: 250, idx: 0 }, { x: 180, z: 260, idx: 1 }
 ];
 
+var subwayTrainPassengers = [];
+
 function populateEnemies() {
-  // Clear any existing ambient enemies (preserve alive mission guards and network mirrors)
+  // Clear any existing ambient enemies (preserve alive mission guards, network mirrors and subway platform citizens)
   for (let i = enemies.length - 1; i >= 0; i--) {
     const e = enemies[i];
-    if (!e.isMissionGuard && !e.isRemoteMirror) {
+    if (!e.isMissionGuard && !e.isRemoteMirror && !e.isSubwayCitizen) {
       if (e.rig && e.rig.root) scene.remove(e.rig.root);
       enemies.splice(i, 1);
     }
@@ -2830,6 +2832,8 @@ function populateEnemies() {
     }
     // Pre-populate peaceful citizens and tourists on Centre Island
     populateCentreIslandCitizens();
+    // Pre-populate peaceful commuters across TTC Subway stations & train cars
+    populateSubwayCitizens();
   } else {
     const spawns = [
       [-8, -18, 0], [8, -18, 1], [-20, 16, 2], [20, 16, 3],
@@ -4372,8 +4376,8 @@ function boardSubwayTrainAtWorldPos(wx, wz, snapLook) {
   state.isUnderground = true;
   const tState = city.subway.state;
   tState.hasPlayer = true;
-  if (tState.isStopped && tState.stopTimer < 2.2) {
-    tState.stopTimer = 2.2;
+  if (tState.isStopped && tState.stopTimer > 2.5) {
+    tState.stopTimer = 2.5;
   }
   const h = tState.heading !== undefined ? tState.heading : Math.PI;
   subwayController.lastHeading = h;
@@ -4547,6 +4551,83 @@ function teleportToRandomSubwayEntrance() {
   return st;
 }
 
+function populateSubwayCitizens() {
+  if (!city || !city.subway) return;
+
+  // 1. Platform Commuters across all 5 TTC Line 1 Subway Stations (3 per platform = 15 total)
+  if (Array.isArray(city.subway.stations)) {
+    city.subway.stations.forEach((st, sIdx) => {
+      const spots = [
+        { dx: -2.0, dz: -18.0, arch: (sIdx * 3 + 0) % CIVILIAN_ARCHETYPES.length },
+        { dx:  1.6, dz:   4.0, arch: (sIdx * 3 + 1) % CIVILIAN_ARCHETYPES.length },
+        { dx: -1.2, dz:  21.0, arch: (sIdx * 3 + 2) % CIVILIAN_ARCHETYPES.length }
+      ];
+      spots.forEach(sp => {
+        const px = st.x + sp.dx;
+        const pz = st.z + sp.dz;
+        const already = enemies.some(e => !e.isDead && e.isSubwayCitizen && Math.hypot(e.rig.root.position.x - px, e.rig.root.position.z - pz) < 3.0);
+        if (!already) {
+          const cit = spawnEnemy(px, pz, 'civilian', sp.arch);
+          if (cit) {
+            cit.isSubwayCitizen = true;
+            cit.subwayStationId = st.id;
+            cit.platformY = city.subway.platformY;
+            cit.rig.root.position.y = city.subway.platformY;
+          }
+        }
+      });
+    });
+  }
+
+  // 2. Train Passengers inside the Toronto Rocket Subway Cars (3 per car = 12 total passengers)
+  if (Array.isArray(city.subway.cars) && subwayTrainPassengers.length === 0) {
+    city.subway.cars.forEach((car, cIdx) => {
+      // Commuter 1: Seated on crimson velvet bench (facing right)
+      const seatLeft = create3DHumanFighter(0, 0, 'civilian', (cIdx * 2) % CIVILIAN_ARCHETYPES.length);
+      seatLeft.root.position.set(-1.08, 0.95, -2.5);
+      seatLeft.root.rotation.y = Math.PI / 2;
+      seatLeft.leftLegPivot.rotation.x = -Math.PI / 2;
+      seatLeft.leftCalfPivot.rotation.x = Math.PI / 2;
+      seatLeft.rightLegPivot.rotation.x = -Math.PI / 2;
+      seatLeft.rightCalfPivot.rotation.x = Math.PI / 2;
+      seatLeft.pelvisGroup.position.set(0, 0.52, 0);
+      seatLeft.torsoPivot.position.set(0, 0.52, 0);
+      seatLeft.leftArmPivot.rotation.set(-0.2, 0, 0.15);
+      seatLeft.rightArmPivot.rotation.set(-0.2, 0, -0.15);
+      if (seatLeft.nameplateSprite) seatLeft.nameplateSprite.visible = false;
+      car.add(seatLeft.root);
+      subwayTrainPassengers.push(seatLeft);
+
+      // Commuter 2: Seated on priority blue bench (facing left)
+      const seatRight = create3DHumanFighter(0, 0, 'civilian', (cIdx * 2 + 1) % CIVILIAN_ARCHETYPES.length);
+      seatRight.root.position.set(1.08, 0.95, 2.5);
+      seatRight.root.rotation.y = -Math.PI / 2;
+      seatRight.leftLegPivot.rotation.x = -Math.PI / 2;
+      seatRight.leftCalfPivot.rotation.x = Math.PI / 2;
+      seatRight.rightLegPivot.rotation.x = -Math.PI / 2;
+      seatRight.rightCalfPivot.rotation.x = Math.PI / 2;
+      seatRight.pelvisGroup.position.set(0, 0.52, 0);
+      seatRight.torsoPivot.position.set(0, 0.52, 0);
+      seatRight.leftArmPivot.rotation.set(-0.2, 0, 0.15);
+      seatRight.rightArmPivot.rotation.set(-0.2, 0, -0.15);
+      if (seatRight.nameplateSprite) seatRight.nameplateSprite.visible = false;
+      car.add(seatRight.root);
+      subwayTrainPassengers.push(seatRight);
+
+      // Commuter 3: Standing holding central stanchion pole
+      const standing = create3DHumanFighter(0, 0, 'civilian', (cIdx * 2 + 2) % CIVILIAN_ARCHETYPES.length);
+      standing.root.position.set(0.24, 1.04, 0.0);
+      standing.root.rotation.y = -Math.PI / 4;
+      standing.rightArmPivot.rotation.set(-1.6, 0, 0.25);
+      standing.rightForearmPivot.rotation.set(-0.5, 0, 0);
+      if (standing.nameplateSprite) standing.nameplateSprite.visible = false;
+      car.add(standing.root);
+      subwayTrainPassengers.push(standing);
+    });
+  }
+}
+
+window.populateSubwayCitizens = populateSubwayCitizens;
 window.boardSubwayTrain = boardSubwayTrain;
 window.updateSubwayRide = updateSubwayRide;
 window.disembarkSubwayTrain = disembarkSubwayTrain;
@@ -7877,6 +7958,17 @@ function updateEnemies(dt) {
   let minDist = 4.0;
   const playerInPeace = (city && player.pos.y <= 50) ? city.isInsidePeaceZone(player.pos.x, player.pos.z, player.pos.y) : false;
 
+  // Ambient subway train passenger animations (breathing & natural head turning)
+  if (subwayTrainPassengers.length > 0) {
+    const pTime = Date.now() * 0.0018;
+    for (let i = 0; i < subwayTrainPassengers.length; i++) {
+      const sp = subwayTrainPassengers[i];
+      if (sp && sp.headPivot) {
+        sp.headPivot.rotation.y = Math.sin(pTime + i * 1.5) * 0.18;
+      }
+    }
+  }
+
   // Who can NPCs go after? Just us in single-player; every living player when hosting.
   // A paused / dead / in-menu player isn't a valid target (matters once the world keeps running for others)
   const localAway = state.isDead || state.isPaused || !state.inGame;
@@ -7910,7 +8002,7 @@ function updateEnemies(dt) {
 
     for (let i = enemies.length - 1; i >= 0; i--) {
       const e = enemies[i];
-      if (e.isDead || e.isKnockedOut || e.isMissionGuard || e.isDeckEnemy || e.isRemoteMirror) continue;
+      if (e.isDead || e.isKnockedOut || e.isMissionGuard || e.isDeckEnemy || e.isRemoteMirror || e.isSubwayCitizen) continue;
       if ((e.kind === 'civilian' || e.isIslandCitizen) && !e.isDynamicIslandSpawn) continue;
 
       const d = nearestPlayerDist(e.rig.root.position.x, e.rig.root.position.z);
@@ -7922,7 +8014,7 @@ function updateEnemies(dt) {
     }
 
     // Maintain ambient target count
-    const aliveAmbient = enemies.filter(e => !e.isDead && !e.isMissionGuard && !e.isDeckEnemy && e.kind !== 'civilian' && !e.isIslandCitizen).length;
+    const aliveAmbient = enemies.filter(e => !e.isDead && !e.isMissionGuard && !e.isDeckEnemy && e.kind !== 'civilian' && !e.isIslandCitizen && !e.isSubwayCitizen).length;
     if (aliveAmbient < cfg.targetEnemies) {
       spawnSingleReinforcement();
     }
@@ -8040,6 +8132,17 @@ function updateEnemies(dt) {
         enemy.rig.root.position.x = cx + (edx / er) * 21.2;
         enemy.rig.root.position.z = cz + (edz / er) * 21.2;
       }
+    } else if (enemy.isSubwayCitizen) {
+      // Platform commuters stay peacefully on their station platform
+      const pY = (city && city.subway) ? city.subway.platformY : -14.0;
+      enemy.rig.root.position.y = pY;
+      if (city && city.subway && Array.isArray(city.subway.stations)) {
+        const st = city.subway.stations.find(s => s.id === enemy.subwayStationId);
+        if (st) {
+          enemy.rig.root.position.x = Math.max(st.x - 4.5, Math.min(st.x + 4.5, enemy.rig.root.position.x));
+          enemy.rig.root.position.z = Math.max(st.z - 30.0, Math.min(st.z + 30.0, enemy.rig.root.position.z));
+        }
+      }
     } else if (enemy.isIslandCitizen || enemy.rig.root.position.z > 840 || (typeof islands !== 'undefined' && islands && islands.isInsideIslands && islands.isInsideIslands(enemy.rig.root.position.x, enemy.rig.root.position.z))) {
       // Keep within Toronto Islands archipelago boundaries: preserve full archipelago exploration!
       const izBase = (typeof islands !== 'undefined' && islands && islands.Z_BASE) ? islands.Z_BASE : 1200;
@@ -8054,7 +8157,7 @@ function updateEnemies(dt) {
     }
 
     // Update ground NPCs vertical elevation to match bridges, piers, and terrain
-    if (!enemy.isDeckEnemy && city && city.floorAt) {
+    if (!enemy.isDeckEnemy && !enemy.isSubwayCitizen && city && city.floorAt) {
       const gFloor = city.floorAt(enemy.rig.root.position.x, enemy.rig.root.position.z, enemy.rig.root.position.y);
       enemy.rig.root.position.y = gFloor;
     }
