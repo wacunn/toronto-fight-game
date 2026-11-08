@@ -4366,24 +4366,51 @@ const subwayController = {
   lastHeading: Math.PI
 };
 
-function boardSubwayTrain() {
-  if (!city || !city.subway) return false;
+function boardSubwayTrainAtWorldPos(wx, wz, snapLook) {
+  if (!city || !city.subway || !city.subway.state) return false;
   state.onSubway = true;
   state.isUnderground = true;
   const tState = city.subway.state;
   tState.hasPlayer = true;
-  subwayController.localX = 0.0;
-  subwayController.localZ = 0.0;
-  subwayController.lastHeading = tState.heading !== undefined ? tState.heading : Math.PI;
-  // Face along the subway car interior toward the front cab window
-  player.yaw = subwayController.lastHeading + Math.PI;
-  player.pitch = -0.02;
+  if (tState.isStopped && tState.stopTimer < 2.2) {
+    tState.stopTimer = 2.2;
+  }
+  const h = tState.heading !== undefined ? tState.heading : Math.PI;
+  subwayController.lastHeading = h;
+  const rotY = h + Math.PI;
+  const axisZX = Math.sin(rotY), axisZZ = Math.cos(rotY);
+  const axisXX = Math.cos(rotY), axisXZ = -Math.sin(rotY);
+  const dx = wx - tState.x;
+  const dz = wz - tState.z;
+  const rawLocalX = dx * axisXX + dz * axisXZ;
+  const rawLocalZ = dx * axisZX + dz * axisZZ;
+  subwayController.localX = snapLook ? 0.0 : Math.max(-1.05, Math.min(1.05, rawLocalX));
+  subwayController.localZ = Math.max(-34.2, Math.min(34.2, rawLocalZ));
+  if (snapLook) {
+    player.yaw = subwayController.lastHeading + Math.PI;
+    player.pitch = -0.02;
+    camera.rotation.order = 'YXZ';
+    camera.rotation.y = player.yaw;
+    camera.rotation.x = player.pitch;
+  }
   player.velocity.set(0, 0, 0);
-  camera.rotation.order = 'YXZ';
-  camera.rotation.y = player.yaw;
-  camera.rotation.x = player.pitch;
   updateSubwayRide(0.0);
   return true;
+}
+
+function boardSubwayTrain() {
+  return boardSubwayTrainAtWorldPos(player.pos.x, player.pos.z, true);
+}
+
+function checkAutoBoardSubway() {
+  if (state.onSubway || player.pos.y >= -6.0 || !city || !city.subway || !city.subway.state) return false;
+  const tState = city.subway.state;
+  if (tState.isStopped && tState.doorsOpen &&
+      Math.abs(player.pos.x - tState.x) <= 1.65 &&
+      Math.abs(player.pos.z - tState.z) <= 35.0) {
+    return boardSubwayTrainAtWorldPos(player.pos.x, player.pos.z, false);
+  }
+  return false;
 }
 
 function updateSubwayRide(dt) {
@@ -4404,7 +4431,7 @@ function updateSubwayRide(dt) {
   const axisZX = Math.sin(rotY), axisZZ = Math.cos(rotY);
   const axisXX = Math.cos(rotY), axisXZ = -Math.sin(rotY);
 
-  // Walkable local interior coordinate grid inside Car 0 (W/A/S/D moves freely along the subway car!)
+  // Walkable local interior coordinate grid across all 4 Open-Gangway Cars (localZ = -34.2..+34.2m)
   const lookFwdX = -Math.sin(player.yaw), lookFwdZ = -Math.cos(player.yaw);
   const lookRightX = Math.cos(player.yaw), lookRightZ = -Math.sin(player.yaw);
   let moveX = 0, moveZ = 0;
@@ -4413,19 +4440,35 @@ function updateSubwayRide(dt) {
   if (keys['KeyD']) { moveX += lookRightX; moveZ += lookRightZ; }
   if (keys['KeyA']) { moveX -= lookRightX; moveZ -= lookRightZ; }
   const moveLen = Math.hypot(moveX, moveZ);
+  const canStepOutToPlatform = !!(tState.isStopped && tState.doorsOpen);
   if (moveLen > 0.001 && dt > 0) {
     moveX /= moveLen;
     moveZ /= moveLen;
     const localVelZ = moveX * axisZX + moveZ * axisZZ;
     const localVelX = moveX * axisXX + moveZ * axisXZ;
     const walkSpd = 3.8;
-    subwayController.localX = Math.max(-0.82, Math.min(0.82, subwayController.localX + localVelX * walkSpd * dt));
-    subwayController.localZ = Math.max(-7.9, Math.min(7.9, subwayController.localZ + localVelZ * walkSpd * dt));
+    const maxLocalX = canStepOutToPlatform ? 1.75 : 1.12;
+    subwayController.localX = Math.max(-1.12, Math.min(maxLocalX, subwayController.localX + localVelX * walkSpd * dt));
+    subwayController.localZ = Math.max(-34.2, Math.min(34.2, subwayController.localZ + localVelZ * walkSpd * dt));
+  } else if (!canStepOutToPlatform) {
+    subwayController.localX = Math.max(-1.12, Math.min(1.12, subwayController.localX));
   }
 
   const wx = tState.x + axisXX * subwayController.localX + axisZX * subwayController.localZ;
   const wz = tState.z + axisXZ * subwayController.localX + axisZZ * subwayController.localZ;
-  player.pos.set(wx, tState.y + 1.12 + EYE_HEIGHT, wz);
+
+  // Seamless walk-out onto the station platform when stopped with doors open
+  if (canStepOutToPlatform && subwayController.localX > 1.48) {
+    state.onSubway = false;
+    tState.hasPlayer = false;
+    tState.stopTimer = Math.max(tState.stopTimer, 6.0);
+    player.pos.set(tState.x + 2.15, city.subway.platformY + EYE_HEIGHT, wz);
+    player.velocity.set(0, 0, 0);
+    player.isGrounded = true;
+    return;
+  }
+
+  player.pos.set(wx, tState.y + 1.10 + EYE_HEIGHT, wz);
   player.velocity.set(0, 0, 0);
 }
 
@@ -4434,11 +4477,13 @@ function disembarkSubwayTrain() {
   state.onSubway = false;
   if (city && city.subway && city.subway.state) {
     city.subway.state.hasPlayer = false;
+    city.subway.state.stopTimer = Math.max(city.subway.state.stopTimer, 6.0);
   }
   const curStop = (city && city.subway && city.subway.stations)
     ? (city.subway.stations[city.subway.state.currentStopIdx] || city.subway.stations[0])
     : { name: 'Station', x: 265, z: -140 };
-  player.pos.set(curStop.x, (city && city.subway) ? city.subway.platformY + EYE_HEIGHT : -14.0 + EYE_HEIGHT, curStop.z);
+  const exitZ = Math.max(curStop.z - 34.0, Math.min(curStop.z + 34.0, player.pos.z));
+  player.pos.set(curStop.x, (city && city.subway) ? city.subway.platformY + EYE_HEIGHT : -14.0 + EYE_HEIGHT, exitZ);
   player.velocity.set(0, 0, 0);
   return true;
 }
@@ -4873,8 +4918,22 @@ function updateObservationDeck(dt) {
       return;
     }
     const tState = city.subway.state;
-    const dTrain = Math.hypot(player.pos.x - tState.x, player.pos.z - tState.z);
-    if (tState.isStopped && tState.doorsOpen && dTrain < 16.0) {
+    for (const st of city.subway.stations) {
+      const exitX = st.portalX !== undefined ? st.portalX : st.x;
+      const exitZ = st.portalZ !== undefined ? st.portalZ : (st.z + 32);
+      const dExit = Math.min(
+        Math.hypot(player.pos.x - exitX, player.pos.z - exitZ),
+        Math.hypot(player.pos.x - st.x, player.pos.z - (st.z + 32))
+      );
+      if (dExit < 7.5 && Math.abs(player.pos.x - tState.x) > 3.5) {
+        activeDeckAction = 'exit_subway_' + st.id;
+        setDeckPrompt('[E]', 'EXIT TO STREET (' + st.name.toUpperCase() + ')');
+        return;
+      }
+    }
+    if (tState.isStopped && tState.doorsOpen &&
+        Math.abs(player.pos.x - tState.x) < 12.5 &&
+        Math.abs(player.pos.z - tState.z) < 35.0) {
       activeDeckAction = 'board_subway_train';
       setDeckPrompt('[E]', 'BOARD LINE 1 SUBWAY');
       return;
@@ -7531,8 +7590,8 @@ function updatePlayer(dt) {
   camera.rotation.z += (rollTarget - camera.rotation.z) * 0.1;
 
   // Movement input: Support W/S/A/D and Arrow keys by e.code
-  const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), player.yaw);
-  const right = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), player.yaw);
+  const forward = new THREE.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw));
+  const right = new THREE.Vector3(Math.cos(player.yaw), 0, -Math.sin(player.yaw));
   const moveDir = new THREE.Vector3();
 
   if (keys['KeyW'] || keys['ArrowUp']) moveDir.add(forward);
@@ -7554,6 +7613,10 @@ function updatePlayer(dt) {
     if (state.telescopeActive) {
       exitTelescope();
     }
+  }
+
+  if (!state.onSubway) {
+    checkAutoBoardSubway();
   }
 
   if (state.inElevator || state.onFerry || state.onPlane || state.onStreetcar || state.onSubway) {
@@ -7596,6 +7659,11 @@ function updatePlayer(dt) {
   } else {
     if (canMoveTo(nextX, player.pos.z)) player.pos.x = nextX;
     if (canMoveTo(player.pos.x, nextZ)) player.pos.z = nextZ;
+  }
+
+  // Seamless walk-in boarding when stepping across the platform edge into the open TTC subway train!
+  if (checkAutoBoardSubway()) {
+    return;
   }
 
   // Vertical position clamping for Ground or Observation Deck (2 floors + stairs)
