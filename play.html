@@ -3400,7 +3400,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     if (!MAP) throw new Error('TORONTO_MAP data missing (toronto_map.js not loaded)');
 
     const [[minX, minZ], [maxX, maxZ]] = MAP.bounds;
-    const PLAY = { minX: Math.min(minX, -1350), maxX: Math.max(maxX, 1360), minZ: Math.min(minZ, -760), maxZ: 1650 };
+    const PLAY = { minX: Math.min(minX, -2350), maxX: Math.max(maxX, 1360), minZ: Math.min(minZ, -1180), maxZ: 1650 };
     const LM = Object.assign({}, MAP.landmarks);
     LM.hhof = [498.5, -327.9];
     LM.dominionPublic = [466.2, -229.8];
@@ -3413,6 +3413,17 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     LM.harbourSquarePark = [470.0, 490.0];
     LM.davidPecautSquare = [-308.0, -270.0];
     LM.jackLaytonTerminal = [708.0, 294.0];
+    LM.oldCityHall = [265.0, -790.0];
+    LM.cityHall = [90.0, -915.0];
+    LM.nathanPhillipsSquare = [90.0, -820.0];
+    LM.torontoSign = [75.0, -775.0];
+    LM.eatonCentre = [355.0, -860.0];
+    LM.yongeDundasSquare = [420.0, -1065.0];
+    LM.chinatown = [-580.0, -1050.0];
+    LM.princesGates = [-1620.0, 320.0];
+    LM.bmoField = [-2020.0, 310.0];
+    LM.cinesphere = [-2120.0, 720.0];
+    LM.ontarioPlace = [-2120.0, 720.0];
     if (typeof window !== 'undefined' && window.buildTorontoIslands) {
       LM.centreIsland = [0.0, 1510.0];
       LM.centreville = [180.0, 1385.0];
@@ -3561,7 +3572,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     // York Slip, Harbour Square, Jack Layton Ferry Terminal, Yonge Slip, Pier 27, Redpath Sugar Wharf,
     // and Sugar Beach in the east.
     const HARBOUR_SHORELINE = [
-      [-2200, 700], [-1250, 684], [-1050, 676], [-850, 624], [-690, 616],
+      [-2600, 710], [-2200, 700], [-1250, 684], [-1050, 676], [-850, 624], [-690, 616],
       [-675, 580], [-625, 580], // Spadina Slip & Spadina WaveDeck
       [-615, 610], [-425, 608], // Toronto Music Garden & Marina Quay West
       [-415, 604], [-355, 600], // Peter Street Basin / Slip
@@ -3670,6 +3681,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       if (x >= 692 - p && x <= 738 + p && z >= 280 - p && z <= 348 + p) return false;
       // Billy Bishop Airport Mainland Ferry Slip at Bathurst Quay (Western Gap)
       if (x >= -1075 - p && x <= -1045 + p && z >= 665 - p && z <= 715 + p) return false;
+      // Ontario Place West Island Grounds, Pedestrian Bridge & Cinesphere Promenade
+      if (x >= -2250 - p && x <= -1980 + p && z >= 460 - p && z <= 820 + p) return false;
       if (typeof window !== 'undefined' && window.buildTorontoIslands) {
         // Dedicated archipelago is active; open harbour water across south of Queens Quay
         return true;
@@ -3932,6 +3945,10 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       if (x >= -1075 && x <= -1045 && z >= 665 && z <= 715) {
         return 0.55;
       }
+      // Ontario Place Pedestrian Bridge and Island Promenade deck
+      if (x >= -2250 && x <= -1980 && z >= 460 && z <= 820) {
+        return 0.15;
+      }
       // Beach boardwalk
       if (z >= 1376 && z <= 1384 && x >= -60 && x <= 420) {
         return 0.25;
@@ -4146,7 +4163,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     const trenchWallsGB = new GeoBuilder();
     const lakeGB = new GeoBuilder();
     const WATER_Y = -0.65;
-    const X_MIN_EXT = Math.min(minX - 800, -1850), X_MAX_EXT = Math.max(maxX + 800, 1850), Z_MIN_EXT = minZ - 800, Z_MAX_EXT = maxZ + 800;
+    const X_MIN_EXT = Math.min(minX - 800, -2650), X_MAX_EXT = Math.max(maxX + 800, 1850), Z_MIN_EXT = Math.min(minZ - 800, -1450), Z_MAX_EXT = maxZ + 800;
 
     // up-facing quad for x0<x1, zN<zS (CCW from above)
     function groundQuad(gb, x0, x1, zN0, zN1, zS0, zS1, y, uvScale = 4) {
@@ -4402,7 +4419,23 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       MAP.roads.push(
         { t: 'pedestrian', w: 10, p: [-252.0, 120.0, -250.0, 185.0, -255.0, 259.0], n: 'CN Tower East Passage' },
         { t: 'pedestrian', w: 10, p: [-160.0, 115.0, -155.0, 165.0, -150.1, 207.9], n: 'Aquarium East Plaza' },
-        { t: 'tertiary', w: 9, p: [-351.7, 369.4, -339.9, 343.5, -307.3, 313.8], n: 'Bremner Boulevard' }
+        { t: 'tertiary', w: 9, p: [-351.7, 369.4, -339.9, 343.5, -307.3, 313.8], n: 'Bremner Boulevard' },
+        // --- Queen to Dundas North Corridor Extensions ---
+        { t: 'primary', w: 14, p: [-680.0, -1050.0, -580.0, -1050.0, -210.0, -1050.0, 100.0, -1050.0, 225.0, -1050.0, 380.0, -1050.0, 650.0, -1050.0], n: 'Dundas Street' },
+        { t: 'primary', w: 14, p: [380.0, -680.0, 380.0, -850.0, 380.0, -1050.0], n: 'Yonge Street' },
+        { t: 'secondary', w: 14, p: [225.0, -680.0, 225.0, -850.0, 225.0, -1050.0], n: 'Bay Street' },
+        { t: 'primary', w: 13, p: [-230.0, -680.0, -230.0, -850.0, -230.0, -1050.0], n: 'University Avenue' },
+        { t: 'primary', w: 13, p: [-190.0, -680.0, -190.0, -850.0, -190.0, -1050.0], n: 'University Avenue' },
+        { t: 'primary', w: 18, p: [-580.0, -680.0, -580.0, -850.0, -580.0, -1050.0, -580.0, -1150.0], n: 'Spadina Avenue' },
+        { t: 'secondary', w: 14, p: [-680.0, -650.0, -210.0, -700.0, 75.0, -755.0, 225.0, -760.0, 380.0, -775.0, 650.0, -775.0], n: 'Queen Street' },
+        { t: 'tertiary', w: 9, p: [100.0, -780.0, 100.0, -900.0, 100.0, -1050.0], n: 'Chestnut Street' },
+        { t: 'tertiary', w: 9, p: [160.0, -860.0, 160.0, -1050.0], n: 'Elizabeth Street' },
+        { t: 'tertiary', w: 9, p: [225.0, -840.0, 340.0, -840.0], n: 'Albert Street' },
+        // --- West End Waterfront Corridor Towards Ontario Place ---
+        { t: 'primary', w: 16, p: [-1100.0, 420.0, -1350.0, 400.0, -1620.0, 380.0, -1900.0, 380.0, -2250.0, 380.0], n: 'Lake Shore Boulevard West' },
+        { t: 'secondary', w: 12, p: [-1100.0, 280.0, -1350.0, 280.0, -1620.0, 280.0], n: 'Fleet Street' },
+        { t: 'pedestrian', w: 8, p: [-1100.0, 480.0, -1350.0, 480.0, -1620.0, 480.0, -1900.0, 480.0, -2200.0, 480.0], n: 'Martin Goodman Trail' },
+        { t: 'pedestrian', w: 10, p: [-2120.0, 480.0, -2120.0, 560.0, -2120.0, 640.0], n: 'Ontario Place Bridge' }
       );
     }
 
@@ -5680,6 +5713,18 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       if (x >= -390 && x <= -310 && z >= 170 && z <= 245) return true;
       // Harbour Square Park
       if (x >= 430 && x <= 520 && z >= 450 && z <= 530) return true;
+      // Nathan Phillips Square & Toronto City Hall
+      if (x >= -30 && x <= 210 && z >= -970 && z <= -765) return true;
+      // Old City Hall
+      if (x >= 225 && x <= 315 && z >= -840 && z <= -755) return true;
+      // Toronto Eaton Centre & Yonge-Dundas Square
+      if (x >= 310 && x <= 465 && z >= -1110 && z <= -670) return true;
+      // Chinatown Gate & Commercial Core (Spadina & Dundas)
+      if (x >= -670 && x <= -510 && z >= -1120 && z <= -980) return true;
+      // Princes' Gates & Exhibition Place & BMO Field
+      if (x >= -2200 && x <= -1550 && z >= 220 && z <= 420) return true;
+      // Ontario Place West Island, Pods & Cinesphere
+      if (x >= -2250 && x <= -2000 && z >= 440 && z <= 820) return true;
       return false;
     }
     const nearSanctuary = (x, z) => Math.hypot(x - LM.cnTower[0], z - LM.cnTower[1]) < 75;
@@ -11967,6 +12012,749 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       }
     }
 
+    // ==========================================================================
+    // 7B. EXPANDED WORLD: QUEEN TO DUNDAS CIVIC CORRIDOR & WEST WATERFRONT
+    //     Old City Hall, Nathan Phillips Square, Toronto City Hall, Eaton Centre,
+    //     Yonge-Dundas Square, Chinatown, Princes' Gates, BMO Field & Ontario Place
+    // ==========================================================================
+    {
+      const expGroup = new THREE.Group();
+
+      // Shared Materials
+      const sandstoneMat = new THREE.MeshStandardMaterial({ color: 0xa89376, roughness: 0.85 });
+      const copperRoofMat = new THREE.MeshStandardMaterial({ color: 0x3d705c, roughness: 0.45, metalness: 0.4 });
+      const concreteMat = new THREE.MeshStandardMaterial({ color: 0xd4d8de, roughness: 0.65 });
+      const darkGlassMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.15, metalness: 0.85 });
+      const blueGlassMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.1, metalness: 0.8, transparent: true, opacity: 0.75 });
+      const whiteSteelMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.35, metalness: 0.4 });
+      const redSteelMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.45, metalness: 0.4 });
+      const goldMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.25, metalness: 0.85 });
+      const glazedGreenMat = new THREE.MeshStandardMaterial({ color: 0x059669, roughness: 0.35, metalness: 0.2 });
+      const plazaGraniteMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.9 });
+      const poolWaterMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.05, metalness: 0.2, transparent: true, opacity: 0.85 });
+      const neonRedMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+      const pitchGrassMat = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.95 });
+
+      // ------------------------------------------------------------------------
+      // 1. OLD CITY HALL & 103m CLOCK TOWER (Queen St & Bay St, NE corner)
+      //    E.J. Lennox Richardsonian Romanesque Sandstone Courthouse (1899)
+      // ------------------------------------------------------------------------
+      {
+        const och = new THREE.Group();
+        och.position.set(265, 0, -790);
+
+        // Quadrangle 4-storey Sandstone Wings
+        // South Wing (facing Queen St)
+        const sWing = new THREE.Mesh(new THREE.BoxGeometry(68, 30, 16), sandstoneMat);
+        sWing.position.set(0, 15, 24);
+        och.add(sWing);
+        const sRoof = new THREE.Mesh(new THREE.ConeGeometry(38, 12, 4), copperRoofMat);
+        sRoof.rotation.y = Math.PI / 4;
+        sRoof.scale.set(1.0, 1.0, 0.45);
+        sRoof.position.set(0, 36, 24);
+        och.add(sRoof);
+
+        // North Wing
+        const nWing = new THREE.Mesh(new THREE.BoxGeometry(68, 30, 16), sandstoneMat);
+        nWing.position.set(0, 15, -24);
+        och.add(nWing);
+        const nRoof = new THREE.Mesh(new THREE.ConeGeometry(38, 12, 4), copperRoofMat);
+        nRoof.rotation.y = Math.PI / 4;
+        nRoof.scale.set(1.0, 1.0, 0.45);
+        nRoof.position.set(0, 36, -24);
+        och.add(nRoof);
+
+        // West Wing (along Bay St) & East Wing (along James St)
+        [-30, 30].forEach(wx => {
+          const wing = new THREE.Mesh(new THREE.BoxGeometry(16, 30, 52), sandstoneMat);
+          wing.position.set(wx, 15, 0);
+          och.add(wing);
+          const wRoof = new THREE.Mesh(new THREE.ConeGeometry(30, 12, 4), copperRoofMat);
+          wRoof.rotation.y = Math.PI / 4;
+          wRoof.scale.set(0.55, 1.0, 1.0);
+          wRoof.position.set(wx, 36, 0);
+          och.add(wRoof);
+        });
+
+        // Courtyard floor
+        const cyFloor = new THREE.Mesh(new THREE.PlaneGeometry(44, 36), plazaGraniteMat);
+        cyFloor.rotation.x = -Math.PI / 2;
+        cyFloor.position.set(0, 0.1, 0);
+        och.add(cyFloor);
+
+        // Majestic 103m Romanesque Clock Tower (center of south facade)
+        const towerShaft = new THREE.Mesh(new THREE.BoxGeometry(14, 70, 14), sandstoneMat);
+        towerShaft.position.set(0, 35, 24);
+        och.add(towerShaft);
+
+        // Clock Stage (y: 70..82) with 4 Illuminated Amber Dials
+        const clockStage = new THREE.Mesh(new THREE.BoxGeometry(15, 12, 15), sandstoneMat);
+        clockStage.position.set(0, 76, 24);
+        och.add(clockStage);
+
+        const dialMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+        [
+          { pos: [0, 76, 31.6], rot: 0 },
+          { pos: [0, 76, 16.4], rot: Math.PI },
+          { pos: [7.6, 76, 24], rot: Math.PI / 2 },
+          { pos: [-7.6, 76, 24], rot: -Math.PI / 2 }
+        ].forEach(cd => {
+          const dial = new THREE.Mesh(new THREE.CircleGeometry(3.2, 24), dialMat);
+          dial.position.set(cd.pos[0], cd.pos[1], cd.pos[2]);
+          dial.rotation.y = cd.rot;
+          och.add(dial);
+          // Clock rim
+          const rim = new THREE.Mesh(new THREE.TorusGeometry(3.3, 0.25, 8, 24), copperRoofMat);
+          rim.position.set(cd.pos[0], cd.pos[1], cd.pos[2]);
+          rim.rotation.y = cd.rot;
+          och.add(rim);
+        });
+
+        // Belfry & Gargoyle Tourelles (y: 82..90)
+        const belfry = new THREE.Mesh(new THREE.BoxGeometry(13, 8, 13), sandstoneMat);
+        belfry.position.set(0, 86, 24);
+        och.add(belfry);
+        [-6.5, 6.5].forEach(tx => {
+          [-6.5, 6.5].forEach(tz => {
+            const tourelle = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.1, 14, 8), copperRoofMat);
+            tourelle.position.set(tx, 88, 24 + tz);
+            och.add(tourelle);
+          });
+        });
+
+        // Copper Spire (y: 90..103)
+        const spire = new THREE.Mesh(new THREE.ConeGeometry(7.5, 14, 4), copperRoofMat);
+        spire.rotation.y = Math.PI / 4;
+        spire.position.set(0, 97, 24);
+        och.add(spire);
+
+        // Triple Arched Entrance Portico on Queen St
+        [-4, 0, 4].forEach(px => {
+          const arch = new THREE.Mesh(new THREE.TorusGeometry(1.8, 0.4, 8, 16, Math.PI), sandstoneMat);
+          arch.position.set(px, 5.2, 32.2);
+          och.add(arch);
+          const col = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.45, 5.2, 8), sandstoneMat);
+          col.position.set(px, 2.6, 32.2);
+          och.add(col);
+        });
+
+        // Historic Bronze Notice Plaque
+        const ochSign = signMesh([
+          'TORONTO OLD CITY HALL • 1899',
+          'RICHARDSONIAN ROMANESQUE CIVIC MONUMENT • E.J. LENNOX'
+        ], 14, 1.8, { bg: '#1c1917', fg: '#fef08a', borderColor: '#d4af37', size: 48 });
+        ochSign.position.set(0, 2.2, 34.5);
+        och.add(ochSign);
+
+        expGroup.add(och);
+
+        // Register solids for Old City Hall
+        addSolid({ type: 'poly', pts: [[231, -774], [299, -774], [299, -758], [231, -758]], h: 30, name: 'Old City Hall South Wing' });
+        addSolid({ type: 'poly', pts: [[231, -822], [299, -822], [299, -806], [231, -806]], h: 30, name: 'Old City Hall North Wing' });
+        addSolid({ type: 'poly', pts: [[227, -816], [243, -816], [243, -764], [227, -764]], h: 30, name: 'Old City Hall West Wing' });
+        addSolid({ type: 'poly', pts: [[287, -816], [303, -816], [303, -764], [287, -764]], h: 30, name: 'Old City Hall East Wing' });
+        addSolid({ type: 'poly', pts: [[257, -773], [273, -773], [273, -759], [257, -759]], h: 103, name: 'Old City Hall Clock Tower' });
+      }
+
+      // ------------------------------------------------------------------------
+      // 2. NATHAN PHILLIPS SQUARE & GLOWING "TORONTO" SIGN
+      //    Grand Civic Plaza, Reflecting Pool, 3 Freedom Arches & Henry Moore
+      // ------------------------------------------------------------------------
+      {
+        const nps = new THREE.Group();
+
+        // 1. Granite Paved Civic Plaza (x: -20..210, z: -770..-875)
+        const plazaFloor = new THREE.Mesh(new THREE.PlaneGeometry(230, 105), plazaGraniteMat);
+        plazaFloor.rotation.x = -Math.PI / 2;
+        plazaFloor.position.set(95, 0.05, -822.5);
+        nps.add(plazaFloor);
+
+        // 2. Walkable Reflecting Pool / Ice Rink (x: 60..120, z: -790..-835)
+        const poolBorder = new THREE.Mesh(new THREE.BoxGeometry(64, 0.35, 48), concreteMat);
+        poolBorder.position.set(90, 0.18, -812.5);
+        nps.add(poolBorder);
+
+        const poolWater = new THREE.Mesh(new THREE.PlaneGeometry(60, 45), poolWaterMat);
+        poolWater.rotation.x = -Math.PI / 2;
+        poolWater.position.set(90, 0.22, -812.5);
+        nps.add(poolWater);
+
+        // 3. Three Concrete Freedom Arches across the pool
+        [-14, 0, 14].forEach(az => {
+          const arch = new THREE.Mesh(new THREE.TorusGeometry(30, 1.25, 8, 28, Math.PI), concreteMat);
+          arch.position.set(90, 0, -812.5 + az);
+          nps.add(arch);
+        });
+
+        // 4. Glowing 3D "TORONTO" Sign with illuminated Canadian Maple Leaf
+        const signGroup = new THREE.Group();
+        signGroup.position.set(75, 0, -775);
+
+        // 3D Block Letter meshes
+        const letters = ['T', 'O', 'R', 'O', 'N', 'T', 'O'];
+        const letterColors = [0x06b6d4, 0xec4899, 0xfacc15, 0x38bdf8, 0x10b981, 0x8b5cf6, 0x06b6d4];
+        letters.forEach((char, idx) => {
+          const lMat = new THREE.MeshBasicMaterial({ color: letterColors[idx] });
+          const lMesh = new THREE.Mesh(new THREE.BoxGeometry(2.2, 3.2, 1.0), lMat);
+          lMesh.position.set(idx * 3.2, 1.6, 0);
+          signGroup.add(lMesh);
+          // Dark rear backing
+          const backMesh = new THREE.Mesh(new THREE.BoxGeometry(2.3, 3.3, 0.4), new THREE.MeshBasicMaterial({ color: 0x0f172a }));
+          backMesh.position.set(idx * 3.2, 1.6, -0.6);
+          signGroup.add(backMesh);
+        });
+        // 3D Red Maple Leaf at end
+        const leafMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+        const mapleLeaf = new THREE.Mesh(new THREE.BoxGeometry(2.8, 2.8, 1.0), leafMat);
+        mapleLeaf.position.set(letters.length * 3.2 + 0.8, 1.6, 0);
+        signGroup.add(mapleLeaf);
+
+        nps.add(signGroup);
+
+        // 5. Henry Moore Bronze Sculpture "Three Way Piece No. 2 (The Archer)"
+        const archerPlinth = new THREE.Mesh(new THREE.BoxGeometry(4.5, 0.8, 4.5), plazaGraniteMat);
+        archerPlinth.position.set(90, 0.4, -850);
+        nps.add(archerPlinth);
+        const bronzeMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.35, metalness: 0.85 });
+        const archerMesh = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.45, 12, 24), bronzeMat);
+        archerMesh.position.set(90, 2.3, -850);
+        nps.add(archerMesh);
+
+        // 6. Elevated Walkway & Ramp along the west perimeter
+        const walkway = new THREE.Mesh(new THREE.BoxGeometry(6, 0.6, 80), concreteMat);
+        walkway.position.set(22, 5.5, -825);
+        nps.add(walkway);
+        const ramp = new THREE.Mesh(new THREE.BoxGeometry(5, 0.4, 40), concreteMat);
+        ramp.position.set(22, 2.75, -775);
+        ramp.rotation.x = -Math.atan2(5.5, 40);
+        nps.add(ramp);
+
+        // 7. Peace Garden Pavilion with Eternal Flame
+        const gardenMat = new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.9 });
+        const gardenBerm = new THREE.Mesh(new THREE.BoxGeometry(28, 0.6, 22), gardenMat);
+        gardenBerm.position.set(170, 0.3, -820);
+        nps.add(gardenBerm);
+        const flamePavilion = new THREE.Mesh(new THREE.CylinderGeometry(4, 4.5, 5, 8), concreteMat);
+        flamePavilion.position.set(170, 2.5, -820);
+        nps.add(flamePavilion);
+        const flame = new THREE.Mesh(new THREE.ConeGeometry(0.8, 2.2, 8), new THREE.MeshBasicMaterial({ color: 0xf97316 }));
+        flame.position.set(170, 5.8, -820);
+        nps.add(flame);
+
+        expGroup.add(nps);
+
+        // Obstacles for sign & sculptures
+        addSolid({ type: 'poly', pts: [[72, -777], [102, -777], [102, -773], [72, -773]], h: 3.5, name: '3D TORONTO Sign' });
+        addSolid({ type: 'poly', pts: [[87, -853], [93, -853], [93, -847], [87, -847]], h: 3.0, name: 'Henry Moore Archer' });
+      }
+
+      // ------------------------------------------------------------------------
+      // 3. TORONTO CITY HALL (Viljo Revell's Twin Towers & Saucer Council Chamber)
+      // ------------------------------------------------------------------------
+      {
+        const tch = new THREE.Group();
+        tch.position.set(90, 0, -915);
+
+        // Two-Storey Podium Base (x: -70..70, z: -38..38, h: 8.5)
+        const podium = new THREE.Mesh(new THREE.BoxGeometry(140, 8.5, 76), concreteMat);
+        podium.position.set(0, 4.25, 0);
+        tch.add(podium);
+
+        // Podium Roof Balustrade & Skylights
+        const balustrade = new THREE.Mesh(new THREE.BoxGeometry(138, 1.0, 74), concreteMat);
+        balustrade.position.set(0, 9.0, 0);
+        tch.add(balustrade);
+
+        // East Crescent Tower (27 storeys, 100m, curving concave toward west)
+        const eastTower = new THREE.Mesh(new THREE.CylinderGeometry(32, 32, 100, 24, 1, false, 0.25, Math.PI * 0.72), concreteMat);
+        eastTower.scale.set(0.55, 1, 1.15);
+        eastTower.position.set(28, 50, -4);
+        tch.add(eastTower);
+        const eastGlass = new THREE.Mesh(new THREE.BoxGeometry(6, 96, 52), darkGlassMat);
+        eastGlass.position.set(30, 50, -4);
+        tch.add(eastGlass);
+
+        // West Crescent Tower (20 storeys, 79m, curving concave toward east)
+        const westTower = new THREE.Mesh(new THREE.CylinderGeometry(30, 30, 79, 24, 1, false, Math.PI * 1.05, Math.PI * 0.72), concreteMat);
+        westTower.scale.set(0.55, 1, 1.15);
+        westTower.position.set(-28, 39.5, -4);
+        tch.add(westTower);
+        const westGlass = new THREE.Mesh(new THREE.BoxGeometry(6, 75, 48), darkGlassMat);
+        westGlass.position.set(-30, 39.5, -4);
+        tch.add(westGlass);
+
+        // Central Flying-Saucer Council Chamber nestled between the twin towers
+        const saucerStem = new THREE.Mesh(new THREE.CylinderGeometry(8, 9, 16, 20), concreteMat);
+        saucerStem.position.set(0, 16.5, 0);
+        tch.add(saucerStem);
+        const saucerDome = new THREE.Mesh(new THREE.SphereGeometry(22, 28, 16), whiteSteelMat);
+        saucerDome.scale.set(1.15, 0.38, 0.95);
+        saucerDome.position.set(0, 25.5, 0);
+        tch.add(saucerDome);
+
+        // City of Toronto Civic Sign
+        const chSign = signMesh([
+          'TORONTO CITY HALL • 100 QUEEN STREET WEST',
+          'VILJO REVELL ARCHITECT (1965) • SEAT OF MUNICIPAL GOVERNMENT'
+        ], 16, 2.0, { bg: '#0f172a', fg: '#38bdf8', borderColor: '#38bdf8', size: 52 });
+        chSign.position.set(0, 3.5, 39.5);
+        tch.add(chSign);
+
+        expGroup.add(tch);
+
+        // Solids for City Hall
+        addSolid({ type: 'poly', pts: [[20, -953], [160, -953], [160, -877], [20, -877]], h: 8.5, name: 'City Hall Podium Base' });
+        addSolid({ type: 'poly', pts: [[105, -941], [131, -941], [131, -889], [105, -889]], h: 100, name: 'City Hall East Tower' });
+        addSolid({ type: 'poly', pts: [[49, -939], [75, -939], [75, -891], [49, -891]], h: 79, name: 'City Hall West Tower' });
+        addSolid({ type: 'circle', x: 90, z: -915, r: 8.5, name: 'City Hall Council Stem' });
+      }
+
+      // ------------------------------------------------------------------------
+      // 4. TORONTO EATON CENTRE & YONGE-DUNDAS SQUARE (Yonge St: Queen to Dundas)
+      // ------------------------------------------------------------------------
+      {
+        const tec = new THREE.Group();
+
+        // 1. Hudson's Bay / Saks Flagship Department Store (Queen & Yonge, NW corner)
+        const hbc = new THREE.Mesh(new THREE.BoxGeometry(60, 36, 56), sandstoneMat);
+        hbc.position.set(342, 18, -710);
+        tec.add(hbc);
+        const hbcRoof = new THREE.Mesh(new THREE.BoxGeometry(62, 4, 58), copperRoofMat);
+        hbcRoof.position.set(342, 37, -710);
+        tec.add(hbcRoof);
+        const hbcSign = signMesh(['HUDSON\'S BAY • SAKS FIFTH AVENUE', 'QUEEN & YONGE FLAGSHIP • EST. 1670'], 15, 2.0, { bg: '#1c1917', fg: '#fef08a', borderColor: '#d4af37', size: 48 });
+        hbcSign.position.set(373, 6, -710);
+        hbcSign.rotation.y = Math.PI / 2;
+        tec.add(hbcSign);
+
+        // 2. Queen Street Twisting Glass Pedestrian Skybridge (connecting to Eaton Centre)
+        const skybridge = new THREE.Mesh(new THREE.BoxGeometry(16, 5, 22), blueGlassMat);
+        skybridge.position.set(355, 8.5, -670);
+        tec.add(skybridge);
+
+        // 3. Main Eaton Centre Retail Mall Body (z: -740..-1030)
+        const mallBody = new THREE.Mesh(new THREE.BoxGeometry(44, 24, 280), concreteMat);
+        mallBody.position.set(352, 12, -885);
+        tec.add(mallBody);
+
+        // 4. The Iconic Glass Barrel-Vaulted Galleria
+        const galleriaVault = new THREE.Mesh(new THREE.CylinderGeometry(13, 13, 276, 16, 1, false, 0, Math.PI), blueGlassMat);
+        galleriaVault.rotation.x = Math.PI / 2;
+        galleriaVault.position.set(352, 24, -885);
+        tec.add(galleriaVault);
+
+        // Arched Steel Galleria Ribs
+        for (let rz = -1015; rz <= -755; rz += 20) {
+          const rib = new THREE.Mesh(new THREE.TorusGeometry(13.2, 0.45, 8, 20, Math.PI), whiteSteelMat);
+          rib.position.set(352, 24, rz);
+          tec.add(rib);
+        }
+
+        // 5. Cadillac Fairview Office Towers
+        // 20 Queen St West (130m, dark glass)
+        const tower20Q = new THREE.Mesh(new THREE.BoxGeometry(34, 130, 34), darkGlassMat);
+        tower20Q.position.set(325, 65, -715);
+        tec.add(tower20Q);
+
+        // 250 Yonge St (110m, bronze glass)
+        const bronzeGlassMat = new THREE.MeshStandardMaterial({ color: 0x785338, roughness: 0.2, metalness: 0.8 });
+        const tower250Y = new THREE.Mesh(new THREE.BoxGeometry(32, 110, 32), bronzeGlassMat);
+        tower250Y.position.set(325, 55, -860);
+        tec.add(tower250Y);
+
+        // 1 Dundas St West (125m, granite/glass)
+        const tower1D = new THREE.Mesh(new THREE.BoxGeometry(34, 125, 34), darkGlassMat);
+        tower1D.position.set(325, 62.5, -1015);
+        tec.add(tower1D);
+
+        // Eaton Centre Street-Level Portals along Yonge St
+        [-990, -880, -780].forEach(pz => {
+          const portal = new THREE.Mesh(new THREE.BoxGeometry(4, 5.5, 12), darkGlassMat);
+          portal.position.set(374, 2.75, pz);
+          tec.add(portal);
+          const eSign = signMesh(['TORONTO EATON CENTRE', 'GALLERIA ENTRANCE'], 10, 1.4, { bg: '#047857', fg: '#ffffff', borderColor: '#34d399', size: 48 });
+          eSign.position.set(376.5, 4.2, pz);
+          eSign.rotation.y = Math.PI / 2;
+          tec.add(eSign);
+        });
+
+        // 6. Yonge-Dundas Square (SE corner of Yonge & Dundas, x: 395..455, z: -1035..-1095)
+        const ydsPlaza = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.9 }));
+        ydsPlaza.rotation.x = -Math.PI / 2;
+        ydsPlaza.position.set(425, 0.05, -1065);
+        tec.add(ydsPlaza);
+
+        // Animated splash fountain nozzles in square
+        for (let fx = 405; fx <= 445; fx += 10) {
+          for (let fz = -1085; fz <= -1045; fz += 10) {
+            const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 1.6, 6), blueGlassMat);
+            jet.position.set(fx, 0.8, fz);
+            tec.add(jet);
+          }
+        }
+
+        // 10 Dundas East Curved Cinema Tower (north of Dundas, x: 395..455, z: -995..-1035)
+        const dundas10 = new THREE.Mesh(new THREE.BoxGeometry(58, 55, 38), darkGlassMat);
+        dundas10.position.set(425, 27.5, -1015);
+        tec.add(dundas10);
+
+        // Giant Curved 3D Digital Billboards on 10 Dundas East
+        const billboard10 = new THREE.Mesh(
+          new THREE.BoxGeometry(52, 28, 2),
+          new THREE.MeshBasicMaterial({ map: makeLabelTexture(['YONGE-DUNDAS', 'SQUARE • LIVE', 'CANADA\'S TIMES SQUARE'], { bg: '#1e1b4b', fg: '#facc15', borderColor: '#ec4899', size: 48 }) })
+        );
+        billboard10.position.set(425, 32, -1035);
+        tec.add(billboard10);
+
+        // YDS South Billboard Media Tower (x: 448, z: -1080)
+        const southMedia = new THREE.Mesh(new THREE.BoxGeometry(16, 42, 16), darkGlassMat);
+        southMedia.position.set(448, 21, -1080);
+        tec.add(southMedia);
+        const southScreen = new THREE.Mesh(
+          new THREE.BoxGeometry(14, 22, 1),
+          new THREE.MeshBasicMaterial({ map: makeLabelTexture(['TORONTO', 'EVENTS • CONCERTS', 'LIVE AT YDS'], { bg: '#831843', fg: '#38bdf8', borderColor: '#f43f5e', size: 44 }) })
+        );
+        southScreen.position.set(448, 26, -1071.5);
+        tec.add(southScreen);
+
+        expGroup.add(tec);
+
+        // Solids for Eaton Centre & YDS
+        addSolid({ type: 'poly', pts: [[312, -738], [372, -738], [372, -682], [312, -682]], h: 36, name: 'Hudson\'s Bay Flagship' });
+        addSolid({ type: 'poly', pts: [[330, -1025], [374, -1025], [374, -745], [330, -745]], h: 24, name: 'Eaton Centre Galleria Body' });
+        addSolid({ type: 'poly', pts: [[396, -1034], [454, -1034], [454, -996], [396, -996]], h: 55, name: '10 Dundas East Cinema Complex' });
+        addSolid({ type: 'poly', pts: [[440, -1088], [456, -1088], [456, -1072], [440, -1072]], h: 42, name: 'YDS Media Tower' });
+      }
+
+      // ------------------------------------------------------------------------
+      // 5. CHINATOWN (Spadina Ave & Dundas St West)
+      //    Imperial Paifang Dragon Arch, Red Silk Lanterns & Authentic Storefronts
+      // ------------------------------------------------------------------------
+      {
+        const ct = new THREE.Group();
+
+        // 1. Grand Imperial Chinese Paifang Gateway Arch (straddling Dundas St West at x = -530)
+        const paifang = new THREE.Group();
+        paifang.position.set(-530, 0, -1050);
+
+        // 4 Vermilion Red Columns
+        [-6.5, -2.2, 2.2, 6.5].forEach(ox => {
+          const col = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.6, 9.5, 12), redSteelMat);
+          col.position.set(ox, 4.75, 0);
+          paifang.add(col);
+          // Stone plinth
+          const base = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.2, 1.6), sandstoneMat);
+          base.position.set(ox, 0.6, 0);
+          paifang.add(base);
+        });
+
+        // Dougong Interlocking Brackets & Golden Architrave Beam
+        const beam = new THREE.Mesh(new THREE.BoxGeometry(16, 1.2, 2.4), redSteelMat);
+        beam.position.set(0, 8.8, 0);
+        paifang.add(beam);
+
+        // Gold Calligraphy Plaque: "多倫多華埠" / "天下為公"
+        const plaque = new THREE.Mesh(
+          new THREE.BoxGeometry(7.2, 1.8, 0.5),
+          new THREE.MeshStandardMaterial({ map: makeLabelTexture(['多 倫 多 華 埠', 'CHINATOWN • TORONTO'], { bg: '#991b1b', fg: '#facc15', borderColor: '#d97706', size: 52 }) })
+        );
+        plaque.position.set(0, 9.2, 1.3);
+        paifang.add(plaque);
+        const plaqueBack = new THREE.Mesh(
+          new THREE.BoxGeometry(7.2, 1.8, 0.5),
+          new THREE.MeshStandardMaterial({ map: makeLabelTexture(['天 下 為 公', 'ALL UNDER HEAVEN'], { bg: '#991b1b', fg: '#facc15', borderColor: '#d97706', size: 52 }) })
+        );
+        plaqueBack.position.set(0, 9.2, -1.3);
+        paifang.add(plaqueBack);
+
+        // Multi-tier Glazed Green Pagoda Roof with Upturned Golden Eaves
+        const mainRoof = new THREE.Mesh(new THREE.BoxGeometry(18, 1.6, 4.2), glazedGreenMat);
+        mainRoof.position.set(0, 10.8, 0);
+        paifang.add(mainRoof);
+
+        const upperRoof = new THREE.Mesh(new THREE.BoxGeometry(9.5, 1.4, 3.4), glazedGreenMat);
+        upperRoof.position.set(0, 12.4, 0);
+        paifang.add(upperRoof);
+
+        // Golden Ridge Dragons
+        [-8.8, 8.8].forEach(ex => {
+          const dragon = new THREE.Mesh(new THREE.ConeGeometry(0.6, 1.5, 6), goldMat);
+          dragon.position.set(ex, 11.6, 0);
+          dragon.rotation.z = ex > 0 ? -0.5 : 0.5;
+          paifang.add(dragon);
+        });
+
+        // Two Imperial Guardian Lion Statues (Foo Dogs)
+        [-7.5, 7.5].forEach((lx, li) => {
+          const lionPlinth = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.0, 1.8), plazaGraniteMat);
+          lionPlinth.position.set(lx, 0.5, 2.2);
+          paifang.add(lionPlinth);
+          const lion = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.3, 1.1), sandstoneMat);
+          lion.position.set(lx, 1.65, 2.2);
+          paifang.add(lion);
+        });
+
+        ct.add(paifang);
+
+        // 2. Hanging Red Chinese Lanterns with Gold Tassels along Spadina & Dundas
+        const lanternSpots = [
+          [-580, -1020], [-580, -1040], [-580, -1060], [-580, -1080],
+          [-550, -1050], [-570, -1050], [-610, -1050], [-630, -1050]
+        ];
+        lanternSpots.forEach(([lx, lz]) => {
+          [-8, 8].forEach(side => {
+            const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 4.6, 8), darkGlassMat);
+            post.position.set(lx + (lz === -1050 ? 0 : side), 2.3, lz + (lz === -1050 ? side : 0));
+            ct.add(post);
+            const lantern = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 10), neonRedMat);
+            lantern.scale.set(1.0, 1.25, 1.0);
+            lantern.position.set(lx + (lz === -1050 ? 0 : side), 4.2, lz + (lz === -1050 ? side : 0));
+            ct.add(lantern);
+            const tassel = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.12, 0.5, 6), goldMat);
+            tassel.position.set(lx + (lz === -1050 ? 0 : side), 3.4, lz + (lz === -1050 ? side : 0));
+            ct.add(tassel);
+          });
+        });
+
+        // 3. Authentic Chinatown Commercial Storefront Blocks
+        const chinatownStores = [
+          { name: 'Swatow Restaurant (潮州汕頭飯店)', x: -558, z: -1030, w: 22, d: 24, h: 14, col: '#b91c1c' },
+          { name: 'Rol San Dim Sum (金山酒家)', x: -610, z: -1030, w: 24, d: 24, h: 15, col: '#ca8a04' },
+          { name: 'Hong Kong Island Bakery (香港餅店)', x: -558, z: -1072, w: 22, d: 24, h: 14, col: '#ea580c' },
+          { name: 'Tung Hing Bakery (東興餅家)', x: -610, z: -1072, w: 24, d: 24, h: 15, col: '#15803d' },
+          { name: 'Tong Ren Tang Chinese Herbs (同仁堂)', x: -558, z: -1098, w: 22, d: 24, h: 16, col: '#0f766e' },
+          { name: 'Lucky Moose Food Mart (吉祥超市)', x: -610, z: -1098, w: 24, d: 24, h: 15, col: '#dc2626' }
+        ];
+
+        chinatownStores.forEach(s => {
+          const bldg = new THREE.Mesh(new THREE.BoxGeometry(s.w, s.h, s.d), sandstoneMat);
+          bldg.position.set(s.x, s.h / 2, s.z);
+          ct.add(bldg);
+          // Green Pagoda Eaves
+          const eaves = new THREE.Mesh(new THREE.BoxGeometry(s.w + 1.6, 1.2, s.d + 1.6), glazedGreenMat);
+          eaves.position.set(s.x, s.h + 0.6, s.z);
+          ct.add(eaves);
+          // Storefront Bilingual Neon Sign
+          const sSign = signMesh([s.name, 'CHINATOWN TORONTO • DOWNTOWN WEST'], s.w * 0.85, 2.0, { bg: s.col, fg: '#fef08a', borderColor: '#facc15', size: 46 });
+          const faceZ = s.z > -1050 ? s.z - s.d / 2 - 0.2 : s.z + s.d / 2 + 0.2;
+          sSign.position.set(s.x, 4.5, faceZ);
+          ct.add(sSign);
+
+          addSolid({
+            type: 'poly',
+            pts: [[s.x - s.w / 2, s.z - s.d / 2], [s.x + s.w / 2, s.z - s.d / 2], [s.x + s.w / 2, s.z + s.d / 2], [s.x - s.w / 2, s.z + s.d / 2]],
+            h: s.h,
+            name: s.name
+          });
+        });
+
+        // 4. Osgoode Hall & Canada Life Building (Civic / University Corridor)
+        // Osgoode Hall (Queen & University, x: -80, z: -730)
+        const osgoodeHall = new THREE.Mesh(new THREE.BoxGeometry(85, 24, 60), sandstoneMat);
+        osgoodeHall.position.set(-80, 12, -730);
+        ct.add(osgoodeHall);
+        const osgoodeLawn = new THREE.Mesh(new THREE.PlaneGeometry(90, 65), new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.9 }));
+        osgoodeLawn.rotation.x = -Math.PI / 2;
+        osgoodeLawn.position.set(-80, 0.05, -730);
+        ct.add(osgoodeLawn);
+        const osgoodeSign = signMesh(['OSGOODE HALL • EST. 1832', 'COURT OF APPEAL FOR ONTARIO • HISTORIC LAW COURTS'], 16, 2.0, { bg: '#1c1917', fg: '#fef08a', borderColor: '#d4af37', size: 48 });
+        osgoodeSign.position.set(-80, 2.4, -698);
+        ct.add(osgoodeSign);
+        addSolid({ type: 'poly', pts: [[-122, -760], [-38, -760], [-38, -700], [-122, -700]], h: 24, name: 'Osgoode Hall' });
+
+        // Canada Life Building (x: -260, z: -720, h: 87m with weather beacon)
+        const canLife = new THREE.Mesh(new THREE.BoxGeometry(38, 75, 42), sandstoneMat);
+        canLife.position.set(-260, 37.5, -720);
+        ct.add(canLife);
+        const canBeacon = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 2.0, 18, 12), whiteSteelMat);
+        canBeacon.position.set(-260, 84, -720);
+        ct.add(canBeacon);
+        const beaconLight = new THREE.Mesh(new THREE.SphereGeometry(1.5, 12, 10), new THREE.MeshBasicMaterial({ color: 0x38bdf8 }));
+        beaconLight.position.set(-260, 94, -720);
+        ct.add(beaconLight);
+        addSolid({ type: 'poly', pts: [[-279, -741], [-241, -741], [-241, -699], [-279, -699]], h: 75, name: 'Canada Life Building' });
+
+        expGroup.add(ct);
+      }
+
+      // ------------------------------------------------------------------------
+      // 6. WEST END WATERFRONT: PRINCES' GATES, BMO FIELD & ONTARIO PLACE
+      // ------------------------------------------------------------------------
+      {
+        const wEnd = new THREE.Group();
+
+        // 1. Princes' Gates (Exhibition Place, x: -1620, z: 320)
+        const pg = new THREE.Group();
+        pg.position.set(-1620, 0, 320);
+
+        // Central Triumphal Arch & Side Pylons
+        [-24, 24].forEach(oz => {
+          const pylon = new THREE.Mesh(new THREE.BoxGeometry(10, 26, 12), concreteMat);
+          pylon.position.set(0, 13, oz);
+          pg.add(pylon);
+        });
+        const archLintel = new THREE.Mesh(new THREE.BoxGeometry(12, 8, 60), concreteMat);
+        archLintel.position.set(0, 26, 0);
+        pg.add(archLintel);
+
+        // Gilded Winged Goddess of Peace statue
+        const goddess = new THREE.Mesh(new THREE.ConeGeometry(3.5, 9, 8), goldMat);
+        goddess.position.set(0, 34, 0);
+        pg.add(goddess);
+
+        // Curved 9-Column Colonnades extending East and West
+        [-1, 1].forEach(side => {
+          for (let i = 1; i <= 9; i++) {
+            const col = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.8, 16, 12), concreteMat);
+            col.position.set(0, 8, side * (30 + i * 4.5));
+            pg.add(col);
+          }
+        });
+
+        // Ceremonial Plaque
+        const pgSign = signMesh([
+          'PRINCES\' GATES • EXHIBITION PLACE',
+          'BEAUX-ARTS TRIUMPHAL ARCH • DEDICATED 1927'
+        ], 14, 1.8, { bg: '#1c1917', fg: '#fef08a', borderColor: '#d4af37', size: 48 });
+        pgSign.position.set(6.5, 3.5, 0);
+        pgSign.rotation.y = Math.PI / 2;
+        pg.add(pgSign);
+
+        wEnd.add(pg);
+
+        // Solids for Princes' Gates side pylons (central passageway remains walkable)
+        addSolid({ type: 'poly', pts: [[-1625, 290], [-1615, 290], [-1615, 302], [-1625, 302]], h: 26, name: 'Princes Gates North Pylon' });
+        addSolid({ type: 'poly', pts: [[-1625, 338], [-1615, 338], [-1615, 350], [-1625, 350]], h: 26, name: 'Princes Gates South Pylon' });
+
+        // 2. BMO Field (National Soccer Stadium, x: -2020, z: 310)
+        const bmo = new THREE.Group();
+        bmo.position.set(-2020, 0, 310);
+
+        // Regulation Soccer Pitch
+        const pitch = new THREE.Mesh(new THREE.PlaneGeometry(105, 68), pitchGrassMat);
+        pitch.rotation.x = -Math.PI / 2;
+        pitch.position.y = 0.25;
+        bmo.add(pitch);
+
+        // Pitch Touchline markings
+        const touchlines = new THREE.Mesh(new THREE.PlaneGeometry(103, 66), new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true }));
+        touchlines.rotation.x = -Math.PI / 2;
+        touchlines.position.y = 0.28;
+        bmo.add(touchlines);
+
+        // Red East and West Grandstands with Cantilevered White Canopies
+        [-62, 62].forEach(sx => {
+          const stand = new THREE.Mesh(new THREE.BoxGeometry(22, 28, 116), redSteelMat);
+          stand.position.set(sx, 14, 0);
+          bmo.add(stand);
+          const canopy = new THREE.Mesh(new THREE.BoxGeometry(28, 2.2, 120), whiteSteelMat);
+          canopy.position.set(sx * 0.85, 29, 0);
+          bmo.add(canopy);
+        });
+
+        // 4 Corner Stadium Floodlight Pylons
+        [-62, 62].forEach(fx => {
+          [-58, 58].forEach(fz => {
+            const lightPylon = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1.2, 45, 8), whiteSteelMat);
+            lightPylon.position.set(fx, 22.5, fz);
+            bmo.add(lightPylon);
+            const lightBank = new THREE.Mesh(new THREE.BoxGeometry(4, 2, 4), new THREE.MeshBasicMaterial({ color: 0xfffbeb }));
+            lightBank.position.set(fx, 45, fz);
+            bmo.add(lightBank);
+          });
+        });
+
+        const bmoSign = signMesh([
+          'BMO FIELD • NATIONAL SOCCER STADIUM',
+          'HOME OF TORONTO FC • TORONTO ARGONAUTS'
+        ], 14, 1.8, { bg: '#991b1b', fg: '#fef08a', borderColor: '#ffffff', size: 48 });
+        bmoSign.position.set(0, 3.5, 64);
+        bmo.add(bmoSign);
+
+        wEnd.add(bmo);
+
+        // Solids for BMO Field grandstands
+        addSolid({ type: 'poly', pts: [[-2093, 252], [-2071, 252], [-2071, 368], [-2093, 368]], h: 28, name: 'BMO Field West Stand' });
+        addSolid({ type: 'poly', pts: [[-1969, 252], [-1947, 252], [-1947, 368], [-1969, 368]], h: 28, name: 'BMO Field East Stand' });
+
+        // 3. Ontario Place Pedestrian Bridge, Island Promenade & Cinesphere (x: -2120, z: 480..780)
+        const op = new THREE.Group();
+
+        // Pedestrian Bridge spanning the water from mainland (z: 480) to island (z: 640)
+        const bridgeDeck = new THREE.Mesh(new THREE.BoxGeometry(10, 0.8, 160), concreteMat);
+        bridgeDeck.position.set(-2120, 0.4, 560);
+        op.add(bridgeDeck);
+        // Bridge white railings & nautical lanterns
+        [-5.1, 5.1].forEach(rx => {
+          const rail = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.2, 160), whiteSteelMat);
+          rail.position.set(-2120 + rx, 1.1, 560);
+          op.add(rail);
+          for (let bz = 490; bz <= 630; bz += 25) {
+            const bl = new THREE.Mesh(new THREE.SphereGeometry(0.25, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffedd5 }));
+            bl.position.set(-2120 + rx, 1.9, bz);
+            op.add(bl);
+          }
+        });
+
+        // Ontario Place West Island Turf & Waterfront Boardwalk (x: -2220..-2020, z: 620..780)
+        const islandTurf = new THREE.Mesh(new THREE.BoxGeometry(200, 0.8, 160), new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.9 }));
+        islandTurf.position.set(-2120, 0.1, 700);
+        op.add(islandTurf);
+
+        const boardwalk = new THREE.Mesh(new THREE.RingGeometry(24, 38, 32), new THREE.MeshStandardMaterial({ color: 0x785338, roughness: 0.8 }));
+        boardwalk.rotation.x = -Math.PI / 2;
+        boardwalk.position.set(-2120, 0.2, 720);
+        op.add(boardwalk);
+
+        // The World's First Permanent IMAX Geodesic Dome: THE CINESPHERE (1971, Eberhard Zeidler)
+        const cinesphere = new THREE.Mesh(new THREE.IcosahedronGeometry(22, 2), whiteSteelMat);
+        cinesphere.position.set(-2120, 16, 720);
+        op.add(cinesphere);
+        const cineFrame = new THREE.Mesh(new THREE.IcosahedronGeometry(22.4, 2), new THREE.MeshBasicMaterial({ color: 0x94a3b8, wireframe: true }));
+        cineFrame.position.set(-2120, 16, 720);
+        op.add(cineFrame);
+
+        // 5 Suspended Modular Pavilion Pods on Steel Masts over Lake Ontario
+        for (let p = 0; p < 5; p++) {
+          const px = -2120 + 44 + p * 32, pz = 702 + (p % 2) * 24;
+          const pod = new THREE.Mesh(new THREE.BoxGeometry(22, 9, 22), whiteSteelMat);
+          pod.position.set(px, 14, pz);
+          op.add(pod);
+          // Glazed walkway connecting pods
+          if (p > 0) {
+            const connector = new THREE.Mesh(new THREE.BoxGeometry(14, 4, 6), blueGlassMat);
+            connector.position.set(px - 16, 14, (pz + (702 + ((p - 1) % 2) * 24)) / 2);
+            op.add(connector);
+          }
+          // Steel tubular masts
+          [-8, 8].forEach(mx => {
+            [-8, 8].forEach(mz => {
+              const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 0.65, 26, 8), concreteMat);
+              mast.position.set(px + mx, 11, pz + mz);
+              op.add(mast);
+            });
+          });
+        }
+
+        // Ontario Place Landmark Sign
+        const opSign = signMesh([
+          'ONTARIO PLACE • EST. 1971',
+          'CINESPHERE GEODESIC DOME • WORLD\'S FIRST PERMANENT IMAX'
+        ], 14, 1.8, { bg: '#0369a1', fg: '#ffffff', borderColor: '#38bdf8', size: 48 });
+        opSign.position.set(-2120, 2.4, 645);
+        op.add(opSign);
+
+        wEnd.add(op);
+
+        // Solid obstacle for Cinesphere center dome
+        addSolid({ type: 'circle', x: -2120, z: 720, r: 18, name: 'Ontario Place Cinesphere' });
+
+        expGroup.add(wEnd);
+      }
+
+      scene.add(expGroup);
+    }
+
     // ---------- 1. Streetcar Tracks along King St, Queen St & Spadina Ave (1 merged GeoBuilder draw call) ----------
     const streetcarRoads = groundRoads.filter(r => {
       const n = (MAP.roads[r.id] || {}).n || '';
@@ -15320,12 +16108,14 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
 
     // ---------- Minimap pre-render ----------
     const MM_SCALE = 0.6; // px per metre
+    const mmMinX = -2350, mmMaxX = 1360;
+    const mmMinZ = -1180, mmMaxZ = 1650;
     const mmCanvas = document.createElement('canvas');
-    mmCanvas.width = Math.ceil((maxX - minX) * MM_SCALE);
-    mmCanvas.height = Math.ceil((1650 - minZ) * MM_SCALE);
+    mmCanvas.width = Math.ceil((mmMaxX - mmMinX) * MM_SCALE);
+    mmCanvas.height = Math.ceil((mmMaxZ - mmMinZ) * MM_SCALE);
     {
       const g = mmCanvas.getContext('2d');
-      const tx = x => (x - minX) * MM_SCALE, tz = z => (z - minZ) * MM_SCALE;
+      const tx = x => (x - mmMinX) * MM_SCALE, tz = z => (z - mmMinZ) * MM_SCALE;
       g.fillStyle = '#16181d';
       g.fillRect(0, 0, mmCanvas.width, mmCanvas.height);
 
@@ -15632,7 +16422,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       ctx.translate(size / 2, size / 2);
       ctx.rotate(yaw); // heading-up
       ctx.scale(s / MM_SCALE, s / MM_SCALE);
-      ctx.drawImage(mmCanvas, -(player.x - minX) * MM_SCALE, -(player.z - minZ) * MM_SCALE);
+      ctx.drawImage(mmCanvas, -(player.x - mmMinX) * MM_SCALE, -(player.z - mmMinZ) * MM_SCALE);
       ctx.restore();
 
       ctx.save();
@@ -15919,6 +16709,48 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         desc: 'Bay & Queens Quay terminal slips and passenger ferries to Toronto Islands',
         pos: { x: 708.0, y: 1.7, z: 295.0 },
         yaw: -0.35
+      },
+      {
+        id: 'nathanPhillipsSquare',
+        name: 'Nathan Phillips Square & Toronto Sign',
+        desc: 'City Hall twin curved towers, reflecting pool, freedom arches & glowing 3D TORONTO sign',
+        pos: { x: 75.0, y: 1.7, z: -770.0 },
+        yaw: 0
+      },
+      {
+        id: 'oldCityHall',
+        name: 'Old City Hall & Clock Tower',
+        desc: '1899 Richardsonian Romanesque sandstone courthouse with 103m soaring clock tower at Queen & Bay',
+        pos: { x: 265.0, y: 1.7, z: -752.0 },
+        yaw: 3.14
+      },
+      {
+        id: 'yongeDundasSquare',
+        name: 'Yonge-Dundas Square & Eaton Centre',
+        desc: 'Canada\'s Times Square with digital billboard towers, splash fountains & Eaton Centre galleria',
+        pos: { x: 420.0, y: 1.7, z: -1065.0 },
+        yaw: 0
+      },
+      {
+        id: 'chinatown',
+        name: 'Toronto Chinatown & Paifang Gate',
+        desc: 'Vibrant Chinatown intersection at Spadina & Dundas with imperial dragon arch, red lanterns & dim sum',
+        pos: { x: -540.0, y: 1.7, z: -1050.0 },
+        yaw: -1.57
+      },
+      {
+        id: 'princesGates',
+        name: 'Princes\' Gates & Exhibition Place',
+        desc: '1927 Beaux-Arts triumphal arch, 9-column colonnades & gilded Winged Goddess of Peace at CNE',
+        pos: { x: -1600.0, y: 1.7, z: 320.0 },
+        yaw: -1.57
+      },
+      {
+        id: 'ontarioPlace',
+        name: 'Ontario Place Cinesphere & Pods',
+        desc: 'World\'s first permanent IMAX geodesic dome & suspended modular pavilion pods over Lake Ontario',
+        pos: { x: -2120.0, y: 1.7, z: 660.0 },
+        yaw: 3.14
       }
     ];
 
@@ -16074,35 +16906,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         );
         torontoSign.position.set(-18, 2.2, 86);
         ch.add(torontoSign);
-        greaterTorontoGroup.add(ch);
-      }
-
-      // 2. EATON CENTRE GALLERIA & YONGE-DUNDAS SQUARE (380, -1150)
-      {
-        const ec = new THREE.Group();
-        ec.position.set(380, 0, -1150);
-        const mallBody = new THREE.Mesh(new THREE.BoxGeometry(68, 28, 260), concreteMat);
-        mallBody.position.set(0, 14, 0);
-        ec.add(mallBody);
-        const galleriaVault = new THREE.Mesh(new THREE.CylinderGeometry(14, 14, 260, 16, 1, false, 0, Math.PI), blueGlassMat);
-        galleriaVault.rotation.x = Math.PI / 2;
-        galleriaVault.position.set(0, 28, 0);
-        ec.add(galleriaVault);
-        // Cadillac Fairview Eaton Centre office towers
-        const ecTower1 = new THREE.Mesh(new THREE.BoxGeometry(36, 128, 36), darkGlassMat);
-        ecTower1.position.set(-16, 64, -95);
-        ec.add(ecTower1);
-        const ecTower2 = new THREE.Mesh(new THREE.BoxGeometry(34, 108, 34), darkGlassMat);
-        ecTower2.position.set(-16, 54, 95);
-        ec.add(ecTower2);
-        // Yonge-Dundas Square Glowing Billboard Tower
-        const ydsBillboard = new THREE.Mesh(
-          new THREE.BoxGeometry(28, 42, 22),
-          new THREE.MeshBasicMaterial({ map: makeLabelTexture(['YONGE-DUNDAS', 'SQUARE • LIVE'], { bg: '#1e1b4b', fg: '#facc15', borderColor: '#ec4899', size: 52 }) })
-        );
-        ydsBillboard.position.set(52, 21, -135);
-        ec.add(ydsBillboard);
-        greaterTorontoGroup.add(ec);
+        // Active walkable City Hall, Nathan Phillips Square & Eaton Centre are rendered in full detail in section 7B
       }
 
       // 3. QUEEN'S PARK & ONTARIO LEGISLATIVE BUILDING (-450, -1950)
@@ -16193,63 +16997,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
 
       // 6. WEST END: EXHIBITION PLACE, BMO FIELD, ONTARIO PLACE CINESPHERE & HUMBER BAY ARCH BRIDGE
       {
-        // Princes' Gates Triumphal Arch (-1620, 320)
-        const pg = new THREE.Group();
-        pg.position.set(-1620, 0, 320);
-        [-22, 22].forEach(oz => {
-          const pylon = new THREE.Mesh(new THREE.BoxGeometry(10, 24, 12), concreteMat);
-          pylon.position.set(0, 12, oz);
-          pg.add(pylon);
-        });
-        const lintel = new THREE.Mesh(new THREE.BoxGeometry(12, 8, 58), concreteMat);
-        lintel.position.set(0, 26, 0);
-        pg.add(lintel);
-        const goddess = new THREE.Mesh(new THREE.ConeGeometry(3.5, 9, 8), new THREE.MeshBasicMaterial({ color: 0xfacc15 }));
-        goddess.position.set(0, 34, 0);
-        pg.add(goddess);
-        greaterTorontoGroup.add(pg);
-
-        // BMO Field Red-Canopy Stadium (-2020, 310)
-        const bmo = new THREE.Group();
-        bmo.position.set(-2020, 0, 310);
-        const pitch = new THREE.Mesh(new THREE.PlaneGeometry(110, 74), parkGrassMat);
-        pitch.rotation.x = -Math.PI / 2;
-        pitch.position.y = 0.3;
-        bmo.add(pitch);
-        [-64, 64].forEach(sx => {
-          const stand = new THREE.Mesh(new THREE.BoxGeometry(22, 28, 118), redSteelMat);
-          stand.position.set(sx, 14, 0);
-          bmo.add(stand);
-          const canopy = new THREE.Mesh(new THREE.BoxGeometry(28, 2.2, 122), whiteSteelMat);
-          canopy.position.set(sx * 0.85, 29, 0);
-          bmo.add(canopy);
-        });
-        greaterTorontoGroup.add(bmo);
-
-        // Ontario Place Cinesphere Geodesic Dome & Suspended White Pods (-2120, 720)
-        const op = new THREE.Group();
-        op.position.set(-2120, WATER_Y, 720);
-        const cinesphere = new THREE.Mesh(new THREE.IcosahedronGeometry(22, 2), whiteSteelMat);
-        cinesphere.position.set(0, 16, 0);
-        op.add(cinesphere);
-        const cineFrame = new THREE.Mesh(new THREE.IcosahedronGeometry(22.4, 2), new THREE.MeshBasicMaterial({ color: 0x94a3b8, wireframe: true }));
-        cineFrame.position.set(0, 16, 0);
-        op.add(cineFrame);
-        // 5 Suspended White Pavilion Pods on Steel Masts over Lake Ontario
-        for (let p = 0; p < 5; p++) {
-          const px = 42 + p * 32, pz = -18 + (p % 2) * 24;
-          const pod = new THREE.Mesh(new THREE.BoxGeometry(22, 9, 22), whiteSteelMat);
-          pod.position.set(px, 14, pz);
-          op.add(pod);
-          [-8, 8].forEach(mx => {
-            [-8, 8].forEach(mz => {
-              const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 26, 8), concreteMat);
-              mast.position.set(px + mx, 11, pz + mz);
-              op.add(mast);
-            });
-          });
-        }
-        greaterTorontoGroup.add(op);
+        // Active walkable Princes' Gates, BMO Field & Ontario Place Cinesphere are rendered in full detail in section 7B
 
         // Humber Bay Arch Bridge (-3450, 480) & High Park (-3450, -680)
         const hb = new THREE.Group();
