@@ -843,6 +843,8 @@
         const hx = SC.L / 2 + 0.15, hz = SC.W / 2 + 0.15;
         people.forEach(p => {
           if (p.isPlayer && (sc.hasPlayer || sc.boardGrace > 0)) return;
+          if (p.y !== undefined && (p.y < -1.5 || p.y > 15.0)) return;
+          if (p.isPlayer && (ctx.state && (ctx.state.onSubway || ctx.state.isUnderground))) return;
           const r = rel(sc, p.x, p.z);
           const R = p.isPlayer ? 0.45 : 0.5;
           if (Math.abs(r.f) > hx + R || Math.abs(r.l) > hz + R) return;
@@ -984,12 +986,19 @@
         greenLensMesh.instanceColor.needsUpdate = true;
         pedLensMesh.instanceColor.needsUpdate = true;
       }
-      const people = [{ x: P.x, z: P.z, isPlayer: true, y: P.y }];
+      const people = [];
+      const isPlayerUnderground = (ctx.state && (ctx.state.onSubway || ctx.state.isUnderground)) || (P.y < -2.0);
+      const isPlayerSky = P.y > 25.0;
+      if (!isPlayerUnderground && !isPlayerSky) {
+        people.push({ x: P.x, z: P.z, isPlayer: true, y: P.y });
+      }
       ctx.enemies.forEach(e => {
         if (!e.isDead && e.rig) {
           const ep = e.rig.root.position;
+          // Ignore enemies and citizens that are underground in the subway (y < -2.0) or high up in CN Tower
+          if (ep.y < -2.0 || ep.y > 25.0 || e.isSubwayCitizen || e.isDeckEnemy) return;
           if (ep.z < 650 && Math.abs(ep.x - P.x) < 170 && Math.abs(ep.z - P.z) < 170) {
-            people.push({ x: ep.x, z: ep.z, enemy: e });
+            people.push({ x: ep.x, z: ep.z, enemy: e, y: ep.y });
           }
         }
       });
@@ -1087,6 +1096,8 @@
         // ---- collisions with people ----
         const hx = L / 2 + 0.15, hz = c.design.W / 2 + 0.15;
         people.forEach(p => {
+          if (p.y !== undefined && (p.y < -1.5 || p.y > 15.0)) return;
+          if (p.isPlayer && (ctx.state && (ctx.state.onSubway || ctx.state.isUnderground))) return;
           const r = rel(c, p.x, p.z);
           const R = p.isPlayer ? 0.45 : 0.5;
           if (Math.abs(r.f) > hx + R || Math.abs(r.l) > hz + R) return;

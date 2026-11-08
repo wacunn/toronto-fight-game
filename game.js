@@ -8515,9 +8515,12 @@ const carKnock = new THREE.Vector3();
 let carInvuln = 0;
 const trafficHooks = {
   player,
+  state,
   get enemies() { return enemies; },
   onHitPlayer(dmg, kx, kz) {
     if (carInvuln > 0 || state.isDead) return;
+    // Street-level vehicles can NEVER hit a player who is riding the subway or underground!
+    if (state.onSubway || state.isUnderground || player.pos.y < -2.0) return;
     carInvuln = 1.2;
     carKnock.set(kx, 0, kz);
     player.velocity.y = 6.5;          // launched off your feet
@@ -8527,14 +8530,18 @@ const trafficHooks = {
     state.camPunch = 1.5;
   },
   onHitEnemy(enemy, dmg, kx, kz) {
+    // Street-level vehicles can NEVER hit underground subway platform commuters
+    if (enemy.isSubwayCitizen || (enemy.rig && enemy.rig.root.position.y < -2.0)) return;
     hitEnemy(enemy, dmg, 0, 'car');
     enemy.vx = kx; enemy.vz = kz;      // thrown along the car's path, not away from you
   },
   pushOut(p, dx, dz) {
     if (p.isPlayer) {
+      if (state.onSubway || state.isUnderground || player.pos.y < -2.0) return;
       if (canMoveTo(player.pos.x + dx, player.pos.z)) player.pos.x += dx;
       if (canMoveTo(player.pos.x, player.pos.z + dz)) player.pos.z += dz;
     } else if (p.enemy && p.enemy.rig) {
+      if (p.enemy.isSubwayCitizen || p.enemy.rig.root.position.y < -2.0) return;
       const ep = p.enemy.rig.root.position;
       if (!city || city.canMoveTo(ep.x + dx, ep.z + dz, 0.45, ep.y)) {
         ep.x += dx;
