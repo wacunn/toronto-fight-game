@@ -4425,7 +4425,7 @@ function updateSubwayRide(dt) {
 
   const wx = tState.x + axisXX * subwayController.localX + axisZX * subwayController.localZ;
   const wz = tState.z + axisXZ * subwayController.localX + axisZZ * subwayController.localZ;
-  player.pos.set(wx, city.subway.platformY + 1.25 + EYE_HEIGHT, wz);
+  player.pos.set(wx, tState.y + 1.12 + EYE_HEIGHT, wz);
   player.velocity.set(0, 0, 0);
 }
 
@@ -4461,14 +4461,13 @@ function teleportToRandomSubwayEntrance() {
   const st = candidates[Math.floor(Math.random() * candidates.length)];
   const stIdx = stations.indexOf(st);
 
-  // Place player right at the street-level entrance doorway (s = -2.2m along the staircase axis),
+  // Place player right at the street-level entrance doorway (s = -2.0m along the staircase axis),
   // facing directly down the open physical stairs into the subway station!
-  const sDx = st.x - st.streetX;
-  const sDz = (st.z + 32) - st.streetZ;
-  const sLen = Math.hypot(sDx, sDz) || 1;
-  const entX = st.streetX - (sDx / sLen) * 2.2;
-  const entZ = st.streetZ - (sDz / sLen) * 2.2;
-  const downStairsYaw = Math.atan2(sDx, sDz) + Math.PI;
+  const ux = (st.stair && st.stair.ux !== undefined) ? st.stair.ux : 0;
+  const uz = (st.stair && st.stair.uz !== undefined) ? st.stair.uz : -1;
+  const entX = st.streetX - ux * 2.0;
+  const entZ = st.streetZ - uz * 2.0;
+  const downStairsYaw = Math.atan2(ux, uz) + Math.PI;
   const stFloor = (city && city.floorAt) ? city.floorAt(entX, entZ, 0) : 0;
   player.pos.set(entX, stFloor + EYE_HEIGHT, entZ);
   player.yaw = downStairsYaw;
@@ -4881,8 +4880,13 @@ function updateObservationDeck(dt) {
       return;
     }
     for (const st of city.subway.stations) {
-      const dExit = Math.hypot(player.pos.x - st.x, player.pos.z - (st.z + 32));
-      if (dExit < 7.5) {
+      const exitX = st.portalX !== undefined ? st.portalX : st.x;
+      const exitZ = st.portalZ !== undefined ? st.portalZ : (st.z + 32);
+      const dExit = Math.min(
+        Math.hypot(player.pos.x - exitX, player.pos.z - exitZ),
+        Math.hypot(player.pos.x - st.x, player.pos.z - (st.z + 32))
+      );
+      if (dExit < 8.5) {
         activeDeckAction = 'exit_subway_' + st.id;
         setDeckPrompt('[E]', 'EXIT TO STREET (' + st.name.toUpperCase() + ')');
         return;
