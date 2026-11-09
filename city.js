@@ -768,6 +768,11 @@
     LM.torontoSign = [75.0, -775.0];
     LM.eatonCentre = [355.0, -860.0];
     LM.yongeDundasSquare = [420.0, -1065.0];
+    LM.masseyHall = [435.0, -890.0];
+    LM.stMichaelsCathedral = [530.0, -925.0];
+    LM.stMichaelsHospital = [475.0, -835.0];
+    LM.tmuSLC = [405.0, -990.0];
+    LM.metropolitanChurch = [600.0, -790.0];
     LM.chinatown = [-580.0, -1050.0];
     LM.princesGates = [-1620.0, 320.0];
     LM.bmoField = [-2020.0, 310.0];
@@ -1780,6 +1785,12 @@
         { t: 'tertiary', w: 9, p: [100.0, -780.0, 100.0, -900.0, 100.0, -1050.0], n: 'Chestnut Street' },
         { t: 'tertiary', w: 9, p: [160.0, -860.0, 160.0, -1050.0], n: 'Elizabeth Street' },
         { t: 'tertiary', w: 9, p: [225.0, -840.0, 340.0, -840.0], n: 'Albert Street' },
+        // --- East of Eaton Centre Downtown Streets (Queen to Dundas) ---
+        { t: 'secondary', w: 12, p: [450.0, -775.0, 450.0, -910.0, 450.0, -1050.0], n: 'Victoria Street' },
+        { t: 'tertiary', w: 10, p: [520.0, -775.0, 520.0, -910.0, 520.0, -1050.0], n: 'Bond Street' },
+        { t: 'primary', w: 14, p: [610.0, -775.0, 610.0, -910.0, 610.0, -1050.0], n: 'Church Street' },
+        { t: 'secondary', w: 13, p: [380.0, -910.0, 450.0, -910.0, 520.0, -910.0, 610.0, -910.0, 680.0, -910.0], n: 'Shuter Street' },
+        { t: 'pedestrian', w: 11, p: [380.0, -1010.0, 450.0, -1010.0, 520.0, -1010.0, 610.0, -1010.0], n: 'Gould Street' },
         // --- West End Waterfront Corridor Towards Ontario Place ---
         { t: 'primary', w: 16, p: [-1100.0, 420.0, -1350.0, 400.0, -1620.0, 380.0, -1900.0, 380.0, -2250.0, 380.0], n: 'Lake Shore Boulevard West' },
         { t: 'secondary', w: 12, p: [-1100.0, 280.0, -1350.0, 280.0, -1620.0, 280.0], n: 'Fleet Street' },
@@ -3066,8 +3077,20 @@
       if (x >= -30 && x <= 210 && z >= -970 && z <= -765) return true;
       // Old City Hall
       if (x >= 225 && x <= 315 && z >= -840 && z <= -755) return true;
-      // Toronto Eaton Centre & Yonge-Dundas Square
-      if (x >= 310 && x <= 465 && z >= -1110 && z <= -670) return true;
+      // Toronto Eaton Centre (West of Yonge)
+      if (x >= 310 && x <= 385 && z >= -1040 && z <= -680) return true;
+      // Yonge-Dundas Square (SE corner of Yonge & Dundas)
+      if (x >= 390 && x <= 445 && z >= -1090 && z <= -1035) return true;
+      // Massey Hall & Allied Music Centre (Victoria & Shuter)
+      if (x >= 420 && x <= 465 && z >= -925 && z <= -870) return true;
+      // St. Michael's Cathedral Basilica & Bishop's Palace (Bond & Shuter)
+      if (x >= 500 && x <= 560 && z >= -950 && z <= -890) return true;
+      // St. Michael's Hospital & Peter Gilgan Tower (Queen & Victoria to Shuter)
+      if (x >= 435 && x <= 505 && z >= -880 && z <= -780) return true;
+      // TMU Student Learning Centre (SLC) (Yonge & Gould)
+      if (x >= 390 && x <= 440 && z >= -1015 && z <= -970) return true;
+      // Metropolitan United Church (Queen & Church)
+      if (x >= 570 && x <= 645 && z >= -820 && z <= -765) return true;
       // Chinatown Gate & Commercial Core (Spadina & Dundas)
       if (x >= -670 && x <= -510 && z >= -1120 && z <= -980) return true;
       // Princes' Gates & Exhibition Place & BMO Field
@@ -9362,15 +9385,357 @@
     }
 
     // ==========================================================================
-    // 7B. EXPANDED WORLD: QUEEN TO DUNDAS CIVIC CORRIDOR & WEST WATERFRONT
+    // 7B. EXPANDED WORLD: QUEEN TO DUNDAS CIVIC CORRIDOR, EAST OF EATON & ONTARIO PLACE
     //     Old City Hall, Nathan Phillips Square, Toronto City Hall, Eaton Centre,
-    //     Yonge-Dundas Square, Chinatown, Princes' Gates, BMO Field & Ontario Place
+    //     Yonge-Dundas Square, Massey Hall, St. Michael's Cathedral & Hospital,
+    //     TMU Student Learning Centre, Ed Mirvish Theatre, Metropolitan United Church,
+    //     Chinatown, Princes' Gates, BMO Field & Ontario Place
     // ==========================================================================
     {
       const expGroup = new THREE.Group();
 
-      // Shared Materials
-      const sandstoneMat = new THREE.MeshStandardMaterial({ color: 0xa89376, roughness: 0.85 });
+      // --- PROCEDURAL ARCHITECTURAL TEXTURES ---
+      function makeCurtainWallTexture(opts) {
+        opts = opts || {};
+        const c = document.createElement('canvas');
+        c.width = 512; c.height = 512;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = opts.glassColor || '#0f172a';
+        ctx.fillRect(0, 0, 512, 512);
+
+        const spandrelH = 22, floorH = 64;
+        for (let y = 0; y < 512; y += floorH) {
+          ctx.fillStyle = opts.spandrelColor || '#334155';
+          ctx.fillRect(0, y, 512, spandrelH);
+          ctx.fillStyle = 'rgba(255,255,255,0.24)';
+          ctx.fillRect(0, y, 512, 2.5);
+          ctx.fillStyle = '#090d16';
+          ctx.fillRect(0, y + spandrelH - 2, 512, 2);
+        }
+
+        for (let x = 0; x < 512; x += 32) {
+          ctx.fillStyle = opts.mullionColor || '#64748b';
+          ctx.fillRect(x, 0, 3, 512);
+          ctx.fillStyle = 'rgba(255,255,255,0.3)';
+          ctx.fillRect(x, 0, 1, 512);
+        }
+
+        for (let y = 0; y < 512; y += floorH) {
+          for (let x = 4; x < 512; x += 32) {
+            const hVal = Math.sin(x * 12.3 + y * 45.6);
+            if (hVal > 0.15) {
+              ctx.fillStyle = hVal > 0.65 ? 'rgba(254, 240, 138, 0.65)' : 'rgba(186, 230, 253, 0.45)';
+              ctx.fillRect(x + 2, y + spandrelH + 4, 24, floorH - spandrelH - 8);
+            }
+          }
+        }
+
+        const g = ctx.createLinearGradient(0, 0, 512, 512);
+        g.addColorStop(0.0, 'rgba(255,255,255,0)');
+        g.addColorStop(0.48, 'rgba(255,255,255,0.12)');
+        g.addColorStop(0.52, 'rgba(255,255,255,0.22)');
+        g.addColorStop(1.0, 'rgba(255,255,255,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, 512, 512);
+
+        const tex = new THREE.CanvasTexture(c);
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(opts.repeatX || 4, opts.repeatY || 4);
+        return tex;
+      }
+
+      function makeConcreteRibTexture(opts) {
+        opts = opts || {};
+        const c = document.createElement('canvas');
+        c.width = 512; c.height = 512;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = opts.baseColor || '#cbd5e1';
+        ctx.fillRect(0, 0, 512, 512);
+
+        for (let x = 0; x < 512; x += 32) {
+          ctx.fillStyle = '#f8fafc';
+          ctx.fillRect(x, 0, 12, 512);
+          ctx.fillStyle = '#64748b';
+          ctx.fillRect(x + 12, 0, 6, 512);
+          ctx.fillStyle = '#334155';
+          ctx.fillRect(x + 18, 0, 14, 512);
+        }
+
+        for (let y = 0; y < 512; y += 128) {
+          ctx.fillStyle = '#1e293b';
+          ctx.fillRect(0, y, 512, 3);
+          ctx.fillStyle = 'rgba(255,255,255,0.3)';
+          ctx.fillRect(0, y + 3, 512, 2);
+        }
+
+        const tex = new THREE.CanvasTexture(c);
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(opts.repeatX || 6, opts.repeatY || 4);
+        return tex;
+      }
+
+      function makeSandstoneRomanesqueTexture(opts) {
+        opts = opts || {};
+        const c = document.createElement('canvas');
+        c.width = 512; c.height = 512;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = opts.baseColor || '#9a3412';
+        ctx.fillRect(0, 0, 512, 512);
+
+        const courseH = 32;
+        for (let y = 0; y < 512; y += courseH) {
+          const isBuff = Math.sin(y * 1.5) > 0;
+          ctx.fillStyle = isBuff ? '#b45309' : '#7c2d12';
+          ctx.fillRect(0, y, 512, courseH);
+          ctx.fillStyle = '#431407';
+          ctx.fillRect(0, y + courseH - 2, 512, 2);
+
+          const blockW = 64;
+          const xOff = (y / courseH) % 2 === 0 ? 0 : blockW / 2;
+          for (let x = xOff; x < 512; x += blockW) {
+            ctx.fillStyle = '#270a03';
+            ctx.fillRect(x, y, 2, courseH);
+            ctx.fillStyle = 'rgba(255,255,255,0.12)';
+            ctx.fillRect(x + 2, y, blockW - 4, 2);
+          }
+        }
+
+        for (let y = 16; y < 512; y += 128) {
+          for (let x = 16; x < 512; x += 64) {
+            ctx.fillStyle = '#18181b';
+            ctx.beginPath();
+            ctx.arc(x + 16, y + 16, 12, Math.PI, 0);
+            ctx.fill();
+            ctx.fillRect(x + 4, y + 16, 24, 32);
+
+            ctx.strokeStyle = '#fef08a';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(x + 16, y + 16, 14, Math.PI, 0);
+            ctx.stroke();
+
+            ctx.fillStyle = 'rgba(56, 189, 248, 0.4)';
+            ctx.fillRect(x + 7, y + 18, 8, 12);
+            ctx.fillRect(x + 17, y + 18, 8, 12);
+            ctx.fillRect(x + 7, y + 33, 8, 12);
+            ctx.fillRect(x + 17, y + 33, 8, 12);
+          }
+        }
+
+        const tex = new THREE.CanvasTexture(c);
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(opts.repeatX || 4, opts.repeatY || 3);
+        return tex;
+      }
+
+      function makeHistoricBrickTexture(opts) {
+        opts = opts || {};
+        const c = document.createElement('canvas');
+        c.width = 512; c.height = 512;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = opts.baseColor || '#881337';
+        ctx.fillRect(0, 0, 512, 512);
+
+        for (let y = 0; y < 512; y += 16) {
+          const isDark = Math.sin(y * 2.3) > 0.2;
+          ctx.fillStyle = isDark ? '#701a2b' : '#9f1239';
+          ctx.fillRect(0, y, 512, 14);
+          ctx.fillStyle = '#1c1917';
+          ctx.fillRect(0, y + 14, 512, 2);
+
+          const xOff = (y / 16) % 2 === 0 ? 0 : 16;
+          for (let x = xOff; x < 512; x += 32) {
+            ctx.fillStyle = '#1c1917';
+            ctx.fillRect(x, y, 2, 14);
+          }
+        }
+
+        for (let y = 16; y < 512; y += 96) {
+          for (let x = 16; x < 512; x += 64) {
+            ctx.fillStyle = '#f8fafc';
+            ctx.fillRect(x + 6, y + 6, 28, 48);
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(x + 9, y + 9, 10, 19);
+            ctx.fillRect(x + 21, y + 9, 10, 19);
+            ctx.fillRect(x + 9, y + 31, 10, 19);
+            ctx.fillRect(x + 21, y + 31, 10, 19);
+            ctx.fillStyle = '#cbd5e1';
+            ctx.fillRect(x + 4, y + 54, 32, 4);
+          }
+        }
+
+        const tex = new THREE.CanvasTexture(c);
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(opts.repeatX || 4, opts.repeatY || 3);
+        return tex;
+      }
+
+      function makeGothicStoneTexture(opts) {
+        opts = opts || {};
+        const c = document.createElement('canvas');
+        c.width = 512; c.height = 512;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = opts.baseColor || '#94a3b8';
+        ctx.fillRect(0, 0, 512, 512);
+
+        for (let y = 0; y < 512; y += 32) {
+          ctx.fillStyle = '#475569';
+          ctx.fillRect(0, y, 512, 2);
+          const xOff = (y / 32) % 2 === 0 ? 0 : 32;
+          for (let x = xOff; x < 512; x += 64) {
+            ctx.fillStyle = '#334155';
+            ctx.fillRect(x, y, 2, 32);
+          }
+        }
+
+        for (let y = 16; y < 512; y += 128) {
+          for (let x = 16; x < 512; x += 64) {
+            ctx.fillStyle = '#0f172a';
+            ctx.beginPath();
+            ctx.moveTo(x + 6, y + 30);
+            ctx.lineTo(x + 18, y + 8);
+            ctx.lineTo(x + 30, y + 30);
+            ctx.lineTo(x + 30, y + 72);
+            ctx.lineTo(x + 6, y + 72);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.strokeStyle = '#e2e8f0';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.fillStyle = 'rgba(239, 68, 68, 0.55)';
+            ctx.fillRect(x + 9, y + 32, 8, 36);
+            ctx.fillStyle = 'rgba(59, 130, 246, 0.55)';
+            ctx.fillRect(x + 19, y + 32, 8, 36);
+          }
+        }
+
+        const tex = new THREE.CanvasTexture(c);
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(opts.repeatX || 4, opts.repeatY || 3);
+        return tex;
+      }
+
+      function makeSnøhettaFritTexture() {
+        const c = document.createElement('canvas');
+        c.width = 512; c.height = 512;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#0284c7';
+        ctx.fillRect(0, 0, 512, 512);
+
+        for (let i = 0; i < 40; i++) {
+          const x = (i * 73) % 480;
+          const y = (i * 97) % 480;
+          const s = 40 + (i * 19) % 60;
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(x + s, y + s * 0.4);
+          ctx.lineTo(x + s * 0.7, y + s * 1.1);
+          ctx.closePath();
+          ctx.fill();
+        }
+
+        for (let x = 0; x < 512; x += 48) {
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+          ctx.fillRect(x, 0, 2, 512);
+        }
+        for (let y = 0; y < 512; y += 64) {
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+          ctx.fillRect(0, y, 512, 2);
+        }
+
+        const tex = new THREE.CanvasTexture(c);
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(3, 3);
+        return tex;
+      }
+
+      function makeHelipadTexture() {
+        const c = document.createElement('canvas');
+        c.width = 512; c.height = 512;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(0, 0, 512, 512);
+
+        ctx.strokeStyle = '#facc15';
+        ctx.lineWidth = 14;
+        ctx.beginPath();
+        ctx.arc(256, 256, 210, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        ctx.arc(256, 256, 175, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.fillStyle = '#ef4444';
+        ctx.fillRect(196, 60, 120, 392);
+        ctx.fillRect(60, 196, 392, 120);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(180, 160, 32, 192);
+        ctx.fillRect(300, 160, 32, 192);
+        ctx.fillRect(180, 240, 152, 32);
+
+        for (let i = 0; i < 16; i++) {
+          const ang = (i / 16) * Math.PI * 2;
+          const px = 256 + Math.cos(ang) * 230;
+          const py = 256 + Math.sin(ang) * 230;
+          ctx.fillStyle = '#22c55e';
+          ctx.beginPath();
+          ctx.arc(px, py, 6, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        return new THREE.CanvasTexture(c);
+      }
+
+      function makeStadiumPitchTexture() {
+        const c = document.createElement('canvas');
+        c.width = 512; c.height = 512;
+        const ctx = c.getContext('2d');
+        for (let y = 0; y < 512; y += 32) {
+          ctx.fillStyle = (y / 32) % 2 === 0 ? '#15803d' : '#16a34a';
+          ctx.fillRect(0, y, 512, 32);
+        }
+
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 6;
+        ctx.strokeRect(20, 20, 472, 472);
+
+        ctx.beginPath();
+        ctx.moveTo(20, 256);
+        ctx.lineTo(492, 256);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(256, 256, 55, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(256, 256, 6, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeRect(146, 20, 220, 80);
+        ctx.strokeRect(146, 412, 220, 80);
+
+        return new THREE.CanvasTexture(c);
+      }
+
+      // Procedural Architectural Materials
+      const curtainWallMat = new THREE.MeshStandardMaterial({ map: makeCurtainWallTexture(), roughness: 0.15, metalness: 0.85 });
+      const concreteRibMat = new THREE.MeshStandardMaterial({ map: makeConcreteRibTexture(), roughness: 0.7, metalness: 0.15 });
+      const sandstoneRomanesqueMat = new THREE.MeshStandardMaterial({ map: makeSandstoneRomanesqueTexture(), roughness: 0.85 });
+      const historicBrickMat = new THREE.MeshStandardMaterial({ map: makeHistoricBrickTexture(), roughness: 0.85 });
+      const gothicStoneMat = new THREE.MeshStandardMaterial({ map: makeGothicStoneTexture(), roughness: 0.8 });
+      const snohettaFritMat = new THREE.MeshStandardMaterial({ map: makeSnøhettaFritTexture(), roughness: 0.1, metalness: 0.6, transparent: true, opacity: 0.9 });
+      const helipadMat = new THREE.MeshStandardMaterial({ map: makeHelipadTexture(), roughness: 0.7 });
+      const bmoPitchMat = new THREE.MeshStandardMaterial({ map: makeStadiumPitchTexture(), roughness: 0.95 });
+
+      // Classical & Modern Structural Materials
       const copperRoofMat = new THREE.MeshStandardMaterial({ color: 0x3d705c, roughness: 0.45, metalness: 0.4 });
       const concreteMat = new THREE.MeshStandardMaterial({ color: 0xd4d8de, roughness: 0.65 });
       const darkGlassMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.15, metalness: 0.85 });
@@ -9382,7 +9747,7 @@
       const plazaGraniteMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.9 });
       const poolWaterMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.05, metalness: 0.2, transparent: true, opacity: 0.85 });
       const neonRedMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
-      const pitchGrassMat = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.95 });
+      const gardenMat = new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.9 });
 
       // ------------------------------------------------------------------------
       // 1. OLD CITY HALL & 103m CLOCK TOWER (Queen St & Bay St, NE corner)
@@ -9394,7 +9759,7 @@
 
         // Quadrangle 4-storey Sandstone Wings
         // South Wing (facing Queen St)
-        const sWing = new THREE.Mesh(new THREE.BoxGeometry(68, 30, 16), sandstoneMat);
+        const sWing = new THREE.Mesh(new THREE.BoxGeometry(68, 30, 16), sandstoneRomanesqueMat);
         sWing.position.set(0, 15, 24);
         och.add(sWing);
         const sRoof = new THREE.Mesh(new THREE.ConeGeometry(38, 12, 4), copperRoofMat);
@@ -9404,7 +9769,7 @@
         och.add(sRoof);
 
         // North Wing
-        const nWing = new THREE.Mesh(new THREE.BoxGeometry(68, 30, 16), sandstoneMat);
+        const nWing = new THREE.Mesh(new THREE.BoxGeometry(68, 30, 16), sandstoneRomanesqueMat);
         nWing.position.set(0, 15, -24);
         och.add(nWing);
         const nRoof = new THREE.Mesh(new THREE.ConeGeometry(38, 12, 4), copperRoofMat);
@@ -9415,7 +9780,7 @@
 
         // West Wing (along Bay St) & East Wing (along James St)
         [-30, 30].forEach(wx => {
-          const wing = new THREE.Mesh(new THREE.BoxGeometry(16, 30, 52), sandstoneMat);
+          const wing = new THREE.Mesh(new THREE.BoxGeometry(16, 30, 52), sandstoneRomanesqueMat);
           wing.position.set(wx, 15, 0);
           och.add(wing);
           const wRoof = new THREE.Mesh(new THREE.ConeGeometry(30, 12, 4), copperRoofMat);
@@ -9432,12 +9797,12 @@
         och.add(cyFloor);
 
         // Majestic 103m Romanesque Clock Tower (center of south facade)
-        const towerShaft = new THREE.Mesh(new THREE.BoxGeometry(14, 70, 14), sandstoneMat);
+        const towerShaft = new THREE.Mesh(new THREE.BoxGeometry(14, 70, 14), sandstoneRomanesqueMat);
         towerShaft.position.set(0, 35, 24);
         och.add(towerShaft);
 
         // Clock Stage (y: 70..82) with 4 Illuminated Amber Dials
-        const clockStage = new THREE.Mesh(new THREE.BoxGeometry(15, 12, 15), sandstoneMat);
+        const clockStage = new THREE.Mesh(new THREE.BoxGeometry(15, 12, 15), sandstoneRomanesqueMat);
         clockStage.position.set(0, 76, 24);
         och.add(clockStage);
 
@@ -9460,7 +9825,7 @@
         });
 
         // Belfry & Gargoyle Tourelles (y: 82..90)
-        const belfry = new THREE.Mesh(new THREE.BoxGeometry(13, 8, 13), sandstoneMat);
+        const belfry = new THREE.Mesh(new THREE.BoxGeometry(13, 8, 13), sandstoneRomanesqueMat);
         belfry.position.set(0, 86, 24);
         och.add(belfry);
         [-6.5, 6.5].forEach(tx => {
@@ -9479,10 +9844,10 @@
 
         // Triple Arched Entrance Portico on Queen St
         [-4, 0, 4].forEach(px => {
-          const arch = new THREE.Mesh(new THREE.TorusGeometry(1.8, 0.4, 8, 16, Math.PI), sandstoneMat);
+          const arch = new THREE.Mesh(new THREE.TorusGeometry(1.8, 0.4, 8, 16, Math.PI), sandstoneRomanesqueMat);
           arch.position.set(px, 5.2, 32.2);
           och.add(arch);
-          const col = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.45, 5.2, 8), sandstoneMat);
+          const col = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.45, 5.2, 8), sandstoneRomanesqueMat);
           col.position.set(px, 2.6, 32.2);
           och.add(col);
         });
@@ -9518,21 +9883,24 @@
         plazaFloor.position.set(95, 0.05, -822.5);
         nps.add(plazaFloor);
 
-        // 2. Walkable Reflecting Pool / Ice Rink (x: 60..120, z: -790..-835)
-        const poolBorder = new THREE.Mesh(new THREE.BoxGeometry(64, 0.35, 48), concreteMat);
-        poolBorder.position.set(90, 0.18, -812.5);
+        // 2. Walkable Reflecting Pool / Ice Rink with dark granite coping curb (x: 60..120, z: -790..-835)
+        const poolBorder = new THREE.Mesh(new THREE.BoxGeometry(64, 0.45, 48), new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.85 }));
+        poolBorder.position.set(90, 0.22, -812.5);
         nps.add(poolBorder);
 
         const poolWater = new THREE.Mesh(new THREE.PlaneGeometry(60, 45), poolWaterMat);
         poolWater.rotation.x = -Math.PI / 2;
-        poolWater.position.set(90, 0.22, -812.5);
+        poolWater.position.set(90, 0.28, -812.5);
         nps.add(poolWater);
 
-        // 3. Three Concrete Freedom Arches across the pool
+        // 3. Three Concrete Freedom Arches across the pool (double-ribbed with white underside)
         [-14, 0, 14].forEach(az => {
-          const arch = new THREE.Mesh(new THREE.TorusGeometry(30, 1.25, 8, 28, Math.PI), concreteMat);
+          const arch = new THREE.Mesh(new THREE.TorusGeometry(30, 1.35, 8, 28, Math.PI), concreteMat);
           arch.position.set(90, 0, -812.5 + az);
           nps.add(arch);
+          const innerArch = new THREE.Mesh(new THREE.TorusGeometry(28.5, 0.4, 8, 28, Math.PI), whiteSteelMat);
+          innerArch.position.set(90, 0, -812.5 + az);
+          nps.add(innerArch);
         });
 
         // 4. Glowing 3D "TORONTO" Sign with illuminated Canadian Maple Leaf
@@ -9560,9 +9928,9 @@
 
         nps.add(signGroup);
 
-        // 5. Henry Moore Bronze Sculpture "Three Way Piece No. 2 (The Archer)"
-        const archerPlinth = new THREE.Mesh(new THREE.BoxGeometry(4.5, 0.8, 4.5), plazaGraniteMat);
-        archerPlinth.position.set(90, 0.4, -850);
+        // 5. Henry Moore Bronze Sculpture "Three Way Piece No. 2 (The Archer)" on polished black circular plinth
+        const archerPlinth = new THREE.Mesh(new THREE.CylinderGeometry(2.8, 3.0, 0.9, 24), new THREE.MeshStandardMaterial({ color: 0x090d16, roughness: 0.2 }));
+        archerPlinth.position.set(90, 0.45, -850);
         nps.add(archerPlinth);
         const bronzeMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.35, metalness: 0.85 });
         const archerMesh = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.45, 12, 24), bronzeMat);
@@ -9579,7 +9947,6 @@
         nps.add(ramp);
 
         // 7. Peace Garden Pavilion with Eternal Flame
-        const gardenMat = new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.9 });
         const gardenBerm = new THREE.Mesh(new THREE.BoxGeometry(28, 0.6, 22), gardenMat);
         gardenBerm.position.set(170, 0.3, -820);
         nps.add(gardenBerm);
@@ -9614,21 +9981,31 @@
         balustrade.position.set(0, 9.0, 0);
         tch.add(balustrade);
 
+        // Sweeping Ceremonial Pedestrian Ramp from Nathan Phillips Square up to Podium Roof
+        const chRamp = new THREE.Mesh(new THREE.BoxGeometry(6, 0.4, 42), concreteMat);
+        chRamp.position.set(0, 4.3, 56);
+        chRamp.rotation.x = -Math.atan2(8.5, 42);
+        tch.add(chRamp);
+
         // East Crescent Tower (27 storeys, 100m, curving concave toward west)
-        const eastTower = new THREE.Mesh(new THREE.CylinderGeometry(32, 32, 100, 24, 1, false, 0.25, Math.PI * 0.72), concreteMat);
-        eastTower.scale.set(0.55, 1, 1.15);
-        eastTower.position.set(28, 50, -4);
-        tch.add(eastTower);
-        const eastGlass = new THREE.Mesh(new THREE.BoxGeometry(6, 96, 52), darkGlassMat);
+        // Outer convex shell: Precast concrete vertical ribs
+        const eastTowerOuter = new THREE.Mesh(new THREE.CylinderGeometry(32, 32, 100, 24, 1, false, 0.25, Math.PI * 0.72), concreteRibMat);
+        eastTowerOuter.scale.set(0.55, 1, 1.15);
+        eastTowerOuter.position.set(28, 50, -4);
+        tch.add(eastTowerOuter);
+        // Inner concave facade: Dark curtain wall glass with horizontal floor spandrels
+        const eastGlass = new THREE.Mesh(new THREE.BoxGeometry(6, 96, 52), curtainWallMat);
         eastGlass.position.set(30, 50, -4);
         tch.add(eastGlass);
 
         // West Crescent Tower (20 storeys, 79m, curving concave toward east)
-        const westTower = new THREE.Mesh(new THREE.CylinderGeometry(30, 30, 79, 24, 1, false, Math.PI * 1.05, Math.PI * 0.72), concreteMat);
-        westTower.scale.set(0.55, 1, 1.15);
-        westTower.position.set(-28, 39.5, -4);
-        tch.add(westTower);
-        const westGlass = new THREE.Mesh(new THREE.BoxGeometry(6, 75, 48), darkGlassMat);
+        // Outer convex shell: Precast concrete vertical ribs
+        const westTowerOuter = new THREE.Mesh(new THREE.CylinderGeometry(30, 30, 79, 24, 1, false, Math.PI * 1.05, Math.PI * 0.72), concreteRibMat);
+        westTowerOuter.scale.set(0.55, 1, 1.15);
+        westTowerOuter.position.set(-28, 39.5, -4);
+        tch.add(westTowerOuter);
+        // Inner concave facade: Dark curtain wall glass
+        const westGlass = new THREE.Mesh(new THREE.BoxGeometry(6, 75, 48), curtainWallMat);
         westGlass.position.set(-30, 39.5, -4);
         tch.add(westGlass);
 
@@ -9640,6 +10017,9 @@
         saucerDome.scale.set(1.15, 0.38, 0.95);
         saucerDome.position.set(0, 25.5, 0);
         tch.add(saucerDome);
+        const saucerSkylight = new THREE.Mesh(new THREE.SphereGeometry(6, 16, 12), blueGlassMat);
+        saucerSkylight.position.set(0, 29.5, 0);
+        tch.add(saucerSkylight);
 
         // City of Toronto Civic Sign
         const chSign = signMesh([
@@ -9665,7 +10045,7 @@
         const tec = new THREE.Group();
 
         // 1. Hudson's Bay / Saks Flagship Department Store (Queen & Yonge, NW corner)
-        const hbc = new THREE.Mesh(new THREE.BoxGeometry(60, 36, 56), sandstoneMat);
+        const hbc = new THREE.Mesh(new THREE.BoxGeometry(60, 36, 56), sandstoneRomanesqueMat);
         hbc.position.set(342, 18, -710);
         tec.add(hbc);
         const hbcRoof = new THREE.Mesh(new THREE.BoxGeometry(62, 4, 58), copperRoofMat);
@@ -9699,20 +10079,27 @@
           tec.add(rib);
         }
 
-        // 5. Cadillac Fairview Office Towers
-        // 20 Queen St West (130m, dark glass)
-        const tower20Q = new THREE.Mesh(new THREE.BoxGeometry(34, 130, 34), darkGlassMat);
+        // Michael Snow's "Flight Stop" flock of Canadian Geese suspended in mid-air in Galleria
+        for (let g = 0; g < 15; g++) {
+          const goose = new THREE.Mesh(new THREE.ConeGeometry(0.6, 1.8, 4), whiteSteelMat);
+          goose.rotation.x = Math.PI / 2 + 0.3;
+          goose.position.set(350 + (g % 3 - 1) * 3, 18 + (g % 4) * 1.5, -885 + (g - 7) * 8);
+          tec.add(goose);
+        }
+
+        // 5. Cadillac Fairview Office Towers (Clad in high-detail curtain wall glass)
+        // 20 Queen St West (130m)
+        const tower20Q = new THREE.Mesh(new THREE.BoxGeometry(34, 130, 34), curtainWallMat);
         tower20Q.position.set(325, 65, -715);
         tec.add(tower20Q);
 
-        // 250 Yonge St (110m, bronze glass)
-        const bronzeGlassMat = new THREE.MeshStandardMaterial({ color: 0x785338, roughness: 0.2, metalness: 0.8 });
-        const tower250Y = new THREE.Mesh(new THREE.BoxGeometry(32, 110, 32), bronzeGlassMat);
+        // 250 Yonge St (110m)
+        const tower250Y = new THREE.Mesh(new THREE.BoxGeometry(32, 110, 32), curtainWallMat);
         tower250Y.position.set(325, 55, -860);
         tec.add(tower250Y);
 
-        // 1 Dundas St West (125m, granite/glass)
-        const tower1D = new THREE.Mesh(new THREE.BoxGeometry(34, 125, 34), darkGlassMat);
+        // 1 Dundas St West (125m)
+        const tower1D = new THREE.Mesh(new THREE.BoxGeometry(34, 125, 34), curtainWallMat);
         tower1D.position.set(325, 62.5, -1015);
         tec.add(tower1D);
 
@@ -9742,17 +10129,17 @@
           }
         }
 
-        // 10 Dundas East Curved Cinema Tower (north of Dundas, x: 395..455, z: -995..-1035)
-        const dundas10 = new THREE.Mesh(new THREE.BoxGeometry(58, 55, 38), darkGlassMat);
-        dundas10.position.set(425, 27.5, -1015);
+        // 10 Dundas East Curved Cinema Tower (north of Dundas, between Yonge & Victoria: x: 394..442, z: -1043..-1017)
+        const dundas10 = new THREE.Mesh(new THREE.BoxGeometry(48, 55, 26), darkGlassMat);
+        dundas10.position.set(418, 27.5, -1030);
         tec.add(dundas10);
 
-        // Giant Curved 3D Digital Billboards on 10 Dundas East
+        // Giant Curved 3D Digital Billboards on 10 Dundas East facing Dundas & Yonge
         const billboard10 = new THREE.Mesh(
-          new THREE.BoxGeometry(52, 28, 2),
+          new THREE.BoxGeometry(46, 28, 2),
           new THREE.MeshBasicMaterial({ map: makeLabelTexture(['YONGE-DUNDAS', 'SQUARE • LIVE', 'CANADA\'S TIMES SQUARE'], { bg: '#1e1b4b', fg: '#facc15', borderColor: '#ec4899', size: 48 }) })
         );
-        billboard10.position.set(425, 32, -1035);
+        billboard10.position.set(418, 32, -1044);
         tec.add(billboard10);
 
         // YDS South Billboard Media Tower (x: 448, z: -1080)
@@ -9771,12 +10158,269 @@
         // Solids for Eaton Centre & YDS
         addSolid({ type: 'poly', pts: [[312, -738], [372, -738], [372, -682], [312, -682]], h: 36, name: 'Hudson\'s Bay Flagship' });
         addSolid({ type: 'poly', pts: [[330, -1025], [374, -1025], [374, -745], [330, -745]], h: 24, name: 'Eaton Centre Galleria Body' });
-        addSolid({ type: 'poly', pts: [[396, -1034], [454, -1034], [454, -996], [396, -996]], h: 55, name: '10 Dundas East Cinema Complex' });
+        addSolid({ type: 'poly', pts: [[394, -1043], [442, -1043], [442, -1017], [394, -1017]], h: 55, name: '10 Dundas East Cinema Complex' });
         addSolid({ type: 'poly', pts: [[440, -1088], [456, -1088], [456, -1072], [440, -1072]], h: 42, name: 'YDS Media Tower' });
       }
 
       // ------------------------------------------------------------------------
-      // 5. CHINATOWN (Spadina Ave & Dundas St West)
+      // 5. EAST OF EATON CENTRE LANDMARKS:
+      //    Massey Hall & Allied Music Centre, St. Michael's Cathedral Basilica,
+      //    St. Michael's Hospital & Trauma Helipad, TMU Student Learning Centre,
+      //    Ed Mirvish Theatre, Metropolitan United Church
+      // ------------------------------------------------------------------------
+      {
+        const eec = new THREE.Group();
+
+        // A. MASSEY HALL & ALLIED MUSIC CENTRE (178 Victoria St at Shuter, x: 428, z: -885)
+        const mh = new THREE.Group();
+        mh.position.set(428, 0, -885);
+
+        // 1894 Historic Palladian Red Brick Concert Hall
+        const mhHall = new THREE.Mesh(new THREE.BoxGeometry(30, 24, 34), historicBrickMat);
+        mhHall.position.set(0, 12, 0);
+        mh.add(mhHall);
+
+        const mhRoof = new THREE.Mesh(new THREE.BoxGeometry(31, 3, 35), copperRoofMat);
+        mhRoof.position.set(0, 25.5, 0);
+        mh.add(mhRoof);
+
+        // Multi-tier cast-iron exterior fire escape staircase on Victoria St facade (x = +15 in local space)
+        for (let tier = 1; tier <= 4; tier++) {
+          const fy = tier * 5.2;
+          const balcony = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.4, 8), darkGlassMat);
+          balcony.position.set(15.8, fy, 0);
+          mh.add(balcony);
+          const stairDiag = new THREE.Mesh(new THREE.BoxGeometry(0.8, 5.2, 0.3), darkGlassMat);
+          stairDiag.rotation.z = -0.55;
+          stairDiag.position.set(15.8, fy - 2.6, tier % 2 === 0 ? 2 : -2);
+          mh.add(stairDiag);
+        }
+
+        // Glowing red neon canopy marquee projecting over Victoria St
+        const mhMarquee = new THREE.Mesh(new THREE.BoxGeometry(6, 2.2, 12), new THREE.MeshBasicMaterial({ color: 0xb91c1c }));
+        mhMarquee.position.set(17, 4.5, 0);
+        mh.add(mhMarquee);
+        const mhNeon = signMesh(['MASSEY HALL', 'EST. 1894 • ALLIED MUSIC CENTRE'], 11, 1.6, { bg: '#991b1b', fg: '#fef08a', borderColor: '#facc15', size: 48 });
+        mhNeon.position.set(20.2, 4.5, 0);
+        mhNeon.rotation.y = Math.PI / 2;
+        mh.add(mhNeon);
+
+        // Allied Music Centre 7-Storey Glass Tower addition (south)
+        const amcTower = new THREE.Mesh(new THREE.BoxGeometry(18, 32, 20), curtainWallMat);
+        amcTower.position.set(0, 16, 28);
+        mh.add(amcTower);
+
+        // Suspended glass passerelle (skybridge)
+        const passerelle = new THREE.Mesh(new THREE.BoxGeometry(10, 4, 10), blueGlassMat);
+        passerelle.position.set(0, 16, 14);
+        mh.add(passerelle);
+
+        eec.add(mh);
+
+        // Solids for Massey Hall
+        addSolid({ type: 'poly', pts: [[413, -902], [443, -902], [443, -868], [413, -868]], h: 24, name: 'Massey Hall Historic Auditorium' });
+        addSolid({ type: 'poly', pts: [[419, -868], [437, -868], [437, -847], [419, -847]], h: 32, name: 'Allied Music Centre Tower' });
+
+        // B. ST. MICHAEL'S CATHEDRAL BASILICA & BISHOP'S PALACE (65 Bond St at Shuter, x: 542, z: -938)
+        const smc = new THREE.Group();
+        smc.position.set(542, 0, -938);
+
+        // Cathedral Nave & Transepts clad in Gothic stone
+        const smcNave = new THREE.Mesh(new THREE.BoxGeometry(24, 26, 44), gothicStoneMat);
+        smcNave.position.set(0, 13, -8);
+        smc.add(smcNave);
+
+        const smcRoof = new THREE.Mesh(new THREE.ConeGeometry(20, 10, 4), copperRoofMat);
+        smcRoof.rotation.y = Math.PI / 4;
+        smcRoof.scale.set(0.65, 1.0, 1.2);
+        smcRoof.position.set(0, 31, -8);
+        smc.add(smcRoof);
+
+        // Soaring 84m Stone Needle Spire (SW corner, facing Bond & Shuter)
+        const towerBase = new THREE.Mesh(new THREE.BoxGeometry(12, 45, 12), gothicStoneMat);
+        towerBase.position.set(-6, 22.5, 16);
+        smc.add(towerBase);
+
+        const spireStage = new THREE.Mesh(new THREE.BoxGeometry(11, 15, 11), gothicStoneMat);
+        spireStage.position.set(-6, 52.5, 16);
+        smc.add(spireStage);
+
+        const needleSpire = new THREE.Mesh(new THREE.ConeGeometry(5.5, 24, 8), copperRoofMat);
+        needleSpire.position.set(-6, 72, 16);
+        smc.add(needleSpire);
+
+        const goldCross = new THREE.Mesh(new THREE.BoxGeometry(0.8, 3.5, 0.8), goldMat);
+        goldCross.position.set(-6, 84, 16);
+        smc.add(goldCross);
+        const crossBar = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.8, 0.8), goldMat);
+        crossBar.position.set(-6, 84.8, 16);
+        smc.add(crossBar);
+
+        // 10m Stained-Glass Rose Window on west facade (facing Bond St)
+        const roseWindow = new THREE.Mesh(new THREE.CircleGeometry(4.5, 24), blueGlassMat);
+        roseWindow.position.set(-12.2, 18, -8);
+        roseWindow.rotation.y = -Math.PI / 2;
+        smc.add(roseWindow);
+
+        // Triple pointed Gothic portals on Bond St
+        [-14, -8, -2].forEach(pz => {
+          const portal = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.35, 8, 16, Math.PI), gothicStoneMat);
+          portal.position.set(-12.2, 4.2, pz);
+          portal.rotation.y = -Math.PI / 2;
+          smc.add(portal);
+        });
+
+        // Flying Buttresses along east side
+        [-24, -14, -4].forEach(bz => {
+          const buttress = new THREE.Mesh(new THREE.BoxGeometry(3.5, 18, 1.4), gothicStoneMat);
+          buttress.position.set(13.5, 9, bz);
+          smc.add(buttress);
+        });
+
+        // Adjacent Bishop's Palace (red-brick Gothic rectory to east)
+        const bp = new THREE.Mesh(new THREE.BoxGeometry(20, 16, 22), historicBrickMat);
+        bp.position.set(22, 8, 4);
+        smc.add(bp);
+
+        const smcSign = signMesh([
+          'ST. MICHAEL\'S CATHEDRAL BASILICA • 1845',
+          'ENGLISH GOTHIC REVIVAL • WILLIAM THOMAS ARCHITECT'
+        ], 14, 1.8, { bg: '#1c1917', fg: '#fef08a', borderColor: '#d4af37', size: 48 });
+        smcSign.position.set(-13.5, 2.4, 16);
+        smcSign.rotation.y = -Math.PI / 2;
+        smc.add(smcSign);
+
+        eec.add(smc);
+
+        // Solids for St. Michael's Cathedral
+        addSolid({ type: 'poly', pts: [[530, -960], [554, -960], [554, -916], [530, -916]], h: 26, name: 'St. Michael\'s Cathedral Nave' });
+        addSolid({ type: 'poly', pts: [[530, -928], [542, -928], [542, -916], [530, -916]], h: 84, name: 'St. Michael\'s Cathedral Spire' });
+        addSolid({ type: 'poly', pts: [[554, -945], [574, -945], [574, -923], [554, -923]], h: 16, name: 'Bishop\'s Palace' });
+
+        // C. ST. MICHAEL'S HOSPITAL & PETER GILGAN PATIENT CARE TOWER (Victoria to Bond, Queen to Shuter)
+        const smh = new THREE.Group();
+        smh.position.set(480, 0, -840);
+
+        // 17-Storey Peter Gilgan Tower (72m, contemporary curtain wall glass)
+        const gilganTower = new THREE.Mesh(new THREE.BoxGeometry(40, 72, 38), curtainWallMat);
+        gilganTower.position.set(0, 36, 0);
+        smh.add(gilganTower);
+
+        // Rooftop Emergency Trauma Helipad with custom helipad texture
+        const helipad = new THREE.Mesh(new THREE.BoxGeometry(28, 1.2, 28), helipadMat);
+        helipad.position.set(0, 72.6, 0);
+        smh.add(helipad);
+
+        // Cardinal Carter and Donne wings along Victoria and Queen
+        const carterWing = new THREE.Mesh(new THREE.BoxGeometry(36, 30, 36), sandstoneRomanesqueMat);
+        carterWing.position.set(0, 15, 37);
+        smh.add(carterWing);
+
+        // High Glass Pedestrian Skybridge spanning Shuter Street (at z = -910)
+        const hospBridge = new THREE.Mesh(new THREE.BoxGeometry(8, 4.5, 35), blueGlassMat);
+        hospBridge.position.set(0, 22, -36.5);
+        smh.add(hospBridge);
+
+        const smhSign = signMesh([
+          'ST. MICHAEL\'S HOSPITAL • LEVEL 1 TRAUMA CENTRE',
+          'PETER GILGAN PATIENT CARE TOWER • EMERGENCY'
+        ], 16, 2.0, { bg: '#991b1b', fg: '#ffffff', borderColor: '#ef4444', size: 50 });
+        smhSign.position.set(-20.5, 3.5, 0);
+        smhSign.rotation.y = -Math.PI / 2;
+        smh.add(smhSign);
+
+        eec.add(smh);
+
+        // Solids for St. Michael's Hospital
+        addSolid({ type: 'poly', pts: [[460, -859], [500, -859], [500, -821], [460, -821]], h: 72, name: 'St. Michael\'s Peter Gilgan Tower' });
+        addSolid({ type: 'poly', pts: [[462, -821], [498, -821], [498, -785], [462, -785]], h: 30, name: 'St. Michael\'s Cardinal Carter Wing' });
+
+        // D. TMU STUDENT LEARNING CENTRE (SLC) (341 Yonge St at Gould, x: 405, z: -989)
+        const slc = new THREE.Group();
+        slc.position.set(405, 0, -989);
+
+        const slcBody = new THREE.Mesh(new THREE.BoxGeometry(28, 38, 30), snohettaFritMat);
+        slcBody.position.set(0, 19, 0);
+        slc.add(slcBody);
+
+        // Cantilevered "Urban Porch" hovering 12m over Yonge & Gould
+        const urbanPorch = new THREE.Mesh(new THREE.BoxGeometry(16, 12, 14), new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.35, metalness: 0.85 }));
+        urbanPorch.position.set(-10, 6, -8);
+        slc.add(urbanPorch);
+
+        const slcSign = signMesh([
+          'TMU STUDENT LEARNING CENTRE • SNØHETTA ARCHITECTS',
+          'ICONIC PRISMATIC DIGITAL-FRITTED LANDMARK'
+        ], 14, 1.8, { bg: '#0369a1', fg: '#ffffff', borderColor: '#38bdf8', size: 48 });
+        slcSign.position.set(-14.5, 3.2, 0);
+        slcSign.rotation.y = -Math.PI / 2;
+        slc.add(slcSign);
+
+        eec.add(slc);
+
+        // Solids for TMU SLC (starts at z = -1004 to leave Gould St clear at z = -1010)
+        addSolid({ type: 'poly', pts: [[391, -1004], [419, -1004], [419, -974], [391, -974]], h: 38, name: 'TMU Student Learning Centre' });
+
+        // E. ED MIRVISH THEATRE / PANTAGES (244 Victoria St, x: 472, z: -965)
+        const emt = new THREE.Group();
+        emt.position.set(472, 0, -965);
+
+        const emtHall = new THREE.Mesh(new THREE.BoxGeometry(26, 22, 28), historicBrickMat);
+        emtHall.position.set(0, 11, 0);
+        emt.add(emtHall);
+
+        const emtMarquee = new THREE.Mesh(new THREE.BoxGeometry(6, 2.0, 14), goldMat);
+        emtMarquee.position.set(-14, 4.5, 0);
+        emt.add(emtMarquee);
+
+        const emtSign = signMesh([
+          'ED MIRVISH THEATRE • EST. 1920',
+          'BEAUX-ARTS BROADWAY PALACE • 244 VICTORIA'
+        ], 13, 1.6, { bg: '#1c1917', fg: '#fef08a', borderColor: '#d4af37', size: 46 });
+        emtSign.position.set(-17.2, 4.5, 0);
+        emtSign.rotation.y = -Math.PI / 2;
+        emt.add(emtSign);
+
+        eec.add(emt);
+
+        // Solids for Ed Mirvish Theatre
+        addSolid({ type: 'poly', pts: [[459, -979], [485, -979], [485, -951], [459, -951]], h: 22, name: 'Ed Mirvish Theatre' });
+
+        // F. METROPOLITAN UNITED CHURCH (Queen St & Church St, x: 588, z: -790)
+        const muc = new THREE.Group();
+        muc.position.set(588, 0, -790);
+
+        const mucLawn = new THREE.Mesh(new THREE.PlaneGeometry(55, 50), gardenMat);
+        mucLawn.rotation.x = -Math.PI / 2;
+        mucLawn.position.set(0, 0.05, 0);
+        muc.add(mucLawn);
+
+        const mucTower = new THREE.Mesh(new THREE.BoxGeometry(12, 73, 12), gothicStoneMat);
+        mucTower.position.set(0, 36.5, -14);
+        muc.add(mucTower);
+
+        const mucNave = new THREE.Mesh(new THREE.BoxGeometry(26, 24, 42), gothicStoneMat);
+        mucNave.position.set(0, 12, 12);
+        muc.add(mucNave);
+
+        const mucSign = signMesh([
+          'METROPOLITAN UNITED CHURCH • 1872',
+          '73m CARILLON TOWER & HISTORIC CHURCHYARD'
+        ], 14, 1.8, { bg: '#1c1917', fg: '#fef08a', borderColor: '#d4af37', size: 48 });
+        mucSign.position.set(0, 2.4, 33.5);
+        muc.add(mucSign);
+
+        eec.add(muc);
+
+        // Solids for Metropolitan United Church
+        addSolid({ type: 'poly', pts: [[582, -806], [594, -806], [594, -794], [582, -794]], h: 73, name: 'Metropolitan United Church Tower' });
+        addSolid({ type: 'poly', pts: [[575, -794], [601, -794], [601, -770], [575, -770]], h: 24, name: 'Metropolitan United Church Nave' });
+
+        expGroup.add(eec);
+      }
+
+      // ------------------------------------------------------------------------
+      // 6. CHINATOWN (Spadina Ave & Dundas St West)
       //    Imperial Paifang Dragon Arch, Red Silk Lanterns & Authentic Storefronts
       // ------------------------------------------------------------------------
       {
@@ -9792,7 +10436,7 @@
           col.position.set(ox, 4.75, 0);
           paifang.add(col);
           // Stone plinth
-          const base = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.2, 1.6), sandstoneMat);
+          const base = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.2, 1.6), sandstoneRomanesqueMat);
           base.position.set(ox, 0.6, 0);
           paifang.add(base);
         });
@@ -9838,7 +10482,7 @@
           const lionPlinth = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.0, 1.8), plazaGraniteMat);
           lionPlinth.position.set(lx, 0.5, 2.2);
           paifang.add(lionPlinth);
-          const lion = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.3, 1.1), sandstoneMat);
+          const lion = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.3, 1.1), sandstoneRomanesqueMat);
           lion.position.set(lx, 1.65, 2.2);
           paifang.add(lion);
         });
@@ -9876,7 +10520,7 @@
         ];
 
         chinatownStores.forEach(s => {
-          const bldg = new THREE.Mesh(new THREE.BoxGeometry(s.w, s.h, s.d), sandstoneMat);
+          const bldg = new THREE.Mesh(new THREE.BoxGeometry(s.w, s.h, s.d), historicBrickMat);
           bldg.position.set(s.x, s.h / 2, s.z);
           ct.add(bldg);
           // Green Pagoda Eaves
@@ -9899,7 +10543,7 @@
 
         // 4. Osgoode Hall & Canada Life Building (Civic / University Corridor)
         // Osgoode Hall (Queen & University, x: -80, z: -730)
-        const osgoodeHall = new THREE.Mesh(new THREE.BoxGeometry(85, 24, 60), sandstoneMat);
+        const osgoodeHall = new THREE.Mesh(new THREE.BoxGeometry(85, 24, 60), sandstoneRomanesqueMat);
         osgoodeHall.position.set(-80, 12, -730);
         ct.add(osgoodeHall);
         const osgoodeLawn = new THREE.Mesh(new THREE.PlaneGeometry(90, 65), new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.9 }));
@@ -9912,7 +10556,7 @@
         addSolid({ type: 'poly', pts: [[-122, -760], [-38, -760], [-38, -700], [-122, -700]], h: 24, name: 'Osgoode Hall' });
 
         // Canada Life Building (x: -260, z: -720, h: 87m with weather beacon)
-        const canLife = new THREE.Mesh(new THREE.BoxGeometry(38, 75, 42), sandstoneMat);
+        const canLife = new THREE.Mesh(new THREE.BoxGeometry(38, 75, 42), sandstoneRomanesqueMat);
         canLife.position.set(-260, 37.5, -720);
         ct.add(canLife);
         const canBeacon = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 2.0, 18, 12), whiteSteelMat);
@@ -9927,7 +10571,7 @@
       }
 
       // ------------------------------------------------------------------------
-      // 6. WEST END WATERFRONT: PRINCES' GATES, BMO FIELD & ONTARIO PLACE
+      // 7. WEST END WATERFRONT: PRINCES' GATES, BMO FIELD & ONTARIO PLACE
       // ------------------------------------------------------------------------
       {
         const wEnd = new THREE.Group();
@@ -9979,17 +10623,11 @@
         const bmo = new THREE.Group();
         bmo.position.set(-2020, 0, 310);
 
-        // Regulation Soccer Pitch
-        const pitch = new THREE.Mesh(new THREE.PlaneGeometry(105, 68), pitchGrassMat);
+        // Regulation Soccer Pitch with mow stripes and pitch markings
+        const pitch = new THREE.Mesh(new THREE.PlaneGeometry(105, 68), bmoPitchMat);
         pitch.rotation.x = -Math.PI / 2;
         pitch.position.y = 0.25;
         bmo.add(pitch);
-
-        // Pitch Touchline markings
-        const touchlines = new THREE.Mesh(new THREE.PlaneGeometry(103, 66), new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true }));
-        touchlines.rotation.x = -Math.PI / 2;
-        touchlines.position.y = 0.28;
-        bmo.add(touchlines);
 
         // Red East and West Grandstands with Cantilevered White Canopies
         [-62, 62].forEach(sx => {
@@ -14078,6 +14716,27 @@
         name: 'Yonge-Dundas Square & Eaton Centre',
         desc: 'Canada\'s Times Square with digital billboard towers, splash fountains & Eaton Centre galleria',
         pos: { x: 420.0, y: 1.7, z: -1065.0 },
+        yaw: 0
+      },
+      {
+        id: 'masseyHall',
+        name: 'Massey Hall & Allied Music Centre',
+        desc: '1894 historic Palladian concert hall, iconic exterior fire escape & red neon marquee at Victoria & Shuter',
+        pos: { x: 435.0, y: 1.7, z: -870.0 },
+        yaw: -1.57
+      },
+      {
+        id: 'stMichaelsCathedral',
+        name: 'St. Michael\'s Cathedral Basilica',
+        desc: '1845 Gothic Revival cathedral with 84m stone needle spire, stained-glass rose window & Bishop\'s Palace',
+        pos: { x: 530.0, y: 1.7, z: -895.0 },
+        yaw: 0
+      },
+      {
+        id: 'tmuSLC',
+        name: 'TMU Student Learning Centre',
+        desc: 'Snøhetta faceted crystalline digital-fritted glass landmark & cantilevered Urban Porch at Yonge & Gould',
+        pos: { x: 395.0, y: 1.7, z: -1010.0 },
         yaw: 0
       },
       {
