@@ -783,9 +783,9 @@
     LM.enercareCentre = [-1780.0, 275.0];
     LM.cocacolaColiseum = [-1900.0, 275.0];
     LM.hotelX = [-2165.0, 310.0];
-    LM.budweiserStage = [-1915.0, 685.0];
-    LM.ontarioPlaceEast = [-1755.0, 665.0];
-    LM.trilliumPark = [-1610.0, 545.0];
+    LM.budweiserStage = [-1745.0, 695.0];
+    LM.ontarioPlaceEast = [-1505.0, 665.0];
+    LM.trilliumPark = [-1398.0, 565.0];
     if (typeof window !== 'undefined' && window.buildTorontoIslands) {
       LM.centreIsland = [0.0, 1510.0];
       LM.centreville = [180.0, 1385.0];
@@ -934,8 +934,8 @@
     // York Slip, Harbour Square, Jack Layton Ferry Terminal, Yonge Slip, Pier 27, Redpath Sugar Wharf,
     // and Sugar Beach in the east.
     const HARBOUR_SHORELINE = [
-      [-2600, 505], [-2250, 505], [-1900, 505], [-1600, 505],
-      [-1520, 535], [-1450, 600], [-1350, 665], [-1250, 695], [-1050, 676], [-850, 624], [-690, 616],
+      [-2600, 505], [-2250, 505], [-1900, 505], [-1420, 505],
+      [-1340, 575], [-1250, 695], [-1050, 676], [-850, 624], [-690, 616],
       [-675, 620], [-625, 620], // Spadina Slip & Spadina WaveDeck
       [-615, 610], [-425, 608], // Toronto Music Garden & Marina Quay West
       [-415, 604], [-355, 600], // Peter Street Basin / Slip
@@ -1039,29 +1039,32 @@
 
     function isOnOntarioPlaceGround(x, z, pad) {
       const p = pad || 0;
-      // 1. West Entrance Bridge (x = -2120, z: 472..624)
+      // 1. West Entrance Bridge over Lake Ontario water (x = -2120, z: 472..624)
       if (x >= -2125 - p && x <= -2115 + p && z >= 472 - p && z <= 624 + p) return true;
-      // 2. West Island (Cinesphere & Pods)
-      if (x >= -2222 - p && x <= -2022 + p && z >= 618 - p && z <= 782 + p) return true;
-      // 3. West-Central Pod Bridge
-      if (x >= -2026 - p && x <= -1986 + p && z >= 676 - p && z <= 694 + p) return true;
-      // 4. Central Main Bridge (Ontario Place Blvd)
-      if (x >= -1916 - p && x <= -1900 + p && z >= 472 - p && z <= 602 + p) return true;
-      // 5. Central Island (Budweiser Stage & Echo Beach)
-      if (x >= -1992 - p && x <= -1838 + p && z >= 595 - p && z <= 782 + p) return true;
-      // 6. Central-East Forum Bridge
-      if (x >= -1842 - p && x <= -1810 + p && z >= 654 - p && z <= 668 + p) return true;
-      // 7. East Island Timber Marina Piers (allow walking out onto finger piers)
-      if ((x >= -1735 - p && x <= -1728 + p && z >= 602 - p && z <= 648 + p) ||
-          (z >= 621 - p && z <= 627 + p && x >= -1735 - p && x <= -1694 + p)) return true;
-      // 8. East Island (Forum & Parkland, carved out around Marina Slip)
-      const inEastIsland = x >= -1816 - p && x <= -1688 + p && z >= 588 - p && z <= 766 + p;
-      const inMarinaSlip = x >= -1732 + p && x <= -1686 - p && z >= 604 + p && z <= 646 - p;
+      // 2. West Island: Cinesphere & West Commons Forest (x: -2300..-2075, z: 616..815)
+      if (x >= -2300 - p && x <= -2075 + p && z >= 616 - p && z <= 815 + p) return true;
+      // 3. West Island Woodlands Peninsula north of Pod Cove (x: -2076..-1880, z: 585..742)
+      if (x >= -2076 - p && x <= -1880 + p && z >= 585 - p && z <= 742 + p) return true;
+      // 4. West-Central Forest Channel Bridge (x: -1884..-1832, z: 648..664)
+      if (x >= -1884 - p && x <= -1832 + p && z >= 648 - p && z <= 664 + p) return true;
+      // 5. Central Mainland Bridge (Remembrance Dr / Ontario Place Blvd)
+      if (x >= -1820 - p && x <= -1804 + p && z >= 472 - p && z <= 536 + p) return true;
+      // 6. Central Island (Budweiser Stage, Woodlands & Echo Beach)
+      if (x >= -1836 - p && x <= -1595 + p && z >= 530 - p && z <= 815 + p) return true;
+      // 7. Central-East Forum Bridge
+      if (x >= -1599 - p && x <= -1552 + p && z >= 654 - p && z <= 668 + p) return true;
+      // 8. East Island Timber Marina Piers (allow walking out onto finger piers)
+      if ((x >= -1495 - p && x <= -1488 + p && z >= 583 - p && z <= 637 + p) ||
+          (z >= 606 - p && z <= 612 + p && x >= -1495 - p && x <= -1456 + p)) return true;
+      // 9. East Island (Forum & Parkland, carved out around Marina Slip)
+      const inEastIsland = x >= -1556 - p && x <= -1452 + p && z >= 575 - p && z <= 765 + p;
+      const inMarinaSlip = x >= -1492 + p && x <= -1448 - p && z >= 585 + p && z <= 635 - p;
       if (inEastIsland && !inMarinaSlip) return true;
-      // 9. East-Trillium Footbridge
-      if (x >= -1696 - p && x <= -1650 + p && z >= 588 - p && z <= 604 + p) return true;
-      // 10. Trillium Park Peninsula & William G. Davis Trail
-      if (x >= -1656 - p && x <= -1578 + p && z >= 475 - p && z <= 636 + p) return true;
+      // 10. East-Trillium Footbridge
+      if (x >= -1456 - p && x <= -1414 + p && z >= 590 - p && z <= 606 + p) return true;
+      // 11. Trillium Park Peninsula & William G. Davis Trail North Bridge
+      if (x >= -1420 - p && x <= -1366 + p && z >= 522 - p && z <= 682 + p) return true;
+      if (x >= -1406 - p && x <= -1390 + p && z >= 484 - p && z <= 528 + p) return true;
       return false;
     }
 
@@ -1335,6 +1338,10 @@
       // Billy Bishop Airport Mainland Ferry Slip at Bathurst Quay
       if (x >= -1075 && x <= -1045 && z >= 665 && z <= 715) {
         return 0.55;
+      }
+      // Budweiser Stage elevated 400-level grassy lawn terrace (rises south z: 698..750)
+      if (x >= -1786 && x <= -1704 && z >= 698 && z <= 750) {
+        return 0.15 + ((z - 698) / 52) * 1.45;
       }
       // Ontario Place West/Central/East Islands, Bridges, Marina Piers & Trillium Park deck
       if (isOnOntarioPlaceGround(x, z, 0)) {
@@ -1835,12 +1842,13 @@
         { t: 'secondary', w: 12, _noWellAnchor: true, p: [-1530.0, 320.0, -1620.0, 320.0, -1935.0, 320.0], n: "Princes' Boulevard" },
         { t: 'secondary', w: 10, _noWellAnchor: true, p: [-1565.0, 232.0, -1780.0, 232.0, -1970.0, 232.0, -2220.0, 232.0], n: 'Nova Scotia Avenue' },
         { t: 'pedestrian', w: 8, _noWellAnchor: true, p: [-725.0, 585.0, -900.0, 580.0, -1080.0, 535.0, -1200.0, 505.0, -1350.0, 495.0, -1530.0, 480.0, -1620.0, 480.0, -1900.0, 480.0, -2260.0, 480.0], n: 'Martin Goodman Trail' },
-        { t: 'pedestrian', w: 10, _noWellAnchor: true, p: [-2120.0, 480.0, -2120.0, 555.0, -2120.0, 625.0], n: 'Ontario Place West Bridge' },
-        { t: 'pedestrian', w: 8, _noWellAnchor: true, p: [-2026.0, 685.0, -1986.0, 685.0], n: 'Ontario Place Pod Bridge' },
-        { t: 'pedestrian', w: 12, _noWellAnchor: true, p: [-1908.0, 480.0, -1908.0, 540.0, -1908.0, 600.0], n: 'Ontario Place Blvd Bridge' },
-        { t: 'pedestrian', w: 8, _noWellAnchor: true, p: [-1842.0, 661.0, -1810.0, 661.0], n: 'Ontario Place Forum Bridge' },
-        { t: 'pedestrian', w: 8, _noWellAnchor: true, p: [-1694.0, 595.0, -1650.0, 595.0], n: 'Trillium Park Footbridge' },
-        { t: 'pedestrian', w: 8, _noWellAnchor: true, p: [-1618.0, 480.0, -1618.0, 545.0, -1610.0, 595.0], n: 'William G. Davis Trail' },
+        { t: 'pedestrian', w: 10, _noWellAnchor: true, p: [-2120.0, 480.0, -2120.0, 560.0, -2120.0, 635.0], n: 'Ontario Place West Bridge' },
+        { t: 'pedestrian', w: 7, _noWellAnchor: true, p: [-2120.0, 635.0, -2195.0, 645.0, -2255.0, 680.0, -2245.0, 755.0, -2175.0, 775.0, -2120.0, 755.0], n: 'West Commons Forest Loop' },
+        { t: 'pedestrian', w: 8, _noWellAnchor: true, p: [-2120.0, 680.0, -2060.0, 655.0, -2005.0, 635.0, -1945.0, 625.0, -1895.0, 652.0, -1882.0, 656.0, -1834.0, 656.0, -1798.0, 675.0, -1770.0, 695.0, -1745.0, 695.0], n: 'Ontario Place Forest Bridge & Trail' },
+        { t: 'pedestrian', w: 12, _noWellAnchor: true, p: [-1812.0, 480.0, -1812.0, 534.0], n: 'Ontario Place Blvd Bridge' },
+        { t: 'pedestrian', w: 8, _noWellAnchor: true, p: [-1597.0, 661.0, -1554.0, 661.0], n: 'Ontario Place Forum Bridge' },
+        { t: 'pedestrian', w: 8, _noWellAnchor: true, p: [-1454.0, 598.0, -1416.0, 598.0], n: 'Trillium Park Footbridge' },
+        { t: 'pedestrian', w: 8, _noWellAnchor: true, p: [-1398.0, 490.0, -1398.0, 540.0, -1398.0, 598.0, -1416.0, 598.0], n: 'William G. Davis Trail' },
 
         // --- West of Spadina Arterial & Neighbourhood Grid (Queens-Dundas-Liberty-Bathurst-Strachan-Dufferin) ---
         { t: 'primary', w: 16, _noWellAnchor: true, p: [-827.7, 134.6, -860.0, 26.0, -917.8, -165.6, -964.2, -320.0, -996.4, -427.0, -1027.9, -530.6, -1085.0, -720.0, -1140.0, -916.0], n: 'Spadina Avenue' },
@@ -10996,27 +11004,23 @@
         // 3. Ontario Place Pedestrian Bridge, Island Promenade & Cinesphere (x: -2120, z: 480..780)
         const op = new THREE.Group();
 
-        // Pedestrian Bridge spanning the water from mainland (z: 480) to island (z: 640)
-        const bridgeDeck = new THREE.Mesh(new THREE.BoxGeometry(10, 0.8, 160), concreteMat);
-        bridgeDeck.position.set(-2120, 0.4, 560);
+        // Pedestrian Bridge spanning the water from mainland (z: 480) to West Island (z: 624)
+        const bridgeDeck = new THREE.Mesh(new THREE.BoxGeometry(10, 0.8, 148), concreteMat);
+        bridgeDeck.position.set(-2120, 0.4, 550);
         op.add(bridgeDeck);
         // Bridge white railings & nautical lanterns
         [-5.1, 5.1].forEach(rx => {
-          const rail = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.2, 160), whiteSteelMat);
-          rail.position.set(-2120 + rx, 1.1, 560);
+          const rail = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.2, 148), whiteSteelMat);
+          rail.position.set(-2120 + rx, 1.1, 550);
           op.add(rail);
-          for (let bz = 490; bz <= 630; bz += 25) {
+          for (let bz = 486; bz <= 618; bz += 24) {
             const bl = new THREE.Mesh(new THREE.SphereGeometry(0.25, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffedd5 }));
             bl.position.set(-2120 + rx, 1.9, bz);
             op.add(bl);
           }
         });
 
-        // Ontario Place West Island Turf & Waterfront Boardwalk (x: -2220..-2020, z: 620..780)
-        const islandTurf = new THREE.Mesh(new THREE.BoxGeometry(200, 0.8, 160), new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.9 }));
-        islandTurf.position.set(-2120, 0.1, 700);
-        op.add(islandTurf);
-
+        // Scenic Timber Plaza Boardwalk circling Cinesphere
         const boardwalk = new THREE.Mesh(new THREE.RingGeometry(24, 38, 32), new THREE.MeshStandardMaterial({ color: 0x785338, roughness: 0.8 }));
         boardwalk.rotation.x = -Math.PI / 2;
         boardwalk.position.set(-2120, 0.2, 720);
@@ -11030,47 +11034,53 @@
         cineFrame.position.set(-2120, 16, 720);
         op.add(cineFrame);
 
-        // 5 Suspended Modular Pavilion Pods on Steel Masts over Lake Ontario (Eberhard Zeidler, 1971)
+        // 5 Suspended Modular Pavilion Pods on Steel Masts over Open Lake Ontario (Pod Cove, SE of Cinesphere)
         for (let p = 0; p < 5; p++) {
-          const px = -2120 + 44 + p * 32, pz = 702 + (p % 2) * 24;
+          const px = -2056 + p * 23, pz = 766 + (p % 2) * 22;
           const podGroup = new THREE.Group();
           podGroup.position.set(px, 14, pz);
 
           // Central white steel modular core
-          const podCore = new THREE.Mesh(new THREE.BoxGeometry(22, 9, 22), whiteSteelMat);
+          const podCore = new THREE.Mesh(new THREE.BoxGeometry(20, 9, 20), whiteSteelMat);
           podGroup.add(podCore);
 
           // Wrap-around panoramic curtain-wall ribbon windows on all 4 faces
-          [-11.1, 11.1].forEach(wx => {
-            const winX = new THREE.Mesh(new THREE.BoxGeometry(0.3, 4.5, 20), curtainWallMat);
+          [-10.1, 10.1].forEach(wx => {
+            const winX = new THREE.Mesh(new THREE.BoxGeometry(0.3, 4.5, 18), curtainWallMat);
             winX.position.set(wx, 0, 0);
             podGroup.add(winX);
           });
-          [-11.1, 11.1].forEach(wz => {
-            const winZ = new THREE.Mesh(new THREE.BoxGeometry(20, 4.5, 0.3), curtainWallMat);
+          [-10.1, 10.1].forEach(wz => {
+            const winZ = new THREE.Mesh(new THREE.BoxGeometry(18, 4.5, 0.3), curtainWallMat);
             winZ.position.set(0, 0, wz);
             podGroup.add(winZ);
           });
 
           // 3D Space-Frame Diagrid Steel Truss Lattice along exterior
-          const trussFrame = new THREE.Mesh(new THREE.BoxGeometry(22.6, 9.4, 22.6), new THREE.MeshBasicMaterial({ color: 0x94a3b8, wireframe: true }));
+          const trussFrame = new THREE.Mesh(new THREE.BoxGeometry(20.6, 9.4, 20.6), new THREE.MeshBasicMaterial({ color: 0x94a3b8, wireframe: true }));
           podGroup.add(trussFrame);
 
-          // Glazed pedestrian skywalk tubes connecting pods
-          if (p > 0) {
-            const prevZ = 702 + ((p - 1) % 2) * 24;
-            const connector = new THREE.Mesh(new THREE.BoxGeometry(14, 4, 6), blueGlassMat);
-            connector.position.set(-16, 0, (prevZ - pz) / 2);
+          // Glazed pedestrian skywalk tubes linking Cinesphere -> Pod 0 -> Pods 1..4
+          if (p === 0) {
+            const cineLink = new THREE.Mesh(new THREE.BoxGeometry(44, 4, 5.5), blueGlassMat);
+            cineLink.position.set(-24, -1, -18);
+            cineLink.rotation.y = 0.65;
+            podGroup.add(cineLink);
+          } else {
+            const prevZ = 766 + ((p - 1) % 2) * 22;
+            const dx = -23, dz = prevZ - pz;
+            const connector = new THREE.Mesh(new THREE.BoxGeometry(Math.hypot(dx, dz), 4, 5.5), blueGlassMat);
+            connector.position.set(dx * 0.5, 0, dz * 0.5);
+            connector.rotation.y = -Math.atan2(dz, dx);
             podGroup.add(connector);
           }
 
-          // 4 Heavy Tubular Steel Suspension Pylons & Stay Cables
-          [-8, 8].forEach(mx => {
-            [-8, 8].forEach(mz => {
-              const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 30, 8), whiteSteelMat);
-              mast.position.set(mx, 2, mz);
+          // 4 Heavy Tubular Steel Suspension Pylons plunging down into Lake Ontario water
+          [-7.5, 7.5].forEach(mx => {
+            [-7.5, 7.5].forEach(mz => {
+              const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 0.65, 34, 8), whiteSteelMat);
+              mast.position.set(mx, -0.5, mz);
               podGroup.add(mast);
-              // Tension stay cable from mast head down to pod roof corner
               const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 12, 4), darkGlassMat);
               cable.position.set(mx * 1.15, 11, mz * 1.15);
               cable.rotation.z = mx > 0 ? 0.35 : -0.35;
@@ -11084,7 +11094,7 @@
         // Ontario Place Landmark Sign
         const opSign = signMesh([
           'ONTARIO PLACE • EST. 1971',
-          'CINESPHERE GEODESIC DOME • WORLD\'S FIRST PERMANENT IMAX'
+          'CINESPHERE GEODESIC DOME • WEST ISLAND FOREST TRAILS'
         ], 14, 1.8, { bg: '#0369a1', fg: '#ffffff', borderColor: '#38bdf8', size: 48 });
         opSign.position.set(-2120, 2.4, 645);
         op.add(opSign);
@@ -11095,8 +11105,9 @@
         addSolid({ type: 'circle', x: -2120, z: 720, r: 18, name: 'Ontario Place Cinesphere' });
 
         // =========================================================================
-        // 3B. ONTARIO PLACE FULL ARCHIPELAGO (West Seawalls, Central Island / Budweiser Stage,
-        //     East Island / Forum & Marina, Trillium Park & William G. Davis Trail, Bridges)
+        // 3B. ONTARIO PLACE FULL ARCHIPELAGO (Spacious West Island Forest & Trails,
+        //     Pod Cove, Central Island / North-to-South Budweiser Stage w/ The Offspring,
+        //     Echo Beach, East Island / Forum & Marina, Trillium Park & Bridges)
         // =========================================================================
         const opArch = new THREE.Group();
         const opTimberMat = new THREE.MeshStandardMaterial({ color: 0x8b6239, roughness: 0.85, metalness: 0.05 });
@@ -11104,8 +11115,91 @@
         const opSeawallMat = new THREE.MeshStandardMaterial({ color: 0x646b73, roughness: 0.88, metalness: 0.06 });
         const opCanopyMat = new THREE.MeshStandardMaterial({ color: 0xf4f7fb, roughness: 0.42, metalness: 0.08, side: THREE.DoubleSide });
         const opGraniteBluffMat = new THREE.MeshStandardMaterial({ color: 0x9c7b70, roughness: 0.90, metalness: 0.05 });
-        const opStageGlowMat = new THREE.MeshStandardMaterial({
-          color: 0x162238, emissive: 0x22d3ee, emissiveIntensity: 0.72, roughness: 0.25, metalness: 0.2
+        const opPathMat = new THREE.MeshStandardMaterial({ color: 0xc8bfa8, roughness: 0.92, metalness: 0.02 });
+
+        // Custom High-Resolution LED Tour Backdrop for Budweiser Stage:
+        // "THE OFFSPRING — SUPERCHARGED WORLDWIDE TOUR" (Facing SOUTH toward audience!)
+        const offspringCanvas = document.createElement('canvas');
+        offspringCanvas.width = 1024;
+        offspringCanvas.height = 512;
+        const octx = offspringCanvas.getContext('2d');
+        if (octx && octx.fillRect) {
+          // Electric dark sky concert gradient
+          const grad = octx.createLinearGradient ? octx.createLinearGradient(0, 0, 0, 512) : null;
+          if (grad) {
+            grad.addColorStop(0, '#09051a');
+            grad.addColorStop(0.52, '#2d0a1e');
+            grad.addColorStop(1, '#090915');
+            octx.fillStyle = grad;
+          } else {
+            octx.fillStyle = '#120820';
+          }
+          octx.fillRect(0, 0, 1024, 512);
+
+          // Radiant high-voltage orange-red Supercharged sunburst center glow
+          const rgrad = octx.createRadialGradient ? octx.createRadialGradient(512, 235, 25, 512, 235, 360) : null;
+          if (rgrad) {
+            rgrad.addColorStop(0, 'rgba(255, 115, 20, 0.90)');
+            rgrad.addColorStop(0.38, 'rgba(220, 38, 38, 0.55)');
+            rgrad.addColorStop(0.75, 'rgba(56, 189, 248, 0.22)');
+            rgrad.addColorStop(1, 'rgba(9, 5, 26, 0)');
+            octx.fillStyle = rgrad;
+            octx.fillRect(0, 0, 1024, 512);
+          }
+
+          // Electric cyan & gold lightning bolts framing the stage screen
+          const drawBolt = (pts, color, lw) => {
+            octx.strokeStyle = color;
+            octx.lineWidth = lw;
+            octx.beginPath();
+            pts.forEach(([lx, ly], idx) => idx === 0 ? octx.moveTo(lx, ly) : octx.lineTo(lx, ly));
+            octx.stroke();
+          };
+          drawBolt([[90, 20], [175, 145], [135, 165], [220, 320], [160, 480]], '#38bdf8', 7);
+          drawBolt([[934, 20], [849, 145], [889, 165], [804, 320], [864, 480]], '#38bdf8', 7);
+          drawBolt([[240, 10], [290, 110], [265, 125], [320, 220]], '#facc15', 5);
+          drawBolt([[784, 10], [734, 110], [759, 125], [704, 220]], '#facc15', 5);
+
+          // Venue kicker
+          octx.textAlign = 'center';
+          octx.fillStyle = '#bae6fd';
+          octx.font = 'bold 26px sans-serif';
+          octx.fillText('LIVE AT BUDWEISER STAGE • TORONTO', 512, 74);
+
+          // Giant "THE OFFSPRING" tour headline with heavy rock outline
+          octx.font = '900 104px Impact, Arial Black, sans-serif';
+          octx.lineWidth = 12;
+          octx.strokeStyle = '#090514';
+          octx.strokeText('THE OFFSPRING', 512, 232);
+          octx.fillStyle = '#facc15';
+          octx.fillText('THE OFFSPRING', 512, 228);
+          octx.lineWidth = 3;
+          octx.strokeStyle = '#ef4444';
+          octx.strokeText('THE OFFSPRING', 512, 228);
+
+          // Bold Supercharged banner bar
+          octx.fillStyle = '#0ea5e9';
+          octx.fillRect(156, 276, 712, 78);
+          octx.strokeStyle = '#fef08a';
+          octx.lineWidth = 4;
+          octx.strokeRect(156, 276, 712, 78);
+          octx.fillStyle = '#ffffff';
+          octx.font = '900 44px Impact, Arial Black, sans-serif';
+          octx.fillText('SUPERCHARGED TOUR', 512, 332);
+
+          // Bottom voltage bars & pyro accent strip
+          octx.fillStyle = '#fb923c';
+          octx.font = 'bold 28px sans-serif';
+          octx.fillText('WORLDWIDE TOUR • ONTARIO PLACE', 512, 422);
+        }
+        const offspringTex = new THREE.CanvasTexture(offspringCanvas);
+        const opOffspringScreenMat = new THREE.MeshStandardMaterial({
+          map: offspringTex,
+          emissiveMap: offspringTex,
+          emissive: 0xffffff,
+          emissiveIntensity: 0.92,
+          roughness: 0.35,
+          metalness: 0.1
         });
 
         const addBoxTo = (parent, x, y, z, w, h, d, mat, rx, ry, rz) => {
@@ -11133,7 +11227,6 @@
           const mat = isTimber ? opTimberMat : plazaGraniteMat;
           addBoxTo(opArch, cx, 0.02, cz, w, 0.26, d, mat);
           addBoxTo(opArch, cx, -0.25, cz, Math.max(2, w - 1.0), 0.35, Math.max(2, d - 1.0), opSeawallMat);
-          // Bridge pier pilings down into Lake Ontario
           const steps = 3;
           for (let i = 0; i < steps; i++) {
             const t = (i + 0.5) / steps;
@@ -11141,7 +11234,6 @@
             const pz = spanX ? cz : (z0 + d * t);
             addBoxTo(opArch, px, -0.95, pz, spanX ? 1.4 : Math.max(2, w - 2.0), 1.9, spanX ? Math.max(2, d - 2.0) : 1.4, opSeawallMat);
           }
-          // Sleek side safety railings (non-obstructive along travel axis)
           if (spanX) {
             addBoxTo(opArch, cx, 0.65, z0 + 0.35, w, 1.0, 0.3, whiteSteelMat);
             addBoxTo(opArch, cx, 0.65, z1 - 0.35, w, 1.0, 0.3, whiteSteelMat);
@@ -11151,94 +11243,137 @@
           }
         };
 
-        // (a) West Island Marine Plinth & West-Central Pod Bridge
-        addIslandSlab(-2222, -2022, 618, 782, gardenMat);
-        addChannelBridge(-2125, -2115, 476, 624, false, false);
-        addChannelBridge(-2026, -1986, 676, 694, true, false);
+        // (a) West Island Sculpted Landmasses (West Commons + Woodlands Peninsula; Pod Cove stays open water!)
+        addIslandSlab(-2300, -2075, 616, 815, gardenMat);
+        addIslandSlab(-2076, -1880, 585, 742, gardenMat);
+        // Scenic Woodland Walkways & Trails across Ontario Place Forest (1 GeoBuilder mesh = 1 draw call!)
+        const ontarioTrails = [
+          // Main winding Forest Trail: Cinesphere -> Birch/Pine Woods -> Forest Channel Bridge -> Budweiser Stage Plaza
+          { w: 6.4, pts: [[-2120, 680], [-2060, 655], [-2005, 635], [-1945, 625], [-1895, 652], [-1882, 656], [-1834, 656], [-1798, 675], [-1770, 695], [-1745, 695]] },
+          // West Commons Woodland Trail Loop
+          { w: 5.5, pts: [[-2120, 635], [-2195, 645], [-2255, 680], [-2245, 755], [-2175, 775], [-2120, 755]] },
+          // North Ravine Woods Path
+          { w: 5.0, pts: [[-2110, 632], [-2045, 602], [-1975, 600], [-1915, 615], [-1895, 652]] },
+          // Central Entrance Remembrance Dr Spine & Southern Lawn -> Echo Beach Trail
+          { w: 7.0, pts: [[-1812, 534], [-1812, 600], [-1802, 650], [-1798, 675]] },
+          { w: 5.8, pts: [[-1834, 656], [-1802, 745], [-1745, 762], [-1675, 742], [-1628, 705], [-1597, 661]] },
+          // East Island Forum & Trillium Park William G. Davis Trail
+          { w: 5.8, pts: [[-1554, 661], [-1505, 665], [-1475, 630], [-1454, 598], [-1416, 598], [-1398, 565], [-1398, 520]] }
+        ];
+        const pathGB = new GeoBuilder();
+        ontarioTrails.forEach(tr => {
+          const hw = tr.w * 0.5;
+          for (let i = 0; i < tr.pts.length - 1; i++) {
+            const [ax, az] = tr.pts[i], [bx, bz] = tr.pts[i + 1];
+            const dx = bx - ax, dz = bz - az, len = Math.hypot(dx, dz) || 1;
+            const nx = (-dz / len) * hw, nz = (dx / len) * hw;
+            const a = pathGB.vert(ax - nx, 0.17, az - nz, 0, 1, 0, 0, 0);
+            const b = pathGB.vert(ax + nx, 0.17, az + nz, 0, 1, 0, 1, 0);
+            const c = pathGB.vert(bx + nx, 0.17, bz + nz, 0, 1, 0, 1, 1);
+            const d = pathGB.vert(bx - nx, 0.17, bz - nz, 0, 1, 0, 0, 1);
+            pathGB.quad(a, b, c, d);
+          }
+        });
+        opArch.add(new THREE.Mesh(pathGB.build(), opPathMat));
 
-        // (b) Central Island (-1992..-1838, z: 595..782): Main Blvd Bridge, Echo Beach & Budweiser Stage
-        addChannelBridge(-1916, -1900, 476, 602, false, false);
-        addIslandSlab(-1992, -1838, 595, 782, gardenMat);
-        // Paved concert entry promenade & amphitheatre plaza (-1962..-1866, z: 604..714)
-        addBoxTo(opArch, -1914, 0.16, 660, 96, 0.04, 112, plazaGraniteMat);
-        // Echo Beach golden sand shoreline & beach pavilion (SW peninsula)
-        addBoxTo(opArch, -1968, 0.17, 742, 38, 0.05, 62, opSandMat);
-        addBoxTo(opArch, -1968, 2.8, 756, 12, 4.2, 8, opTimberMat);
-        addBoxTo(opArch, -1968, 5.1, 756, 14, 0.4, 10, opCanopyMat);
+        // West-Central Forest Channel Bridge (x: -1884..-1832, z: 648..664)
+        addChannelBridge(-1884, -1832, 648, 664, true, true);
 
-        // Budweiser Stage Iconic White Tensile Saddle Roof, Twin Arch Trusses, Bowl & Concert Stage
-        // Stepped grassy amphitheatre lawn behind seats (z: 632..662)
-        for (let t = 0; t < 4; t++) {
-          const bH = 0.45 + t * 0.42;
-          addBoxTo(opArch, -1915, 0.15 + bH * 0.5, 658 - t * 6.5, 76 - t * 6, bH, 6.2, gardenMat);
+        // (b) Central Island (x: -1836..-1595, z: 530..815): Central Bridge, Budweiser Stage (Stage N -> Lawn S!) & Echo Beach
+        addChannelBridge(-1820, -1804, 476, 536, false, false);
+        addIslandSlab(-1836, -1595, 530, 815, gardenMat);
+        // Paved concert amphitheatre plaza & concourse (-1792..-1698, z: 604..698)
+        addBoxTo(opArch, -1745, 0.16, 652, 94, 0.04, 96, plazaGraniteMat);
+        // Echo Beach golden sand shoreline & cabana (eastern shore of Central Island, x: -1655..-1598)
+        addBoxTo(opArch, -1626, 0.17, 707, 56, 0.05, 114, opSandMat);
+        addBoxTo(opArch, -1628, 2.8, 658, 16, 4.4, 9, opTimberMat);
+        addBoxTo(opArch, -1628, 5.2, 658, 18, 0.45, 11, opCanopyMat);
+
+        // BUDWEISER STAGE (-1745, 695): Stage House on NORTH (z = 584..606) facing SOUTH (+Z),
+        // Covered 100s/200s/300s Bowl & White Saddle Roof in middle (z = 618..678), Grassy 400s Lawn on SOUTH (z = 682..752)!
+        // 1. Acoustic Stage House, Fly Tower & Backstage Rig (NORTH side, opening SOUTH)
+        addBoxTo(opArch, -1745, 8.0, 595, 46, 16.0, 20, darkGlassMat);
+        addBoxTo(opArch, -1745, 1.15, 610, 42, 2.0, 12, concreteMat); // Raised concert stage deck
+        addBoxTo(opArch, -1745, 15.8, 608, 46, 1.8, 14, whiteSteelMat); // Proscenium stage roof
+        // Towering LED Backdrop displaying "THE OFFSPRING — SUPERCHARGED WORLDWIDE TOUR" (facing +Z SOUTH, rotation.y = 0!)
+        const offspringScreen = new THREE.Mesh(new THREE.PlaneGeometry(34, 10.6), opOffspringScreenMat);
+        offspringScreen.name = 'budweiserStageOffspringBackdrop';
+        offspringScreen.position.set(-1745, 7.6, 606.8);
+        offspringScreen.rotation.y = 0;
+        opArch.add(offspringScreen);
+        // Side PA line-array speaker wing stacks & colorful concert light bars
+        addBoxTo(opArch, -1765, 7.6, 611, 4.2, 11.5, 5.2, concreteRibMat);
+        addBoxTo(opArch, -1725, 7.6, 611, 4.2, 11.5, 5.2, concreteRibMat);
+        const stageSign = signMesh('BUDWEISER STAGE', '#ffffff', '#0b3b75', 22, 3.4);
+        stageSign.position.set(-1745, 15.8, 615.4);
+        stageSign.rotation.y = 0;
+        opArch.add(stageSign);
+
+        // 2. Covered Amphitheatre Bowl Seating Steps (ascending south from z=626 to z=668, open center aisle!)
+        for (let r = 0; r < 6; r++) {
+          const tierZ = 626 + r * 7.2;
+          const tierY = 0.45 + r * 0.28;
+          addBoxTo(opArch, -1767, 0.15 + tierY * 0.5, tierZ, 24, tierY, 5.2, concreteRibMat);
+          addBoxTo(opArch, -1723, 0.15 + tierY * 0.5, tierZ, 24, tierY, 5.2, concreteRibMat);
         }
-        // Covered Amphitheatre Bowl Seating Steps (z: 672..706, gently flanking center aisle)
-        for (let r = 0; r < 5; r++) {
-          const tierZ = 674 + r * 6.5;
-          const tierY = 1.6 - r * 0.25;
-          addBoxTo(opArch, -1931, 0.15 + tierY * 0.5, tierZ, 24, tierY, 4.8, concreteRibMat);
-          addBoxTo(opArch, -1899, 0.15 + tierY * 0.5, tierZ, 24, tierY, 4.8, concreteRibMat);
-        }
-        // White Tensile Hyperbolic-Paraboloid Roof Canopy over (-1915, 692)
+        // White Tensile Hyperbolic-Paraboloid Roof Canopy over covered seating (-1745, 648)
         const saddleMesh = new THREE.Mesh(
-          new THREE.CylinderGeometry(34, 40, 2.2, 16, 1, false),
+          new THREE.CylinderGeometry(36, 42, 2.2, 18, 1, false),
           opCanopyMat
         );
-        saddleMesh.scale.set(1.15, 1, 0.85);
-        saddleMesh.position.set(-1915, 16.5, 692);
-        saddleMesh.rotation.z = 0.04;
+        saddleMesh.scale.set(1.18, 1, 0.88);
+        saddleMesh.position.set(-1745, 16.8, 648);
+        saddleMesh.rotation.z = -0.04;
         opArch.add(saddleMesh);
-        // Twin Steel Arch Ribs & Truss Pylons supporting the Budweiser canopy
-        for (const px of [-1947, -1883]) {
-          addBoxTo(opArch, px, 8.5, 668, 4.2, 17, 4.2, whiteSteelMat);
-          addBoxTo(opArch, px, 8.5, 716, 3.6, 17, 3.6, whiteSteelMat);
-          addBoxTo(opArch, px, 17.2, 692, 2.4, 2.2, 52, whiteSteelMat);
+        // 4 Structural Arch Pylons supporting canopy
+        for (const px of [-1784, -1706]) {
+          addBoxTo(opArch, px, 8.8, 622, 4.0, 17.5, 4.0, whiteSteelMat);
+          addBoxTo(opArch, px, 8.8, 674, 4.2, 17.5, 4.2, whiteSteelMat);
+          addBoxTo(opArch, px, 17.5, 648, 2.4, 2.2, 54, whiteSteelMat);
         }
-        // Budweiser Concert Stage House, Acoustic Rig & LED Video Screen (z = 716..734)
-        addBoxTo(opArch, -1915, 7.2, 725, 38, 14.0, 16, darkGlassMat);
-        addBoxTo(opArch, -1915, 1.3, 713, 34, 2.2, 8, concreteMat);
-        addBoxTo(opArch, -1915, 7.8, 716.6, 26, 8.6, 0.8, opStageGlowMat);
-        addBoxTo(opArch, -1915, 15.0, 720, 40, 1.6, 12, whiteSteelMat);
-        const stageSign = signMesh('BUDWEISER STAGE', '#ffffff', '#0b3b75', 22, 3.6);
-        stageSign.position.set(-1915, 13.8, 714.0);
-        stageSign.rotation.y = Math.PI;
-        opArch.add(stageSign);
-        addSolid({ type: 'poly', pts: [[-1934, 716], [-1896, 716], [-1896, 734], [-1934, 734]], h: 15, name: 'Budweiser Stage House' });
-        addSolid({ type: 'poly', pts: [[-1952, 662], [-1942, 662], [-1942, 674], [-1952, 674]], h: 17, name: 'Budweiser Stage West Pylon' });
-        addSolid({ type: 'poly', pts: [[-1888, 662], [-1878, 662], [-1878, 674], [-1888, 674]], h: 17, name: 'Budweiser Stage East Pylon' });
+        // 3. Terraced Grassy 400-Level Amphitheatre Lawn (SOUTH side, z: 696..748, facing NORTH at Stage!)
+        for (let t = 0; t < 4; t++) {
+          const bH = 0.48 + t * 0.44;
+          addBoxTo(opArch, -1745, 0.15 + bH * 0.5, 704 + t * 11.5, 78 - t * 6, bH, 9.2, gardenMat);
+        }
+        addSolid({ type: 'poly', pts: [[-1768, 584], [-1722, 584], [-1722, 606], [-1768, 606]], h: 16, name: 'Budweiser Stage House' });
+        addSolid({ type: 'poly', pts: [[-1788, 618], [-1780, 618], [-1780, 626], [-1788, 626]], h: 18, name: 'Budweiser Stage NW Pylon' });
+        addSolid({ type: 'poly', pts: [[-1710, 618], [-1702, 618], [-1702, 626], [-1710, 626]], h: 18, name: 'Budweiser Stage NE Pylon' });
+        addSolid({ type: 'poly', pts: [[-1788, 670], [-1780, 670], [-1780, 678], [-1788, 678]], h: 18, name: 'Budweiser Stage SW Pylon' });
+        addSolid({ type: 'poly', pts: [[-1710, 670], [-1702, 670], [-1702, 678], [-1710, 678]], h: 18, name: 'Budweiser Stage SE Pylon' });
 
-        // (c) Central-East Forum Bridge & East Island (Forum Rotunda + Carved Marina Basin + Boats)
-        addChannelBridge(-1842, -1810, 654, 668, true, true);
-        addIslandSlab(-1816, -1732, 588, 766, gardenMat);
-        addIslandSlab(-1732, -1688, 588, 604, plazaGraniteMat);
-        addIslandSlab(-1732, -1688, 646, 766, gardenMat);
-        // Forum Sunken Paved Plaza (-1758, 670) & 12-Spoke Translucent Rotunda Ring (open center walkable!)
+        // (c) Central-East Forum Bridge & East Island (Forum -1505, 665 + Carved Marina Basin + Boats)
+        addChannelBridge(-1599, -1552, 654, 668, true, true);
+        addIslandSlab(-1556, -1492, 575, 765, gardenMat);
+        addIslandSlab(-1492, -1452, 575, 585, plazaGraniteMat);
+        addIslandSlab(-1492, -1452, 635, 765, gardenMat);
+        // Forum Sunken Paved Plaza (-1505, 665) & 12-Spoke Translucent Rotunda Ring
         const forumPlaza = new THREE.Mesh(new THREE.CylinderGeometry(28, 28, 0.08, 24), plazaGraniteMat);
-        forumPlaza.position.set(-1758, 0.16, 670);
+        forumPlaza.position.set(-1505, 0.16, 665);
         opArch.add(forumPlaza);
         const forumRoof = new THREE.Mesh(new THREE.RingGeometry(8.5, 25.5, 12, 1), opCanopyMat);
         forumRoof.rotation.x = -Math.PI * 0.5;
-        forumRoof.position.set(-1758, 9.6, 670);
+        forumRoof.position.set(-1505, 9.6, 665);
         opArch.add(forumRoof);
         for (let k = 0; k < 12; k++) {
           const ang = (k / 12) * Math.PI * 2;
-          const cx = -1758 + Math.cos(ang) * 23.5;
-          const cz = 670 + Math.sin(ang) * 23.5;
+          const cx = -1505 + Math.cos(ang) * 23.5;
+          const cz = 665 + Math.sin(ang) * 23.5;
           addBoxTo(opArch, cx, 4.9, cz, 0.7, 9.5, 0.7, whiteSteelMat, 0, -ang, 0);
         }
-        // Forum Ticket Pavilion & Marina Harbormaster Kiosk (clear of -1755, 665!)
-        addBoxTo(opArch, -1788, 2.4, 622, 12, 4.5, 10, historicBrickMat);
-        addBoxTo(opArch, -1788, 4.9, 622, 14, 0.5, 12, copperRoofMat);
-        addSolid({ type: 'poly', pts: [[-1794, 617], [-1782, 617], [-1782, 627], [-1794, 627]], h: 5, name: 'Ontario Place Marina Office' });
+        // Forum Ticket Pavilion & Marina Harbormaster Kiosk (clear of -1505, 665!)
+        addBoxTo(opArch, -1532, 2.4, 616, 12, 4.5, 10, historicBrickMat);
+        addBoxTo(opArch, -1532, 4.9, 616, 14, 0.5, 12, copperRoofMat);
+        addSolid({ type: 'poly', pts: [[-1538, 611], [-1526, 611], [-1526, 621], [-1538, 621]], h: 5, name: 'Ontario Place Marina Office' });
 
-        // Ontario Place Timber Marina Finger Piers (-1735..-1694, z: 602..648) & Bobbing Sailboats
-        addChannelBridge(-1735, -1728, 602, 648, false, true);
-        addChannelBridge(-1735, -1694, 621, 627, true, true);
+        // Ontario Place Timber Marina Finger Piers (-1495..-1456, z: 583..637) & Bobbing Sailboats
+        addChannelBridge(-1495, -1488, 583, 637, false, true);
+        addChannelBridge(-1495, -1456, 606, 612, true, true);
         const marinaBoatSpots = [
-          [-1718, 612, 0.1, 0xf8fafc, 0x0284c7],
-          [-1702, 612, 0.25, 0xfef9c3, 0xdc2626],
-          [-1718, 636, -0.15, 0xffffff, 0x059669],
-          [-1702, 636, 0.08, 0xf1f5f9, 0x2563eb]
+          [-1476, 595, 0.1, 0xf8fafc, 0x0284c7],
+          [-1460, 595, 0.25, 0xfef9c3, 0xdc2626],
+          [-1476, 624, -0.15, 0xffffff, 0x059669],
+          [-1460, 624, 0.08, 0xf1f5f9, 0x2563eb]
         ];
         marinaBoatSpots.forEach(([bx, bz, yaw, hullHex, sailHex], idx) => {
           const bg = new THREE.Group();
@@ -11256,28 +11391,29 @@
           scene.userData.westMarinaBoats.push({ mesh: bg, baseY: WATER_Y + 0.06, phase: idx * 1.4, amp: 0.08 });
         });
 
-        // (d) East-Trillium Footbridge & Trillium Park / William G. Davis Trail (-1656..-1578, z: 475..636)
-        addChannelBridge(-1694, -1650, 588, 602, true, true);
-        addIslandSlab(-1656, -1578, 475, 636, gardenMat);
+        // (d) East-Trillium Footbridge & Trillium Park / William G. Davis Trail (-1420..-1366, z: 522..682)
+        addChannelBridge(-1456, -1414, 590, 606, true, true);
+        addChannelBridge(-1406, -1390, 484, 528, false, true);
+        addIslandSlab(-1420, -1366, 522, 682, gardenMat);
         // William G. Davis Trail cedar boardwalk spine & waterfront lookout terrace
-        addBoxTo(opArch, -1618, 0.17, 540, 8.2, 0.06, 128, opTimberMat);
-        addBoxTo(opArch, -1610, 0.18, 580, 26, 0.06, 22, plazaGraniteMat);
-        // Trillium Park Open-Air Cedar & Corten Steel Pavilion (-1610, 580; columns spaced cleanly off center!)
-        addBoxTo(opArch, -1610, 5.4, 580, 18, 0.55, 13, opTimberMat);
-        for (const [cx, cz] of [[-1618, 574.5], [-1602, 574.5], [-1618, 585.5], [-1602, 585.5]]) {
+        addBoxTo(opArch, -1398, 0.17, 560, 8.0, 0.06, 130, opTimberMat);
+        addBoxTo(opArch, -1394, 0.18, 590, 24, 0.06, 22, plazaGraniteMat);
+        // Trillium Park Open-Air Cedar & Corten Steel Pavilion (-1394, 590; open center walkable at -1398, 565!)
+        addBoxTo(opArch, -1394, 5.4, 590, 18, 0.55, 13, opTimberMat);
+        for (const [cx, cz] of [[-1402, 584.5], [-1386, 584.5], [-1402, 595.5], [-1386, 595.5]]) {
           addBoxTo(opArch, cx, 2.8, cz, 0.55, 5.2, 0.55, concreteRibMat);
         }
-        // Scenic Muskoka Pink Granite Bluff Outcrops along southwest water lookout
+        // Scenic Muskoka Pink Granite Bluff Outcrops along southwest overlook
         for (const [gx, gz, gw, gh, gd, rot] of [
-          [-1642, 616, 14, 3.8, 12, 0.25],
-          [-1626, 624, 16, 2.9, 10, -0.18],
-          [-1646, 602, 10, 2.4, 11, 0.4]
+          [-1406, 646, 13, 3.8, 11, 0.25],
+          [-1386, 658, 15, 2.9, 10, -0.18],
+          [-1410, 628, 9, 2.4, 10, 0.4]
         ]) {
           addBoxTo(opArch, gx, 0.15 + gh * 0.45, gz, gw, gh, gd, opGraniteBluffMat, 0, rot, 0);
           addSolid({ type: 'circle', x: gx, z: gz, r: Math.max(gw, gd) * 0.45, name: 'Trillium Park Muskoka Granite Bluff' });
         }
         const trilliumSign = signMesh('TRILLIUM PARK', '#fef3c7', '#14532d', 16, 2.8);
-        trilliumSign.position.set(-1610, 6.4, 573.4);
+        trilliumSign.position.set(-1394, 6.4, 583.4);
         opArch.add(trilliumSign);
         wEnd.add(opArch);
 
@@ -11444,16 +11580,35 @@
         const rampMesh = new THREE.Mesh(rampGB.build(), concreteMat);
         westHeritage.add(rampMesh);
 
-        // (f) Single InstancedMesh Pair (trunks + crowns) for Ontario Place, Trillium, Fort York & Trinity Bellwoods
-        const westTreeSpots = [
-          // West & Central Island
-          [-2175, 665, 1.1], [-2172, 745, 1.2], [-2068, 650, 1.1], [-2048, 748, 1.0],
-          [-1975, 622, 1.15], [-1975, 680, 1.05], [-1858, 622, 1.15], [-1855, 745, 1.2],
-          // East Island & Wilderness Hill
-          [-1798, 695, 1.25], [-1796, 738, 1.3], [-1752, 735, 1.2], [-1712, 718, 1.15],
-          [-1710, 672, 1.1], [-1758, 616, 1.05], [-1802, 625, 1.1],
-          // Trillium Park
-          [-1642, 505, 1.15], [-1640, 555, 1.2], [-1592, 502, 1.1], [-1590, 560, 1.15], [-1595, 610, 1.2],
+        // (f) Dense Ontario Place Forest + Trillium, Fort York & Trinity Bellwoods (4 draw calls total!)
+        const segDistSq = (px, pz, ax, az, bx, bz) => {
+          const dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz || 1;
+          const t = Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / l2));
+          const qx = ax + dx * t, qz = az + dz * t;
+          return (px - qx) * (px - qx) + (pz - qz) * (pz - qz);
+        };
+        const nearOntarioTrail = (px, pz, pad) => {
+          const r2 = pad * pad;
+          for (const tr of ontarioTrails) {
+            for (let i = 0; i < tr.pts.length - 1; i++) {
+              if (segDistSq(px, pz, tr.pts[i][0], tr.pts[i][1], tr.pts[i + 1][0], tr.pts[i + 1][1]) < r2) return true;
+            }
+          }
+          return false;
+        };
+        const canPlantOntarioTree = (x, z) => {
+          if (Math.hypot(x + 2120, z - 720) < 38) return false; // Cinesphere boardwalk & dome
+          if (Math.hypot(x + 2120, z - 635) < 16) return false; // West bridge plaza
+          if (x >= -1798 && x <= -1692 && z >= 578 && z <= 758) return false; // Budweiser Stage, bowl & grassy lawn
+          if (x >= -1662 && x <= -1594 && z >= 645 && z <= 770) return false; // Echo Beach cove & cabana
+          if (Math.hypot(x + 1505, z - 665) < 31) return false; // East Island Forum Rotunda
+          if (x >= -1546 && x <= -1448 && z >= 575 && z <= 644) return false; // Marina office & Marina basin
+          if (x >= -1420 && x <= -1380 && z >= 556 && z <= 665) return false; // Trillium Pavilion & Muskoka bluffs
+          if (nearOntarioTrail(x, z, 5.8)) return false;
+          return true;
+        };
+
+        const broadleafSpots = [
           // Fort York Perimeter Elms
           [-1415, 226, 1.25], [-1340, 224, 1.3], [-1265, 226, 1.25], [-1390, 322, 1.1], [-1290, 322, 1.1],
           // Trinity Bellwoods Park Canopy
@@ -11461,25 +11616,85 @@
           [-1735, -445, 1.3], [-1705, -425, 1.25], [-1645, -425, 1.3], [-1618, -445, 1.25],
           [-1735, -410, 1.2], [-1620, -410, 1.2]
         ];
+        const pineSpots = [];
+        const forestZones = [
+          // West Commons & Cinesphere West Woods (-2294..-2080, z: 622..808)
+          { x0: -2294, x1: -2082, z0: 622, z1: 808, step: 14, pineBias: 0.42 },
+          // Dense Forest & Paths BETWEEN Cinesphere/Pods and Budweiser Stage Bridge (-2074..-1886, z: 592..736)
+          { x0: -2074, x1: -1886, z0: 592, z1: 736, step: 13, pineBias: 0.36 },
+          // Central Island Perimeter Woodlands around Budweiser Stage & North Buffer (-1830..-1602, z: 536..806)
+          { x0: -1830, x1: -1602, z0: 536, z1: 806, step: 15, pineBias: 0.38 },
+          // East Island Wilderness Hills (-1550..-1458, z: 584..756)
+          { x0: -1550, x1: -1458, z0: 584, z1: 756, step: 15, pineBias: 0.45 },
+          // Trillium Park White Pines & Native Birches (-1416..-1370, z: 526..676)
+          { x0: -1416, x1: -1370, z0: 526, z1: 676, step: 13, pineBias: 0.65 }
+        ];
+        let fSeed = 137;
+        const nextRand = () => {
+          fSeed = (fSeed * 1664525 + 1013904223) >>> 0;
+          return fSeed / 4294967296;
+        };
+        forestZones.forEach(fz => {
+          for (let gx = fz.x0 + 6; gx <= fz.x1 - 6; gx += fz.step) {
+            for (let gz = fz.z0 + 6; gz <= fz.z1 - 6; gz += fz.step) {
+              const jx = gx + (nextRand() - 0.5) * (fz.step * 0.68);
+              const jz = gz + (nextRand() - 0.5) * (fz.step * 0.68);
+              const sc = 0.92 + nextRand() * 0.65;
+              if (!canPlantOntarioTree(jx, jz)) continue;
+              if (nextRand() < fz.pineBias) pineSpots.push([jx, jz, sc]);
+              else broadleafSpots.push([jx, jz, sc]);
+            }
+          }
+        });
+
         const wTrunkMat = new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 0.9 });
-        const wCrownMat = new THREE.MeshStandardMaterial({ color: 0x2d6a3e, roughness: 0.85 });
-        const wTrunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.28, 0.42, 3.6, 6), wTrunkMat, westTreeSpots.length);
-        const wCrowns = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(3.1, 0), wCrownMat, westTreeSpots.length);
+        const wCrownMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.86 });
+        const wPineMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.88 });
         const dummyTree = new THREE.Object3D();
-        westTreeSpots.forEach(([tx, tz, sc], i) => {
-          dummyTree.position.set(tx, 1.8 * sc, tz);
+        const leafPalette = [new THREE.Color(0x2d6a3e), new THREE.Color(0x3a7d44), new THREE.Color(0x245932), new THREE.Color(0x4b8f4c)];
+        const pinePalette = [new THREE.Color(0x1b4d32), new THREE.Color(0x1f5939), new THREE.Color(0x163e29), new THREE.Color(0x226340)];
+
+        const wTrunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.28, 0.44, 3.8, 6), wTrunkMat, broadleafSpots.length);
+        const wCrowns = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(3.2, 0), wCrownMat, broadleafSpots.length);
+        broadleafSpots.forEach(([tx, tz, sc], i) => {
+          dummyTree.position.set(tx, 1.9 * sc, tz);
           dummyTree.scale.set(sc, sc, sc);
           dummyTree.rotation.set(0, (i * 1.1) % 6.28, 0);
           dummyTree.updateMatrix();
           wTrunks.setMatrixAt(i, dummyTree.matrix);
-          dummyTree.position.set(tx, 4.9 * sc, tz);
-          dummyTree.scale.set(sc, sc * 1.1, sc);
+          dummyTree.position.set(tx, 5.1 * sc, tz);
+          dummyTree.scale.set(sc, sc * 1.12, sc);
           dummyTree.updateMatrix();
           wCrowns.setMatrixAt(i, dummyTree.matrix);
+          wCrowns.setColorAt(i, leafPalette[i % leafPalette.length]);
         });
         wTrunks.instanceMatrix.needsUpdate = true;
+        wCrowns.name = 'ontarioPlaceBroadleafCrowns';
         wCrowns.instanceMatrix.needsUpdate = true;
+        if (wCrowns.instanceColor) wCrowns.instanceColor.needsUpdate = true;
         westHeritage.add(wTrunks, wCrowns);
+
+        if (pineSpots.length > 0) {
+          const pTrunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.24, 0.38, 3.6, 5), wTrunkMat, pineSpots.length);
+          const pCrowns = new THREE.InstancedMesh(new THREE.ConeGeometry(2.7, 7.6, 7), wPineMat, pineSpots.length);
+          pCrowns.name = 'ontarioPlacePineCrowns';
+          pineSpots.forEach(([tx, tz, sc], i) => {
+            dummyTree.position.set(tx, 1.8 * sc, tz);
+            dummyTree.scale.set(sc, sc, sc);
+            dummyTree.rotation.set(0, (i * 0.7) % 6.28, 0);
+            dummyTree.updateMatrix();
+            pTrunks.setMatrixAt(i, dummyTree.matrix);
+            dummyTree.position.set(tx, 6.2 * sc, tz);
+            dummyTree.scale.set(sc, sc * 1.15, sc);
+            dummyTree.updateMatrix();
+            pCrowns.setMatrixAt(i, dummyTree.matrix);
+            pCrowns.setColorAt(i, pinePalette[i % pinePalette.length]);
+          });
+          pTrunks.instanceMatrix.needsUpdate = true;
+          pCrowns.instanceMatrix.needsUpdate = true;
+          if (pCrowns.instanceColor) pCrowns.instanceColor.needsUpdate = true;
+          westHeritage.add(pTrunks, pCrowns);
+        }
         wEnd.add(westHeritage);
 
         expGroup.add(wEnd);
@@ -14944,45 +15159,49 @@
       g.strokeStyle = '#2d6a4f';
       g.lineWidth = 1.5;
       for (const [ix0, iz0, iw, id] of [
-        [-2222, 618, 200, 164], // West Island
-        [-1992, 595, 154, 187], // Central Island (Budweiser Stage)
-        [-1816, 588, 128, 178], // East Island (Forum & Parkland)
-        [-1656, 475, 78, 161]   // Trillium Park Headland
+        [-2300, 616, 225, 199], // West Island & West Commons Forest
+        [-2076, 585, 196, 157], // West Island Woodlands Peninsula (Pod Cove water below z=742!)
+        [-1836, 530, 241, 285], // Central Island (Budweiser Stage, Forest & Echo Beach)
+        [-1556, 575, 104, 190], // East Island (Forum & Marina)
+        [-1420, 522, 54, 160]   // Trillium Park Headland
       ]) {
         g.fillRect(tx(ix0), tz(iz0), iw * MM_SCALE, id * MM_SCALE);
         g.strokeRect(tx(ix0), tz(iz0), iw * MM_SCALE, id * MM_SCALE);
       }
       // East Island Marina Slip Water Basin & Timber Pier
       g.fillStyle = '#0c2d48';
-      g.fillRect(tx(-1732), tz(604), 46 * MM_SCALE, 42 * MM_SCALE);
+      g.fillRect(tx(-1492), tz(585), 44 * MM_SCALE, 50 * MM_SCALE);
       g.fillStyle = '#d97706';
-      g.fillRect(tx(-1735), tz(602), 7 * MM_SCALE, 46 * MM_SCALE);
-      g.fillRect(tx(-1735), tz(621), 41 * MM_SCALE, 6 * MM_SCALE);
+      g.fillRect(tx(-1495), tz(583), 7 * MM_SCALE, 54 * MM_SCALE);
+      g.fillRect(tx(-1495), tz(606), 39 * MM_SCALE, 6 * MM_SCALE);
 
-      // Echo Beach golden sand, Cinesphere Dome, Budweiser Stage & Forum landmarks
+      // Echo Beach golden sand, Cinesphere Dome, Budweiser Stage (Stage N -> Lawn S) & Forum landmarks
       g.fillStyle = '#d4a373';
-      g.fillRect(tx(-1987), tz(711), 38 * MM_SCALE, 62 * MM_SCALE);
+      g.fillRect(tx(-1655), tz(650), 57 * MM_SCALE, 115 * MM_SCALE);
       g.fillStyle = '#f8fafc';
       g.beginPath();
       g.arc(tx(-2120), tz(720), 16 * MM_SCALE, 0, Math.PI * 2);
       g.fill();
       g.beginPath();
-      g.arc(tx(-1915), tz(692), 28 * MM_SCALE, 0, Math.PI * 2);
+      g.arc(tx(-1745), tz(646), 34 * MM_SCALE, 0, Math.PI * 2);
       g.fill();
+      g.fillStyle = '#1e293b';
+      g.fillRect(tx(-1768), tz(584), 46 * MM_SCALE, 22 * MM_SCALE); // North Stage House
       g.strokeStyle = '#cbd5e1';
       g.lineWidth = 2;
       g.beginPath();
-      g.arc(tx(-1758), tz(670), 22 * MM_SCALE, 0, Math.PI * 2);
+      g.arc(tx(-1505), tz(665), 22 * MM_SCALE, 0, Math.PI * 2);
       g.stroke();
 
       // Ontario Place Bridges (shore-to-island & inter-island channels)
       g.fillStyle = '#f59e0b';
       for (const [bx0, bz0, bw, bd] of [
         [-2125, 476, 10, 148], // West Bridge
-        [-2026, 676, 40, 18],  // Pod Bridge
-        [-1916, 476, 16, 126], // Central Main Blvd Bridge
-        [-1842, 654, 32, 14],  // Forum Bridge
-        [-1694, 588, 44, 14]   // East-Trillium Footbridge
+        [-1884, 648, 52, 16],  // West-Central Forest Channel Bridge
+        [-1820, 476, 16, 60],  // Central Main Blvd Bridge
+        [-1599, 654, 47, 14],  // Forum Bridge
+        [-1456, 590, 42, 16],  // East-Trillium Footbridge
+        [-1406, 484, 16, 44]   // Davis Trail North Bridge
       ]) {
         g.fillRect(tx(bx0), tz(bz0), bw * MM_SCALE, bd * MM_SCALE);
       }
@@ -15571,14 +15790,14 @@
         id: 'trilliumPark',
         name: 'Trillium Park & Davis Trail',
         desc: 'Waterfront Muskoka granite bluffs, cedar pavilion & scenic east island footbridge',
-        pos: { x: -1610.0, y: 1.7, z: 545.0 },
+        pos: { x: -1398.0, y: 1.7, z: 565.0 },
         yaw: 0.0
       },
       {
         id: 'budweiserStage',
         name: 'Ontario Place Budweiser Stage',
-        desc: 'Lakeside tensile saddle amphitheatre, concert stage & Echo Beach cove',
-        pos: { x: -1915.0, y: 1.7, z: 685.0 },
+        desc: 'Lakeside amphitheatre facing north (The Offspring Supercharged Tour), grassy lawn & Echo Beach',
+        pos: { x: -1745.0, y: 1.7, z: 695.0 },
         yaw: 0.0
       },
       {
