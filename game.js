@@ -1156,6 +1156,7 @@ const state = {
   onFerry: false,
   onIsland: false,
   onSubway: false,
+  onTaxi: false,
   isUnderground: false,
   skyShowdownActive: false,
   skyShowdownWave: 0,
@@ -3646,6 +3647,550 @@ window.openFerryPanel = openFerryPanel;
 window.closeFerryPanel = closeFerryPanel;
 window.selectFerryDock = selectFerryDock;
 
+// ============================================================================
+// TORONTO BECK TAXI SYSTEM (5 Pickup Stands -> 5 Fixed Destination Hubs)
+// Asymmetric one-way dispatch: players can ONLY hail taxis at the 5 non-destination
+// pickup stands (Union Station, Eaton Centre, Chinatown, St. Lawrence Market,
+// Liberty Village) and ONLY ride to the 5 drop-off hubs (Near CN Tower, City Hall,
+// Ontario Place, Jack Layton Ferry Terminal, Billy Bishop Airport Ferry), so
+// taxis help cross the expanded city without enabling arbitrary box-to-box chaining.
+// ============================================================================
+const FALLBACK_TAXI_PICKUPS = [
+  { id: 'union', name: 'Union Station', sub: 'Front St W Colonnade Stand', x: 262.0, z: -182.0, cabX: 256.0, cabZ: -187.0, cabYaw: Math.PI * 0.42 },
+  { id: 'eaton', name: 'Eaton Centre', sub: 'Yonge St & Dundas Gate Stand', x: 372.0, z: -1032.0, cabX: 378.0, cabZ: -1026.0, cabYaw: Math.PI },
+  { id: 'chinatown', name: 'Chinatown', sub: 'Spadina Ave & Dundas Gate Stand', x: -540.0, z: -1035.0, cabX: -545.0, cabZ: -1039.0, cabYaw: -Math.PI / 2 },
+  { id: 'stLawrence', name: 'St. Lawrence Market', sub: 'Front St E & Market Curb Stand', x: 908.0, z: -548.0, cabX: 912.0, cabZ: -553.0, cabYaw: -2.1 },
+  { id: 'libertyVillage', name: 'Liberty Village', sub: 'East Liberty St Carpet Lofts Stand', x: -1760.0, z: 152.0, cabX: -1754.0, cabZ: 158.0, cabYaw: -Math.PI / 2 }
+];
+
+function getTaxiPickups() {
+  return (city && city.taxiStands && Array.isArray(city.taxiStands.stands) && city.taxiStands.stands.length > 0)
+    ? city.taxiStands.stands
+    : FALLBACK_TAXI_PICKUPS;
+}
+
+const TAXI_DESTINATIONS = [
+  {
+    id: 'cnTower',
+    label: '01',
+    name: 'Near CN Tower',
+    sub: 'Bremner Blvd & John St Curb (SkyDome / Plaza)',
+    dropX: -238.0, dropZ: 228.0,
+    cabX: -232.0, cabZ: 236.0,
+    arrivalYaw: 0.52
+  },
+  {
+    id: 'cityHall',
+    label: '02',
+    name: 'City Hall / Nathan Phillips Sq.',
+    sub: 'Queen St West Curb (Toronto Sign & Towers)',
+    dropX: 75.0, dropZ: -770.0,
+    cabX: 75.0, cabZ: -763.0,
+    arrivalYaw: 0.0
+  },
+  {
+    id: 'ontarioPlace',
+    label: '03',
+    name: 'Ontario Place',
+    sub: 'Lake Shore Blvd W & Remembrance Dr Entrance',
+    dropX: -1812.0, dropZ: 412.0,
+    cabX: -1812.0, cabZ: 392.0,
+    arrivalYaw: Math.PI
+  },
+  {
+    id: 'ferryTerminal',
+    label: '04',
+    name: 'Jack Layton Ferry Terminal',
+    sub: 'Queens Quay & Bay Terminal Forecourt',
+    dropX: 708.0, dropZ: 255.0,
+    cabX: 704.0, cabZ: 240.0,
+    arrivalYaw: Math.PI
+  },
+  {
+    id: 'airportFerry',
+    label: '05',
+    name: 'Billy Bishop Airport Ferry',
+    sub: 'Bathurst Quay / Eireann Quay Slip',
+    dropX: -1048.0, dropZ: 650.0,
+    cabX: -1056.0, cabZ: 652.0,
+    arrivalYaw: 2.85
+  }
+];
+
+const taxiPanel = { open: false, highlight: 0, stand: null };
+let taxiRoadGraphCache = null;
+
+function buildTaxiRoadGraph() {
+  if (taxiRoadGraphCache) return taxiRoadGraphCache;
+  const roads = (city && Array.isArray(city.trafficRoads)) ? city.trafficRoads : [];
+  const nodes = [];
+  const segs = [];
+  const mergeGrid = new Map();
+
+  function addNode(x, z) {
+    const gx = Math.round(x / 4), gz = Math.round(z / 4);
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        const arr = mergeGrid.get((gx + dx) + ',' + (gz + dz));
+        if (!arr) continue;
+        for (let k = 0; k < arr.length; k++) {
+          const idx = arr[k];
+          if (Math.hypot(nodes[idx].x - x, nodes[idx].z - z) < 5.0) return idx;
+        }
+      }
+    }
+    const id = nodes.length;
+    nodes.push({ x, z, adj: [] });
+    const key = gx + ',' + gz;
+    if (!mergeGrid.has(key)) mergeGrid.set(key, []);
+    mergeGrid.get(key).push(id);
+    return id;
+  }
+
+  for (let ri = 0; ri < roads.length; ri++) {
+    const r = roads[ri];
+    if (!r || r.y > 1 || !r.pts || r.pts.length < 2) continue;
+    for (let i = 0; i < r.pts.length - 1; i++) {
+      const a = addNode(r.pts[i][0], r.pts[i][1]);
+      const b = addNode(r.pts[i + 1][0], r.pts[i + 1][1]);
+      if (a !== b) {
+        const d = Math.hypot(nodes[a].x - nodes[b].x, nodes[a].z - nodes[b].z);
+        if (d > 0.1) {
+          nodes[a].adj.push([b, d]);
+          nodes[b].adj.push([a, d]);
+          segs.push([a, b]);
+        }
+      }
+    }
+  }
+
+  // Bucket segments on a coarse 24m grid so T-junction linking completes in < 15ms
+  const segBuckets = new Map();
+  for (let si = 0; si < segs.length; si++) {
+    const [a, b] = segs[si];
+    const minBx = Math.floor(Math.min(nodes[a].x, nodes[b].x) / 24);
+    const maxBx = Math.floor(Math.max(nodes[a].x, nodes[b].x) / 24);
+    const minBz = Math.floor(Math.min(nodes[a].z, nodes[b].z) / 24);
+    const maxBz = Math.floor(Math.max(nodes[a].z, nodes[b].z) / 24);
+    for (let bx = minBx; bx <= maxBx; bx++) {
+      for (let bz = minBz; bz <= maxBz; bz++) {
+        const bk = bx + ',' + bz;
+        if (!segBuckets.has(bk)) segBuckets.set(bk, []);
+        segBuckets.get(bk).push(si);
+      }
+    }
+  }
+
+  const baseCount = nodes.length;
+  for (let i = 0; i < baseCount; i++) {
+    const p = nodes[i];
+    const pbx = Math.floor(p.x / 24), pbz = Math.floor(p.z / 24);
+    const checked = new Set();
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        const bucket = segBuckets.get((pbx + dx) + ',' + (pbz + dz));
+        if (!bucket) continue;
+        for (let bi = 0; bi < bucket.length; bi++) {
+          const si = bucket[bi];
+          if (checked.has(si)) continue;
+          checked.add(si);
+          const [a, b] = segs[si];
+          if (a === i || b === i) continue;
+          const ax = nodes[a].x, az = nodes[a].z;
+          const vx = nodes[b].x - ax, vz = nodes[b].z - az;
+          const l2 = vx * vx + vz * vz;
+          if (l2 < 1) continue;
+          const t = ((p.x - ax) * vx + (p.z - az) * vz) / l2;
+          if (t > 0.01 && t < 0.99) {
+            const px = ax + vx * t, pz = az + vz * t;
+            const d = Math.hypot(p.x - px, p.z - pz);
+            if (d < 8.0) {
+              const da = Math.hypot(p.x - ax, p.z - az);
+              const db = Math.hypot(p.x - nodes[b].x, p.z - nodes[b].z);
+              p.adj.push([a, da]); nodes[a].adj.push([i, da]);
+              p.adj.push([b, db]); nodes[b].adj.push([i, db]);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  taxiRoadGraphCache = { nodes };
+  return taxiRoadGraphCache;
+}
+
+function findTaxiRoadPath(fromStand, dest) {
+  const graph = buildTaxiRoadGraph();
+  const nodes = graph.nodes;
+  const startPt = { x: fromStand.cabX !== undefined ? fromStand.cabX : fromStand.x, z: fromStand.cabZ !== undefined ? fromStand.cabZ : fromStand.z };
+  const endPt = { x: dest.cabX !== undefined ? dest.cabX : dest.dropX, z: dest.cabZ !== undefined ? dest.cabZ : dest.dropZ };
+
+  if (nodes.length < 2) return [startPt, endPt];
+
+  function nearestNodeIdx(px, pz) {
+    let best = 0, bestD = Infinity;
+    for (let i = 0; i < nodes.length; i++) {
+      const d = Math.hypot(nodes[i].x - px, nodes[i].z - pz);
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    return best;
+  }
+
+  const s = nearestNodeIdx(startPt.x, startPt.z);
+  const g = nearestNodeIdx(endPt.x, endPt.z);
+  const gScore = new Float64Array(nodes.length).fill(Infinity);
+  const prev = new Int32Array(nodes.length).fill(-1);
+  const visited = new Uint8Array(nodes.length);
+  gScore[s] = 0;
+  const open = [s];
+  const gx = nodes[g].x, gz = nodes[g].z;
+
+  while (open.length > 0) {
+    let bestIdx = 0;
+    let bestF = gScore[open[0]] + Math.hypot(nodes[open[0]].x - gx, nodes[open[0]].z - gz);
+    for (let i = 1; i < open.length; i++) {
+      const f = gScore[open[i]] + Math.hypot(nodes[open[i]].x - gx, nodes[open[i]].z - gz);
+      if (f < bestF) { bestF = f; bestIdx = i; }
+    }
+    const u = open.splice(bestIdx, 1)[0];
+    if (u === g) break;
+    if (visited[u]) continue;
+    visited[u] = 1;
+    const adj = nodes[u].adj;
+    for (let i = 0; i < adj.length; i++) {
+      const v = adj[i][0], w = adj[i][1];
+      const nd = gScore[u] + w;
+      if (nd < gScore[v]) {
+        gScore[v] = nd;
+        prev[v] = u;
+        open.push(v);
+      }
+    }
+  }
+
+  const pts = [startPt];
+  if (s === g || prev[g] >= 0) {
+    const rev = [];
+    for (let cur = g; cur >= 0; cur = prev[cur]) {
+      rev.push({ x: nodes[cur].x, z: nodes[cur].z });
+    }
+    for (let i = rev.length - 1; i >= 0; i--) {
+      const p = rev[i];
+      const last = pts[pts.length - 1];
+      if (Math.hypot(p.x - last.x, p.z - last.z) > 2.0) pts.push(p);
+    }
+  }
+  const tail = pts[pts.length - 1];
+  if (Math.hypot(endPt.x - tail.x, endPt.z - tail.z) > 1.5) pts.push(endPt);
+
+  // Corner-fillet smoothing so intersection turns sweep gently instead of snapping camera headings
+  const smoothed = [pts[0]];
+  for (let i = 1; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1], p1 = pts[i], p2 = pts[i + 1];
+    const dIn = Math.hypot(p1.x - p0.x, p1.z - p0.z);
+    const dOut = Math.hypot(p2.x - p1.x, p2.z - p1.z);
+    const cutIn = Math.min(10.0, dIn * 0.35);
+    const cutOut = Math.min(10.0, dOut * 0.35);
+    if (dIn > 4 && dOut > 4) {
+      const ax = p1.x - ((p1.x - p0.x) / dIn) * cutIn;
+      const az = p1.z - ((p1.z - p0.z) / dIn) * cutIn;
+      const bx = p1.x + ((p2.x - p1.x) / dOut) * cutOut;
+      const bz = p1.z + ((p2.z - p1.z) / dOut) * cutOut;
+      const mx = 0.25 * ax + 0.5 * p1.x + 0.25 * bx;
+      const mz = 0.25 * az + 0.5 * p1.z + 0.25 * bz;
+      smoothed.push({ x: ax, z: az }, { x: mx, z: mz }, { x: bx, z: bz });
+    } else {
+      smoothed.push(p1);
+    }
+  }
+  smoothed.push(pts[pts.length - 1]);
+  return smoothed;
+}
+
+const taxiController = {
+  isMoving: false,
+  fromStand: null,
+  toDest: null,
+  routePts: [],
+  cumDist: [0],
+  totalDist: 0,
+  progress: 0,
+  duration: 7.0,
+  heading: 0,
+  lastHeading: 0,
+  cabMesh: null,
+  hiddenStandCab: null
+};
+
+function evalTaxiRoute(u) {
+  const pts = taxiController.routePts;
+  const cum = taxiController.cumDist;
+  const total = taxiController.totalDist;
+  if (!pts || pts.length < 2 || total <= 0.01) {
+    const p = (pts && pts[0]) || { x: player.pos.x, z: player.pos.z };
+    return { x: p.x, z: p.z, heading: taxiController.heading };
+  }
+  const targetD = Math.max(0, Math.min(total, u * total));
+  let lo = 0, hi = pts.length - 2;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (cum[mid] <= targetD) lo = mid;
+    else hi = mid - 1;
+  }
+  const a = pts[lo], b = pts[lo + 1];
+  const segLen = Math.max(0.001, cum[lo + 1] - cum[lo]);
+  const f = (targetD - cum[lo]) / segLen;
+  const x = a.x + (b.x - a.x) * f;
+  const z = a.z + (b.z - a.z) * f;
+  const heading = Math.atan2(b.x - a.x, b.z - a.z);
+  return { x, z, heading };
+}
+
+function findNearbyTaxiStand(maxDist = 11.5) {
+  if (!player || !player.pos || state.onIsland || state.onFerry || state.onPlane || state.onStreetcar || state.onSubway || state.onTaxi || state.inElevator) {
+    return null;
+  }
+  const feet = player.pos.y - EYE_HEIGHT;
+  if (feet < -2.0 || feet > 15.0) return null;
+  const stands = getTaxiPickups();
+  let best = null, bestD = maxDist;
+  for (let i = 0; i < stands.length; i++) {
+    const st = stands[i];
+    const dStand = Math.hypot(player.pos.x - st.x, player.pos.z - st.z);
+    const dCab = (st.cabX !== undefined) ? Math.hypot(player.pos.x - st.cabX, player.pos.z - st.cabZ) : dStand;
+    const d = Math.min(dStand, dCab);
+    if (d < bestD) { bestD = d; best = st; }
+  }
+  return best;
+}
+
+function buildTaxiPanel() {
+  const listEl = document.getElementById('taxi-dest-list');
+  if (!listEl) return;
+  const titleEl = document.getElementById('taxi-panel-title');
+  if (titleEl && taxiPanel.stand) {
+    titleEl.innerText = `🚕 BECK TAXI • ${taxiPanel.stand.name.toUpperCase()}`;
+  }
+  listEl.innerHTML = '';
+  TAXI_DESTINATIONS.forEach((d, i) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'elev-floor-btn' + (i === taxiPanel.highlight ? ' is-highlight' : '');
+    btn.innerHTML =
+      `<span class="elev-floor-key">${i + 1}</span>` +
+      `<span class="elev-floor-text">` +
+      `<span class="elev-floor-label">${d.label} • DROP-OFF HUB</span>` +
+      `<span class="elev-floor-name">${d.name}</span>` +
+      `<span class="elev-floor-sub">${d.sub}</span>` +
+      `</span>`;
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      selectTaxiDest(i);
+    });
+    listEl.appendChild(btn);
+  });
+}
+
+function openTaxiPanel(stand) {
+  const near = stand || findNearbyTaxiStand();
+  if (!near || state.onTaxi || state.onFerry || state.inElevator || state.onPlane || state.onStreetcar || state.onSubway) return false;
+  taxiPanel.stand = near;
+  taxiPanel.highlight = Math.max(0, Math.min(TAXI_DESTINATIONS.length - 1, taxiPanel.highlight));
+  taxiPanel.open = true;
+  buildTaxiPanel();
+  const el = document.getElementById('taxi-panel');
+  if (el) el.classList.remove('hidden');
+  if (audio && audio.playElevatorDing) audio.playElevatorDing();
+  if (document.pointerLockElement && document.exitPointerLock) {
+    document.exitPointerLock();
+  }
+  return true;
+}
+
+function closeTaxiPanel() {
+  if (!taxiPanel.open) return;
+  taxiPanel.open = false;
+  const el = document.getElementById('taxi-panel');
+  if (el) el.classList.add('hidden');
+  if (state.inGame && !state.freeMouseMode && !state.isPaused && !state.isDead && !state.onTaxi && !state.onFerry && !state.inElevator && container && container.requestPointerLock && !document.pointerLockElement) {
+    try { container.requestPointerLock(); } catch (_) {}
+  }
+}
+
+function moveTaxiHighlight(delta) {
+  const n = TAXI_DESTINATIONS.length;
+  taxiPanel.highlight = (taxiPanel.highlight + delta + n) % n;
+  buildTaxiPanel();
+}
+
+function selectTaxiDest(idx) {
+  if (idx < 0 || idx >= TAXI_DESTINATIONS.length) return false;
+  const origin = taxiPanel.stand || findNearbyTaxiStand();
+  closeTaxiPanel();
+  if (!origin) return false;
+  return startTaxiRide(origin, TAXI_DESTINATIONS[idx]);
+}
+
+function startTaxiRide(fromStandOrId, destOrId) {
+  if (state.onTaxi || state.onFerry || state.inElevator || state.onPlane || state.onStreetcar || state.onSubway) return false;
+  const pickups = getTaxiPickups();
+  const fromStand = typeof fromStandOrId === 'string'
+    ? pickups.find(s => s.id === fromStandOrId)
+    : (fromStandOrId || findNearbyTaxiStand());
+  const dest = typeof destOrId === 'string'
+    ? TAXI_DESTINATIONS.find(d => d.id === destOrId)
+    : destOrId;
+  if (!fromStand || !dest) return false;
+
+  const routePts = findTaxiRoadPath(fromStand, dest);
+  const cum = [0];
+  let total = 0;
+  for (let i = 1; i < routePts.length; i++) {
+    total += Math.hypot(routePts[i].x - routePts[i - 1].x, routePts[i].z - routePts[i - 1].z);
+    cum.push(total);
+  }
+
+  taxiController.fromStand = fromStand;
+  taxiController.toDest = dest;
+  taxiController.routePts = routePts;
+  taxiController.cumDist = cum;
+  taxiController.totalDist = total;
+  taxiController.progress = 0;
+  taxiController.duration = Math.max(5.0, Math.min(12.0, 3.6 + total * 0.0024));
+  taxiController.isMoving = true;
+  state.onTaxi = true;
+  state.onIsland = false;
+  state.isUnderground = false;
+
+  if (fromStand.cabMesh) {
+    fromStand.cabMesh.visible = false;
+    taxiController.hiddenStandCab = fromStand.cabMesh;
+  } else {
+    taxiController.hiddenStandCab = null;
+  }
+
+  if (!taxiController.cabMesh && city && city.taxiStands && city.taxiStands.createCabMesh) {
+    taxiController.cabMesh = city.taxiStands.createCabMesh(true);
+    scene.add(taxiController.cabMesh);
+  }
+
+  const startSample = evalTaxiRoute(0);
+  const nextSample = evalTaxiRoute(Math.min(1, 0.02));
+  const initHeading = Math.hypot(nextSample.x - startSample.x, nextSample.z - startSample.z) > 0.01
+    ? Math.atan2(nextSample.x - startSample.x, nextSample.z - startSample.z)
+    : startSample.heading;
+
+  taxiController.heading = initHeading;
+  taxiController.lastHeading = initHeading;
+  const gY = (city && city.floorAt) ? city.floorAt(startSample.x, startSample.z, 0) : 0;
+
+  if (taxiController.cabMesh) {
+    taxiController.cabMesh.visible = true;
+    taxiController.cabMesh.position.set(startSample.x, gY, startSample.z);
+    taxiController.cabMesh.rotation.y = initHeading;
+  }
+
+  player.pos.set(
+    startSample.x + Math.sin(initHeading) * 0.12,
+    gY + 1.44,
+    startSample.z + Math.cos(initHeading) * 0.12
+  );
+  player.yaw = initHeading + Math.PI;
+  player.pitch = -0.04;
+  player.velocity.set(0, 0, 0);
+  camera.rotation.order = 'YXZ';
+  camera.rotation.y = player.yaw;
+  camera.rotation.x = player.pitch;
+
+  if (traffic && traffic.ringGong) traffic.ringGong();
+  else if (audio && audio.playPickup) audio.playPickup();
+  if (typeof showAnnouncement === 'function') {
+    showAnnouncement(`🚕 BECK TAXI: En route to ${dest.name}...`, 2800);
+  }
+  return true;
+}
+
+function arriveTaxi() {
+  const dest = taxiController.toDest;
+  taxiController.isMoving = false;
+  state.onTaxi = false;
+  if (taxiController.hiddenStandCab) {
+    taxiController.hiddenStandCab.visible = true;
+    taxiController.hiddenStandCab = null;
+  }
+  if (taxiController.cabMesh) {
+    taxiController.cabMesh.visible = false;
+  }
+  if (dest) {
+    const fl = (city && city.floorAt) ? city.floorAt(dest.dropX, dest.dropZ, 0) : 0;
+    player.pos.set(dest.dropX, fl + EYE_HEIGHT, dest.dropZ);
+    player.yaw = dest.arrivalYaw !== undefined ? dest.arrivalYaw : 0;
+    player.pitch = -0.02;
+    player.velocity.set(0, 0, 0);
+    player.isGrounded = true;
+    camera.rotation.order = 'YXZ';
+    camera.rotation.y = player.yaw;
+    camera.rotation.x = player.pitch;
+    if (audio && audio.playElevatorDing) audio.playElevatorDing();
+    if (typeof showAnnouncement === 'function') {
+      showAnnouncement(`🚕 ARRIVED AT ${dest.name.toUpperCase()} • Fixed Drop-Off Hub`, 3000);
+    }
+  }
+  taxiController.toDest = null;
+  taxiController.fromStand = null;
+}
+
+function updateTaxi(dt) {
+  if (!taxiController.isMoving || !state.onTaxi) return;
+  taxiController.progress += dt / Math.max(0.5, taxiController.duration);
+  const prog = Math.max(0, Math.min(1, taxiController.progress));
+  const ease = prog * prog * (3 - 2 * prog);
+  const sample = evalTaxiRoute(ease);
+
+  // Smooth tangent heading from finite lookahead along route
+  const ahead = evalTaxiRoute(Math.min(1, ease + 0.015));
+  const behind = evalTaxiRoute(Math.max(0, ease - 0.015));
+  const dx = ahead.x - behind.x, dz = ahead.z - behind.z;
+  const heading = (Math.hypot(dx, dz) > 0.01) ? Math.atan2(dx, dz) : sample.heading;
+
+  let dHeading = heading - taxiController.lastHeading;
+  while (dHeading > Math.PI) dHeading -= Math.PI * 2;
+  while (dHeading < -Math.PI) dHeading += Math.PI * 2;
+  player.yaw += dHeading;
+  taxiController.lastHeading = heading;
+  taxiController.heading = heading;
+
+  const gY = (city && city.floorAt) ? city.floorAt(sample.x, sample.z, 0) : 0;
+  if (taxiController.cabMesh) {
+    taxiController.cabMesh.position.set(sample.x, gY, sample.z);
+    taxiController.cabMesh.rotation.y = heading;
+  }
+
+  player.pos.set(
+    sample.x + Math.sin(heading) * 0.12,
+    gY + 1.44,
+    sample.z + Math.cos(heading) * 0.12
+  );
+  player.velocity.set(0, 0, 0);
+
+  if (taxiController.progress >= 1.0) {
+    arriveTaxi();
+  }
+}
+
+window.TAXI_PICKUPS = getTaxiPickups;
+window.TAXI_DESTINATIONS = TAXI_DESTINATIONS;
+window.findNearbyTaxiStand = findNearbyTaxiStand;
+window.openTaxiPanel = openTaxiPanel;
+window.closeTaxiPanel = closeTaxiPanel;
+window.selectTaxiDest = selectTaxiDest;
+window.startTaxiRide = startTaxiRide;
+window.updateTaxi = updateTaxi;
+window.arriveTaxi = arriveTaxi;
+window.taxiController = taxiController;
+window.taxiPanel = taxiPanel;
+
 const ferryController = {
   isMoving: false,
   dir: 'to_island',
@@ -4022,7 +4567,7 @@ function evalPorterFlightSpline(prog) {
 }
 
 function startPorterFlight(viewMode) {
-  if (porterFlightController.isFlying || state.onFerry || state.inElevator) return;
+  if (porterFlightController.isFlying || state.onFerry || state.inElevator || state.onTaxi) return;
   if (state.onStreetcar) disembarkStreetcar();
 
   porterFlightController.isFlying = true;
@@ -4238,7 +4783,7 @@ function findNearbyStreetcar(maxDist) {
 
 function boardStreetcar(sc) {
   const car = sc || findNearbyStreetcar(14.0);
-  if (!car || state.onFerry || state.inElevator || state.onPlane) return false;
+  if (!car || state.onFerry || state.inElevator || state.onPlane || state.onTaxi) return false;
 
   if (streetcarController.activeCar && streetcarController.activeCar.group) {
     streetcarController.activeCar.hasPlayer = false;
@@ -4496,6 +5041,8 @@ function teleportToRandomSubwayEntrance() {
   if (state.telescopeActive) exitTelescope();
   if (elevatorPanel && elevatorPanel.open) closeElevatorPanel();
   if (ferryPanel && ferryPanel.open) closeFerryPanel();
+  if (taxiPanel && taxiPanel.open) closeTaxiPanel();
+  if (state.onTaxi) arriveTaxi();
   if (state.onFerry) state.onFerry = false;
   if (state.onPlane) landPorterFlight();
   if (state.onStreetcar) disembarkStreetcar();
@@ -4886,10 +5433,11 @@ function updateObservationDeck(dt) {
   const promptEl = document.getElementById('deck-action-prompt');
   activeDeckAction = null;
 
-  if (state.inElevator || state.onFerry) {
+  if (state.inElevator || state.onFerry || state.onTaxi) {
     if (promptEl) promptEl.classList.add('hidden');
     closeElevatorPanel();
     closeFerryPanel();
+    closeTaxiPanel();
     return;
   }
 
@@ -4925,6 +5473,17 @@ function updateObservationDeck(dt) {
       activeDeckAction = { type: 'board_streetcar', sc: nearSc };
       setDeckPrompt('[E]', `BOARD STREETCAR (${nearSc.sign || '504 KING'})`);
       return;
+    }
+
+    // Beck Taxi Pickup Stands (Strictly 5 non-destination hubs -> 5 fixed landmark drop-offs)
+    const nearTaxiStand = findNearbyTaxiStand(11.5);
+    if (nearTaxiStand) {
+      activeDeckAction = { type: 'hail_beck_taxi', stand: nearTaxiStand };
+      setDeckPrompt('[E]', `HAIL BECK TAXI (${nearTaxiStand.name.toUpperCase()})`);
+      return;
+    }
+    if (taxiPanel.open && !findNearbyTaxiStand(14.5)) {
+      closeTaxiPanel();
     }
 
     // Easter Egg 1: Speakers Corner Booth at 299 Queen St W (MuchMusic HQ)
@@ -5197,6 +5756,11 @@ function handleDeckAction() {
   }
   if (activeDeckAction && activeDeckAction.type === 'board_streetcar') {
     boardStreetcar(activeDeckAction.sc);
+    return true;
+  }
+  if (activeDeckAction && activeDeckAction.type === 'hail_beck_taxi') {
+    if (taxiPanel.open) closeTaxiPanel();
+    else openTaxiPanel(activeDeckAction.stand);
     return true;
   }
   if (activeDeckAction === 'disembark_streetcar') {
@@ -5752,15 +6316,15 @@ document.addEventListener('pointerlockchange', () => {
   }
 
   // When pointer lock is lost in mouse-look mode (e.g. user pressed Esc), pause the game
-  // (unless the elevator or ferry panel is intentionally open for destination selection)
-  if (!state.isPointerLocked && state.inGame && !state.freeMouseMode && !state.isDead && !state.isPaused && !elevatorPanel.open && !ferryPanel.open) {
+  // (unless the elevator, ferry, or taxi panel is intentionally open for destination selection)
+  if (!state.isPointerLocked && state.inGame && !state.freeMouseMode && !state.isDead && !state.isPaused && !elevatorPanel.open && !ferryPanel.open && !taxiPanel.open) {
     pauseGame();
   }
 });
 
 // Canvas Click & Mousedown: Executes attacks during gameplay with zero dropped inputs
 container.addEventListener('mousedown', (e) => {
-  if (!state.inGame || state.isPaused || state.isDead || elevatorPanel.open || ferryPanel.open) return;
+  if (!state.inGame || state.isPaused || state.isDead || elevatorPanel.open || ferryPanel.open || taxiPanel.open) return;
   if (e.button === 0) {
     // If near the active mission box, instantly crack it open!
     if (missionState.active && missionState.state === 'active' && missionState.boxObj) {
@@ -5775,7 +6339,7 @@ container.addEventListener('mousedown', (e) => {
 });
 
 container.addEventListener('click', (e) => {
-  if (!state.inGame || state.isPaused || state.isDead || elevatorPanel.open || ferryPanel.open) return;
+  if (!state.inGame || state.isPaused || state.isDead || elevatorPanel.open || ferryPanel.open || taxiPanel.open) return;
   if (state.telescopeActive) {
     if (!e.target.closest('.telescope-card') && !e.target.closest('.telescope-telemetry-top')) {
       cycleTelescopeZoom(1);
@@ -5797,7 +6361,7 @@ window.addEventListener('wheel', (e) => {
 
 // Mouse Movement: Rotates camera or swivels telescope
 document.addEventListener('mousemove', (e) => {
-  if (state.isDead || state.isPaused || elevatorPanel.open || ferryPanel.open) return;
+  if (state.isDead || state.isPaused || elevatorPanel.open || ferryPanel.open || taxiPanel.open) return;
   if (state.telescopeActive) {
     const zoomRatio = (camera.fov / 78);
     const sens = mouseSensitivity * zoomRatio * 0.9;
@@ -5828,7 +6392,7 @@ if (deckPromptEl) {
         startSkyShowdown();
       } else {
         handleDeckAction();
-        if (!state.freeMouseMode && !elevatorPanel.open && !ferryPanel.open && container && container.requestPointerLock && !state.isPointerLocked) {
+        if (!state.freeMouseMode && !elevatorPanel.open && !ferryPanel.open && !taxiPanel.open && container && container.requestPointerLock && !state.isPointerLocked) {
           container.requestPointerLock();
         }
       }
@@ -5874,6 +6438,45 @@ window.addEventListener('keydown', (e) => {
       e.preventDefault();
       e.stopPropagation();
       closeFerryPanel();
+      return;
+    }
+    return;
+  }
+
+  // Beck Taxi Destination Selector Keyboard Controls
+  if (taxiPanel.open) {
+    if (e.code.startsWith('Digit') || e.code.startsWith('Numpad')) {
+      const numStr = e.code.replace(/\D/g, '') || e.key;
+      const keyNum = parseInt(numStr, 10);
+      if (!isNaN(keyNum) && keyNum >= 1 && keyNum <= TAXI_DESTINATIONS.length) {
+        e.preventDefault();
+        e.stopPropagation();
+        selectTaxiDest(keyNum - 1);
+        return;
+      }
+    }
+    if (e.code === 'ArrowUp' || e.code === 'KeyW') {
+      e.preventDefault();
+      e.stopPropagation();
+      moveTaxiHighlight(-1);
+      return;
+    }
+    if (e.code === 'ArrowDown' || e.code === 'KeyS') {
+      e.preventDefault();
+      e.stopPropagation();
+      moveTaxiHighlight(1);
+      return;
+    }
+    if (e.code === 'Enter' || e.code === 'Space') {
+      e.preventDefault();
+      e.stopPropagation();
+      selectTaxiDest(taxiPanel.highlight);
+      return;
+    }
+    if (e.code === 'Escape' || e.code === 'KeyE') {
+      e.preventDefault();
+      e.stopPropagation();
+      closeTaxiPanel();
       return;
     }
     return;
@@ -7146,7 +7749,7 @@ function updateKickLeg(prog) {
 }
 
 function updateArmsRig(dt) {
-  armsRig.visible = !(state.onPlane || state.telescopeActive || state.onStreetcar || state.onSubway);
+  armsRig.visible = !(state.onPlane || state.telescopeActive || state.onStreetcar || state.onSubway || state.onTaxi);
   if (!armsRig.visible) return;
   vm.time += dt;
 
@@ -7366,6 +7969,8 @@ function updateNeighborhood() {
     name = islands.getNeighborhood(p.x, p.z);
   } else if (state.onFerry) {
     name = "TORONTO HARBOUR FERRY";
+  } else if (state.onTaxi && taxiController.toDest) {
+    name = "BECK TAXI → " + taxiController.toDest.name.toUpperCase();
   } else if (p.y > 50) {
     name = p.y > 345.5 ? "CN TOWER • 348m 360° LOOKOUT" : "CN TOWER • 342m GLASS FLOOR";
   } else if (p.z > 950 || (city.isInsideCentreIsland && city.isInsideCentreIsland(p.x, p.z))) {
@@ -7446,6 +8051,7 @@ function animate(now) {
     updateMission(simDt);
     updateElevator(simDt);
     updateFerry(simDt);
+    updateTaxi(simDt);
     updatePorterFlight(simDt);
     updateStreetcarRide(simDt);
     updateObservationDeck(simDt);
@@ -7700,7 +8306,7 @@ function updatePlayer(dt) {
     checkAutoBoardSubway();
   }
 
-  if (state.inElevator || state.onFerry || state.onPlane || state.onStreetcar || state.onSubway) {
+  if (state.inElevator || state.onFerry || state.onPlane || state.onStreetcar || state.onSubway || state.onTaxi) {
     if (state.onPlane) {
       camera.rotation.z += (porterFlightController.roll * 0.45 - camera.rotation.z) * 0.15;
     }
@@ -8519,8 +9125,8 @@ const trafficHooks = {
   get enemies() { return enemies; },
   onHitPlayer(dmg, kx, kz) {
     if (carInvuln > 0 || state.isDead) return;
-    // Street-level vehicles can NEVER hit a player who is riding the subway or underground!
-    if (state.onSubway || state.isUnderground || player.pos.y < -2.0) return;
+    // Street-level vehicles can NEVER hit a player who is riding the subway, Beck Taxi, or underground!
+    if (state.onSubway || state.onTaxi || state.isUnderground || player.pos.y < -2.0) return;
     carInvuln = 1.2;
     carKnock.set(kx, 0, kz);
     player.velocity.y = 6.5;          // launched off your feet
@@ -8537,7 +9143,7 @@ const trafficHooks = {
   },
   pushOut(p, dx, dz) {
     if (p.isPlayer) {
-      if (state.onSubway || state.isUnderground || player.pos.y < -2.0) return;
+      if (state.onSubway || state.onTaxi || state.isUnderground || player.pos.y < -2.0) return;
       if (canMoveTo(player.pos.x + dx, player.pos.z)) player.pos.x += dx;
       if (canMoveTo(player.pos.x, player.pos.z + dz)) player.pos.z += dz;
     } else if (p.enemy && p.enemy.rig) {
@@ -8724,6 +9330,16 @@ if (startFreeBtn) {
 }
 
 function resetGame() {
+  if (taxiPanel && taxiPanel.open) closeTaxiPanel();
+  if (state.onTaxi) {
+    taxiController.isMoving = false;
+    state.onTaxi = false;
+    if (taxiController.hiddenStandCab) {
+      taxiController.hiddenStandCab.visible = true;
+      taxiController.hiddenStandCab = null;
+    }
+    if (taxiController.cabMesh) taxiController.cabMesh.visible = false;
+  }
   state.health = 100;
   state.armor = 50;
   state.isDead = false;

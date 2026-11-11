@@ -15280,7 +15280,17 @@
       });
       g.fillStyle = '#ff3b4a';
       g.beginPath(); g.arc(tx(LM.cnTower[0]), tz(LM.cnTower[1]), 6, 0, Math.PI * 2); g.fill();
+      [[262.0, -182.0], [372.0, -1032.0], [-540.0, -1035.0], [908.0, -548.0], [-1760.0, 152.0]].forEach(([sx, sz]) => {
+        g.fillStyle = '#f97316';
+        g.fillRect(tx(sx) - 3, tz(sz) - 3, 6, 6);
+        g.strokeStyle = '#0d9488';
+        g.lineWidth = 1.2;
+        g.strokeRect(tx(sx) - 3, tz(sz) - 3, 6, 6);
+      });
     }
+
+    let taxiStandsData = null;
+    let taxiBeaconMat = null;
 
     // ---------- Per-frame updates ----------
     let lightTimer = 0, t = 0;
@@ -15372,6 +15382,9 @@
       if (peaceIconGroup) {
         peaceIconGroup.rotation.y += dt * 0.9;
         peaceIconGroup.position.y = 6.5 + Math.sin(t * 1.5) * 0.35;
+      }
+      if (taxiBeaconMat) {
+        taxiBeaconMat.emissiveIntensity = 0.8 + Math.sin(t * 3.8) * 0.35;
       }
       if (barrierMat) {
         barrierMat.opacity = 0.22 + Math.sin(t * 2.2) * 0.08;
@@ -17005,6 +17018,199 @@
       tunnelScrollGroup.position.z = subwayTrainState.tunnelScroll;
     };
 
+    // =========================================================================
+    // BECK TAXI PICKUP STANDS & ICONIC ORANGE-AND-TEAL TORONTO CABS
+    // Note: Pickups exist ONLY at 5 non-destination hubs (Union, Eaton Centre,
+    // Chinatown, St. Lawrence Market, Liberty Village) so taxis cannot chain
+    // all-to-all across arbitrary mission boxes.
+    // =========================================================================
+    const taxiSharedMats = (() => {
+      const orange = new THREE.MeshStandardMaterial({ color: 0xf97316, roughness: 0.35, metalness: 0.25 });
+      const teal = new THREE.MeshStandardMaterial({ color: 0x0d9488, roughness: 0.35, metalness: 0.22 });
+      const chrome = new THREE.MeshStandardMaterial({ color: 0xd1d5db, roughness: 0.25, metalness: 0.85 });
+      const tire = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.85, metalness: 0.1 });
+      const glassParked = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.12, metalness: 0.65, transparent: true, opacity: 0.52 });
+      const glassRide = new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.08, metalness: 0.3, transparent: true, opacity: 0.16, depthWrite: false });
+      const headMat = new THREE.MeshBasicMaterial({ color: 0xfff6e6 });
+      const tailMat = new THREE.MeshBasicMaterial({ color: 0xff1f1f });
+      const beaconMat = new THREE.MeshStandardMaterial({ color: 0xffd34d, emissive: 0xffb703, emissiveIntensity: 0.95, roughness: 0.25 });
+      taxiBeaconMat = beaconMat;
+      return { orange, teal, chrome, tire, glassParked, glassRide, headMat, tailMat, beaconMat };
+    })();
+
+    function buildBeckTaxiCabMesh(forRiding = false) {
+      const g = new THREE.Group();
+      const M = taxiSharedMats;
+      const wheelGeo = new THREE.CylinderGeometry(0.34, 0.34, 0.24, 14);
+      wheelGeo.rotateZ(Math.PI / 2);
+      const hubGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.25, 10);
+      hubGeo.rotateZ(Math.PI / 2);
+
+      // Lower chassis, elongated tangerine hood (+Z forward), cabin trunk (-Z rear)
+      const chassis = new THREE.Mesh(new THREE.BoxGeometry(1.86, 0.56, 4.68), M.orange);
+      chassis.position.set(0, 0.58, 0);
+      chassis.castShadow = !forRiding;
+      g.add(chassis);
+
+      // Raised front hood sculpting & radiator grille (+Z front)
+      const hood = new THREE.Mesh(new THREE.BoxGeometry(1.76, 0.16, 1.48), M.orange);
+      hood.position.set(0, 0.9, 1.48);
+      g.add(hood);
+      const grille = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.2, 0.08), M.chrome);
+      grille.position.set(0, 0.68, 2.34);
+      g.add(grille);
+
+      // Front & rear bumpers
+      const fBump = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.18, 0.14), M.tire);
+      fBump.position.set(0, 0.36, 2.36);
+      g.add(fBump);
+      const rBump = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.18, 0.14), M.tire);
+      rBump.position.set(0, 0.36, -2.36);
+      g.add(rBump);
+
+      // Iconic Beck Taxi signature teal stripes on both doors & trunk + teal roof cap
+      [-1, 1].forEach(s => {
+        const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.14, 2.95), M.teal);
+        stripe.position.set(s * 0.935, 0.66, 0);
+        g.add(stripe);
+      });
+      const tealRoof = new THREE.Mesh(new THREE.BoxGeometry(1.56, 0.08, 1.56), M.teal);
+      tealRoof.position.set(0, 1.5, -0.18);
+      g.add(tealRoof);
+
+      // Greenhouse cabin glass (transparent front/side view when inside cab)
+      const glassMat = forRiding ? M.glassRide : M.glassParked;
+      const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.58, 0.56, 1.95), glassMat);
+      cabin.position.set(0, 1.18, -0.15);
+      g.add(cabin);
+
+      // Slim teal/orange A & B roof pillars when riding so frame reads cleanly from driver/passenger seat
+      if (forRiding) {
+        [-1, 1].forEach(s => {
+          const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.56, 0.08), M.teal);
+          pillar.position.set(s * 0.76, 1.18, 0.74);
+          pillar.rotation.x = -0.35;
+          g.add(pillar);
+        });
+      }
+
+      // Glowing yellow Beck TAXI roof topper sign
+      const taxiTopper = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.2, 0.24), M.beaconMat);
+      taxiTopper.position.set(0, 1.62, 0.08);
+      g.add(taxiTopper);
+
+      // Headlights (+Z) & Taillights (-Z)
+      [-0.64, 0.64].forEach(sx => {
+        const hl = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.13, 0.06), M.headMat);
+        hl.position.set(sx, 0.68, 2.34);
+        g.add(hl);
+        const tl = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.14, 0.06), M.tailMat);
+        tl.position.set(sx, 0.68, -2.34);
+        g.add(tl);
+      });
+
+      // 4 wheels
+      [-1, 1].forEach(sx => [-1.38, 1.38].forEach(sz => {
+        const w = new THREE.Mesh(wheelGeo, M.tire);
+        w.position.set(sx * 0.86, 0.34, sz);
+        g.add(w);
+        const h = new THREE.Mesh(hubGeo, M.chrome);
+        h.position.set(sx * 0.865, 0.34, sz);
+        g.add(h);
+      }));
+
+      return g;
+    }
+
+    const BECK_TAXI_STANDS = [
+      {
+        id: 'union',
+        name: 'Union Station',
+        sub: 'Front St W Colonnade Stand',
+        x: 262.0, z: -182.0,
+        signX: 258.0, signZ: -185.0, signYaw: 0.0,
+        cabX: 256.0, cabZ: -187.0, cabYaw: Math.PI * 0.42
+      },
+      {
+        id: 'eaton',
+        name: 'Eaton Centre',
+        sub: 'Yonge St & Dundas Gate Stand',
+        x: 372.0, z: -1032.0,
+        signX: 375.0, signZ: -1035.0, signYaw: -Math.PI / 2,
+        cabX: 378.0, cabZ: -1026.0, cabYaw: Math.PI
+      },
+      {
+        id: 'chinatown',
+        name: 'Chinatown',
+        sub: 'Spadina Ave & Dundas Gate Stand',
+        x: -540.0, z: -1035.0,
+        signX: -537.0, signZ: -1037.0, signYaw: Math.PI,
+        cabX: -545.0, cabZ: -1039.0, cabYaw: -Math.PI / 2
+      },
+      {
+        id: 'stLawrence',
+        name: 'St. Lawrence Market',
+        sub: 'Front St E & Market Curb Stand',
+        x: 908.0, z: -548.0,
+        signX: 904.0, signZ: -550.0, signYaw: -2.1,
+        cabX: 912.0, cabZ: -553.0, cabYaw: -2.1
+      },
+      {
+        id: 'libertyVillage',
+        name: 'Liberty Village',
+        sub: 'East Liberty St Carpet Lofts Stand',
+        x: -1760.0, z: 152.0,
+        signX: -1763.0, signZ: 154.0, signYaw: 0.0,
+        cabX: -1754.0, cabZ: 158.0, cabYaw: -Math.PI / 2
+      }
+    ];
+
+    const poleGeoTaxi = new THREE.CylinderGeometry(0.08, 0.1, 3.3, 10);
+    const beaconDomeGeoTaxi = new THREE.SphereGeometry(0.22, 12, 8);
+    const ringMatTaxi = new THREE.MeshBasicMaterial({ color: 0xf97316, transparent: true, opacity: 0.42, side: THREE.DoubleSide });
+    const ringGeoTaxi = new THREE.RingGeometry(1.15, 1.5, 24);
+    ringGeoTaxi.rotateX(-Math.PI / 2);
+
+    BECK_TAXI_STANDS.forEach(stand => {
+      const standGroup = new THREE.Group();
+      standGroup.position.set(stand.signX, 0, stand.signZ);
+
+      const pole = new THREE.Mesh(poleGeoTaxi, taxiSharedMats.teal);
+      pole.position.y = 1.65;
+      standGroup.add(pole);
+
+      const beacon = new THREE.Mesh(beaconDomeGeoTaxi, taxiSharedMats.beaconMat);
+      beacon.position.y = 3.45;
+      standGroup.add(beacon);
+
+      const placard = signMesh(['BECK TAXI', 'STAND [E]'], 2.2, 1.0, { bg: '#ea580c', fg: '#ffffff', borderColor: '#0d9488', size: 68 });
+      placard.position.y = 2.65;
+      placard.rotation.y = stand.signYaw;
+      standGroup.add(placard);
+
+      // Subtle glowing orange hail pad at sidewalk stand point
+      const hailPad = new THREE.Mesh(ringGeoTaxi, ringMatTaxi);
+      hailPad.position.set(stand.x - stand.signX, 0.04, stand.z - stand.signZ);
+      standGroup.add(hailPad);
+
+      scene.add(standGroup);
+      addCircle(stand.signX, stand.signZ, 0.35);
+
+      const cabMesh = buildBeckTaxiCabMesh(false);
+      cabMesh.position.set(stand.cabX, 0, stand.cabZ);
+      cabMesh.rotation.y = stand.cabYaw;
+      scene.add(cabMesh);
+
+      stand.group = standGroup;
+      stand.beaconMesh = beacon;
+      stand.cabMesh = cabMesh;
+    });
+
+    taxiStandsData = {
+      stands: BECK_TAXI_STANDS,
+      createCabMesh: buildBeckTaxiCabMesh
+    };
+
     return {
       canMoveTo,
       hasLineOfSight,
@@ -17136,6 +17342,7 @@
         isUnderground: (y) => y < -6.0,
         getStairInfo: getSubwayStairInfo
       },
+      taxiStands: taxiStandsData,
       solids: solids,
       // Centre Island & Toronto Island Ferries API
       isInsideCentreIsland,

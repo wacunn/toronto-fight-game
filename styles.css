@@ -1874,9 +1874,10 @@ body.telescope-mode #crosshair-wrapper {
   display: none !important;
 }
 
-/* CN Tower elevator floor-select panel & Toronto Island Ferry dock-select panel */
+/* CN Tower elevator, Toronto Island Ferry & Beck Taxi select panels */
 #elevator-panel,
-#ferry-panel {
+#ferry-panel,
+#taxi-panel {
   position: absolute;
   right: 28px;
   top: 50%;
@@ -1891,21 +1892,31 @@ body.telescope-mode #crosshair-wrapper {
   color: #f8fafc;
   pointer-events: auto;
 }
+#taxi-panel {
+  border-color: #f97316;
+  box-shadow: 0 0 22px rgba(249, 115, 22, 0.45), inset 0 0 12px rgba(13, 148, 136, 0.2);
+}
 #elevator-panel.hidden,
-#ferry-panel.hidden { display: none !important; }
+#ferry-panel.hidden,
+#taxi-panel.hidden { display: none !important; }
 #elevator-panel .elev-panel-head,
-#ferry-panel .elev-panel-head {
+#ferry-panel .elev-panel-head,
+#taxi-panel .elev-panel-head {
   display: flex; justify-content: space-between; align-items: baseline;
   margin-bottom: 10px;
 }
 #elevator-panel .elev-panel-title,
-#ferry-panel .elev-panel-title {
+#ferry-panel .elev-panel-title,
+#taxi-panel .elev-panel-title {
   font-family: 'Teko', sans-serif; font-size: 22px; font-weight: 700; color: #38bdf8; line-height: 1;
 }
+#taxi-panel .elev-panel-title { color: #fb923c; }
 #elevator-panel .elev-panel-hint,
-#ferry-panel .elev-panel-hint { font-size: 11px; color: #94a3b8; }
+#ferry-panel .elev-panel-hint,
+#taxi-panel .elev-panel-hint { font-size: 11px; color: #94a3b8; }
 #elevator-floor-list,
-#ferry-dock-list { display: flex; flex-direction: column; gap: 6px; }
+#ferry-dock-list,
+#taxi-dest-list { display: flex; flex-direction: column; gap: 6px; }
 .elev-floor-btn {
   display: flex; align-items: center; gap: 12px;
   width: 100%; padding: 8px 10px;
@@ -1931,10 +1942,12 @@ body.telescope-mode #crosshair-wrapper {
 .elev-floor-name { font-size: 14px; font-weight: 700; }
 .elev-floor-sub { font-size: 11px; color: #cbd5e1; }
 #elevator-panel .elev-panel-foot,
-#ferry-panel .elev-panel-foot { margin-top: 10px; font-size: 11px; color: #94a3b8; text-align: center; }
+#ferry-panel .elev-panel-foot,
+#taxi-panel .elev-panel-foot { margin-top: 10px; font-size: 11px; color: #94a3b8; text-align: center; }
 @media (max-width: 700px) {
   #elevator-panel,
-  #ferry-panel { right: 50%; transform: translate(50%, -50%); width: min(320px, 90vw); }
+  #ferry-panel,
+  #taxi-panel { right: 50%; transform: translate(50%, -50%); width: min(320px, 90vw); }
 }
 
 /* ==========================================================================
