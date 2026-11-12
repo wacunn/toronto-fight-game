@@ -6454,15 +6454,13 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
 
       // 1. Signature Marquees on Real Cultural, Theatre & Market Landmarks
       const NAMED_SIGNS = [
-        { match: /^Royal Alexandra Theatre$/, lines: ['ROYAL ALEXANDRA THEATRE', 'KING WEST • EST. 1907'], bg: '#7f1d1d', fg: '#fde047', border: '#f59e0b', w: 18, h: 2.8, y: 6.2 },
-        { match: /^Princess of Wales Theatre$/, lines: ['PRINCESS OF WALES THEATRE', 'MIRVISH THEATRE • KING WEST'], bg: '#2d0b1a', fg: '#fef08a', border: '#d97706', w: 20, h: 2.8, y: 6.2 },
-        { match: /^Bell Lightbox$/, lines: ['TIFF BELL LIGHTBOX', 'TORONTO INTL FILM FESTIVAL'], bg: '#9a3412', fg: '#ffffff', border: '#fb923c', w: 18, h: 2.6, y: 6.5 },
-        { match: /^Canadian Broadcasting Centre$/, lines: ['CBC • RADIO-CANADA', 'CANADIAN BROADCASTING CENTRE'], bg: '#991b1b', fg: '#ffffff', border: '#ef4444', w: 22, h: 3.2, y: 7.5 },
-        { match: /^St\. Lawrence Hall$/, lines: ['ST. LAWRENCE HALL', 'HISTORIC LANDMARK • EST. 1850'], bg: '#064e3b', fg: '#fde68a', border: '#d97706', w: 16, h: 2.4, y: 6.2 },
-        { match: /^The Omni King Edward Hotel$/, lines: ['THE OMNI KING EDWARD HOTEL', 'HISTORIC GRAND HOTEL • EST. 1903'], bg: '#450a0a', fg: '#fde68a', border: '#d97706', w: 20, h: 2.6, y: 6.8 },
-        { match: /^North St\. Lawrence Market|^St\. Lawrence North Market/, lines: ['ST. LAWRENCE NORTH MARKET', 'FARMERS MARKET & ARTISANS'], bg: '#7c2d12', fg: '#fef08a', border: '#22c55e', w: 20, h: 2.8, y: 5.8 },
-        { match: /^Gooderham Building$/, lines: ['GOODERHAM FLATIRON', 'HISTORIC LANDMARK • EST. 1892'], bg: '#450a0a', fg: '#fde68a', border: '#b45309', w: 13, h: 1.9, y: 5.4 },
-        { match: /^Queen's Quay Terminal$/, lines: ["QUEEN'S QUAY TERMINAL", 'HARBOURFRONT MARKET & SHOPS'], bg: '#0f766e', fg: '#fef08a', border: '#2dd4bf', w: 22, h: 3.0, y: 7.0 }
+        { match: /^Royal Alexandra Theatre$/, lines: ['ROYAL ALEXANDRA THEATRE'], bg: '#7f1d1d', fg: '#fde047', border: '#f59e0b', w: 12, h: 1.5, y: 5.8 },
+        { match: /^Princess of Wales Theatre$/, lines: ['PRINCESS OF WALES THEATRE'], bg: '#2d0b1a', fg: '#fef08a', border: '#d97706', w: 13, h: 1.5, y: 5.8 },
+        { match: /^Bell Lightbox$/, lines: ['TIFF BELL LIGHTBOX'], bg: '#9a3412', fg: '#ffffff', border: '#fb923c', w: 12, h: 1.5, y: 6.2 },
+        { match: /^Canadian Broadcasting Centre$/, lines: ['CBC • RADIO-CANADA'], bg: '#991b1b', fg: '#ffffff', border: '#ef4444', w: 14, h: 1.8, y: 7.2 },
+        { match: /^The Omni King Edward Hotel$/, lines: ['OMNI KING EDWARD'], bg: '#2a0e0e', fg: '#fde68a', border: '#b45309', w: 8.5, h: 1.1, y: 5.6 },
+        { match: /^North St\. Lawrence Market|^St\. Lawrence North Market/, lines: ['ST. LAWRENCE NORTH MARKET'], bg: '#451a03', fg: '#fef08a', border: '#b45309', w: 10, h: 1.3, y: 5.2 },
+        { match: /^Queen's Quay Terminal$/, lines: ["QUEEN'S QUAY TERMINAL"], bg: '#1e293b', fg: '#f8fafc', border: '#94a3b8', w: 11, h: 1.35, y: 6.4 }
       ];
       const KIND_SIGN_THEME = {
         hotel:             { bg: '#0f172a', fg: '#fde68a', border: '#d97706', sub: 'HOTEL' },
@@ -6470,11 +6468,11 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         theatre:           { bg: '#2b1022', fg: '#fde047', border: '#d97706', sub: 'PERFORMING ARTS' },
         cinema:            { bg: '#7c2d12', fg: '#ffffff', border: '#fb923c', sub: 'CINEMA & FILM' },
         studio:            { bg: '#0f172a', fg: '#38bdf8', border: '#0284c7', sub: 'BROADCAST STUDIOS' },
-        museum:            { bg: '#064e3b', fg: '#fde68a', border: '#10b981', sub: 'MUSEUM & GALLERY' },
-        bank:              { bg: '#064e3b', fg: '#ffffff', border: '#22c55e', sub: 'FINANCIAL SERVICES' },
-        fire_station:      { bg: '#7f1d1d', fg: '#fde047', border: '#ef4444', sub: 'TORONTO FIRE SERVICES' },
+        museum:            { bg: '#1c1917', fg: '#fde68a', border: '#b45309', sub: 'MUSEUM & GALLERY' },
+        bank:              { bg: '#1e293b', fg: '#f8fafc', border: '#64748b', sub: 'FINANCIAL SERVICES' },
+        fire_station:      { bg: '#7f1d1d', fg: '#fde047', border: '#ef4444', sub: 'TORONTO FIRE' },
         convention_centre: { bg: '#0c4a6e', fg: '#ffffff', border: '#38bdf8', sub: 'CONVENTION CENTRE' },
-        private_club:      { bg: '#14532d', fg: '#fde68a', border: '#d97706', sub: 'HISTORIC CLUB' },
+        private_club:      { bg: '#1c1917', fg: '#e7e5e4', border: '#94a3b8', sub: 'HISTORIC CLUB' },
         place_of_worship:  { bg: '#1e293b', fg: '#fde68a', border: '#94a3b8', sub: 'HERITAGE LANDMARK' }
       };
       MAP.buildings.forEach(b => {
@@ -6497,11 +6495,15 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         if (kTheme || isFamousTower) {
           const th = kTheme || { bg: '#0f172a', fg: '#f8fafc', border: '#38bdf8', sub: 'DOWNTOWN TORONTO' };
           const title = nm.toUpperCase();
-          const lines = th.sub ? [title, th.sub] : [title];
-          const sMesh = signMesh(lines, Math.min(18, Math.max(9.5, title.length * 0.62)), 2.2, {
-            bg: th.bg, fg: th.fg, borderColor: th.border, size: 58
+          // Only mount prominent street signage on theatres/venues; skip generic "MUSEUM & GALLERY" / "HERITAGE LANDMARK" placards
+          const keepSub = th.sub && !/^(MUSEUM & GALLERY|FINANCIAL SERVICES|HISTORIC CLUB|HERITAGE LANDMARK)$/.test(th.sub);
+          const lines = keepSub ? [title, th.sub] : [title];
+          const w = keepSub ? Math.min(13, Math.max(7.0, title.length * 0.48)) : Math.min(6.4, Math.max(3.6, title.length * 0.24));
+          const h = keepSub ? 1.55 : 0.75;
+          const sMesh = signMesh(lines, w, h, {
+            bg: th.bg, fg: th.fg, borderColor: th.border, size: keepSub ? 56 : 48
           });
-          signOnEdge(pts, [bcx, bcz + 60], sMesh, 5.8, 9);
+          signOnEdge(pts, [bcx, bcz + 60], sMesh, keepSub ? 5.2 : 3.2, 9);
         }
       });
 
@@ -8086,6 +8088,13 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       return { geo: gb.build(), top };
     }
     function signMesh(text, w, h, colors) {
+      if (typeof w === 'string') {
+        // Backward-compat for 5-arg legacy calls: signMesh(text, fg, bg, widthNum, heightNum)
+        const fg = w, bg = h, numW = colors, numH = arguments[4];
+        w = Number.isFinite(numW) ? numW : 4;
+        h = Number.isFinite(numH) ? numH : 0.8;
+        colors = { fg, bg };
+      }
       const backMat = signMesh._backMat || (signMesh._backMat = new THREE.MeshStandardMaterial({ color: 0x141820, roughness: 0.7, metalness: 0.4 }));
       const isMulti = Array.isArray(text) && text.length > 1;
       const tex = makeLabelTexture(Array.isArray(text) ? text : [text], Object.assign({ size: 70, w: 1024, h: isMulti ? 256 : 140 }, colors));
@@ -8169,7 +8178,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       roofGeo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
       const roof = new THREE.Mesh(roofGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.32, metalness: 0.55, envMapIntensity: 0.5, side: THREE.DoubleSide }));
       [walls, roof].forEach(m => { m.castShadow = true; m.receiveShadow = true; scene.add(m); });
-      signOnEdge(landmarkFeet.ripleys, LM.cnTower, signMesh(["RIPLEY'S AQUARIUM OF CANADA"], 26, 3.4, { bg: '#032a3d', fg: '#7dd3fc', borderColor: '#0ea5e9', size: 62 }), 5.2, 14);
+      signOnEdge(landmarkFeet.ripleys, LM.cnTower, signMesh(["RIPLEY'S AQUARIUM"], 12, 1.55, { bg: '#032a3d', fg: '#7dd3fc', borderColor: '#0ea5e9', size: 58 }), 5.0, 14);
     }
 
     // ---------------- 1b. Bobbie Rosenfeld Park / Olympic Park ----------------
@@ -8252,11 +8261,11 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         scene.add(bGroup);
       });
 
-      // Park Entrance Sign facing Bremner Blvd
-      const opSign = signMesh(['BOBBIE ROSENFELD PARK', 'OLYMPIC PARK • CANADIAN ATHLETES ESPLANADE'], 16, 2.2, {
-        bg: '#0f172a', fg: '#f8fafc', borderColor: '#ef4444', size: 56
+      // Discrete park post sign facing Bremner Blvd
+      const opSign = signMesh(['BOBBIE ROSENFELD PARK'], 3.4, 0.65, {
+        bg: '#1e293b', fg: '#f8fafc', borderColor: '#94a3b8', size: 48
       });
-      opSign.position.set(-348, 2.8, 238);
+      opSign.position.set(-348, 1.5, 238);
       scene.add(opSign);
     }
 
@@ -8446,8 +8455,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       if (doorSpots.length) {
         const mid = doorSpots[Math.floor(doorSpots.length / 2)];
         const toC = unit(C[0] - mid[0], C[1] - mid[1]);
-        const s = signMesh(['STEAM WHISTLE BREWING', 'THE ROUNDHOUSE'], 16, 2.6, { bg: '#064e3b', fg: '#ecfdf5', borderColor: '#10b981', size: 52 });
-        s.position.set(mid[0] + toC[0] * 0.4, 7.6, mid[1] + toC[1] * 0.4);
+        const s = signMesh(['STEAM WHISTLE BREWING'], 8.5, 1.35, { bg: '#14261c', fg: '#ecfdf5', borderColor: '#4ade80', size: 52 });
+        s.position.set(mid[0] + toC[0] * 0.4, 7.2, mid[1] + toC[1] * 0.4);
         s.rotation.y = Math.atan2(toC[0], toC[1]);
         scene.add(s);
       }
@@ -9122,12 +9131,12 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       });
 
       // East & West Concourse Porticoes
-      const bayCanopy = signMesh(['BAY STREET CONCOURSE', 'TO GO TRAINS • TTC • SCOTIABANK ARENA'], 18, 2.4, { bg: '#172554', fg: '#fef08a', borderColor: '#3b82f6', size: 54 });
+      const bayCanopy = signMesh(['BAY STREET CONCOURSE', 'GO TRAINS • TTC'], 11, 1.4, { bg: '#172554', fg: '#fef08a', borderColor: '#3b82f6', size: 48 });
       bayCanopy.position.set(frontAnchor[0] + fDir[0] * (HEAD_W / 2 - 24.0) - sDir[0] * 2.5, 4.8, frontAnchor[1] + fDir[1] * (HEAD_W / 2 - 24.0) - sDir[1] * 2.5);
       bayCanopy.rotation.y = Math.atan2(-sDir[0], -sDir[1]);
       scene.add(bayCanopy);
 
-      const yorkCanopy = signMesh(['YORK STREET CONCOURSE', 'TO GO TRAINS • UP EXPRESS • PATH'], 18, 2.4, { bg: '#064e3b', fg: '#fef08a', borderColor: '#22c55e', size: 54 });
+      const yorkCanopy = signMesh(['YORK STREET CONCOURSE', 'GO TRAINS • UP EXPRESS'], 11, 1.4, { bg: '#172554', fg: '#fef08a', borderColor: '#3b82f6', size: 48 });
       yorkCanopy.position.set(frontAnchor[0] - fDir[0] * (HEAD_W / 2 - 24.0) - sDir[0] * 2.5, 4.8, frontAnchor[1] - fDir[1] * (HEAD_W / 2 - 24.0) - sDir[1] * 2.5);
       yorkCanopy.rotation.y = Math.atan2(-sDir[0], -sDir[1]);
       scene.add(yorkCanopy);
@@ -9565,9 +9574,9 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       const top = new THREE.Mesh(new THREE.CircleGeometry(rBase * 0.58, 64), new THREE.MeshStandardMaterial({ color: 0x2d333b, roughness: 0.7, side: THREE.DoubleSide }));
       top.rotation.x = -Math.PI / 2; top.position.set(cx, h, cz); scene.add(top);
       addCircle(cx, cz, rBase + 0.4);
-      const s = signMesh(['ROY THOMSON HALL'], 16, 2.2, { bg: '#111318', fg: '#e5e7eb', borderColor: '#9ca3af', size: 70 });
+      const s = signMesh(['ROY THOMSON HALL'], 8.5, 1.1, { bg: '#111318', fg: '#e5e7eb', borderColor: '#9ca3af', size: 60 });
       const toKing = unit(0, -1);
-      s.position.set(cx + toKing[0] * (rBase + 1.5), 2.6, cz + toKing[1] * (rBase + 1.5)); s.rotation.y = Math.atan2(toKing[0], toKing[1]);
+      s.position.set(cx + toKing[0] * (rBase + 1.5), 2.2, cz + toKing[1] * (rBase + 1.5)); s.rotation.y = Math.atan2(toKing[0], toKing[1]);
       scene.add(s);
     }
 
@@ -9715,19 +9724,13 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         dpsGrp.add(bGlow);
       });
 
-      // 7. Park Entrance Marquee Signs facing King St W and Wellington St W
-      const dpsSignKing = signMesh([
-        'DAVID PECAUT SQUARE',
-        'CIVIC SQUARE & URBAN PARK • TIFF FESTIVAL HUB'
-      ], 16, 2.2, { bg: '#0f172a', fg: '#f8fafc', borderColor: '#3b82f6', size: 56 });
-      dpsSignKing.position.set(-308, 2.4, -315);
+      // Discrete park signs facing King St W and Wellington St W
+      const dpsSignKing = signMesh(['DAVID PECAUT SQUARE'], 3.2, 0.6, { bg: '#1e293b', fg: '#f8fafc', borderColor: '#94a3b8', size: 48 });
+      dpsSignKing.position.set(-308, 1.5, -315);
       dpsGrp.add(dpsSignKing);
 
-      const dpsSignWell = signMesh([
-        'DAVID PECAUT SQUARE',
-        'METRO HALL PROMENADE • CULTURAL PLAZA'
-      ], 14, 2.0, { bg: '#0f172a', fg: '#f8fafc', borderColor: '#3b82f6', size: 54 });
-      dpsSignWell.position.set(-308, 2.4, -225);
+      const dpsSignWell = signMesh(['DAVID PECAUT SQUARE'], 3.2, 0.6, { bg: '#1e293b', fg: '#f8fafc', borderColor: '#94a3b8', size: 48 });
+      dpsSignWell.position.set(-308, 1.5, -225);
       dpsSignWell.rotation.y = Math.PI;
       dpsGrp.add(dpsSignWell);
 
@@ -10431,11 +10434,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       cathedGrp.add(cloisMesh);
 
       // Inscribed bronze heritage plaque on Synod House north courtyard
-      const synodSign = signMesh([
-        'ST. JAMES CATHEDRAL • SYNOD HOUSE',
-        'DIOCESAN COUNCIL & HERITAGE ARCHIVES • EST. 1889'
-      ], 9.5, 1.4, { bg: '#1c1917', fg: '#fef08a', borderColor: '#d4af37', size: 52 });
-      synodSign.position.set(synodX, 2.2, synodZ - synodLen / 2 - 0.5);
+      const synodSign = signMesh(['ST. JAMES SYNOD HOUSE • EST. 1889'], 2.4, 0.55, { bg: '#1c1917', fg: '#fef08a', borderColor: '#b45309', size: 44 });
+      synodSign.position.set(synodX, 1.5, synodZ - synodLen / 2 - 0.5);
       cathedGrp.add(synodSign);
 
       addSolid({ type: 'poly', pts: [[tcx - 8, chancelZ - chancelLen / 2], [tcx + 8, chancelZ - chancelLen / 2], [tcx + 8, chancelZ + chancelLen / 2], [tcx - 8, chancelZ + chancelLen / 2]], h: chancelH, name: 'St. James Cathedral Chancel' });
@@ -10477,12 +10477,9 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         cathedGrp.add(pArch);
       });
 
-      // Church Plaque / Notice Board on King Street East Entrance Plaza
-      const cathedSign = signMesh([
-        'THE CATHEDRAL CHURCH OF ST. JAMES',
-        'ANGLICAN DIOCESE OF TORONTO • CONSECRATED 1853'
-      ], 11, 1.6, { bg: '#1c1917', fg: '#fef08a', borderColor: '#d4af37', size: 52 });
-      cathedSign.position.set(tcx, 2.2, tcz + 12.0);
+      // Discrete churchyard notice board on King Street East Entrance Plaza
+      const cathedSign = signMesh(['CATHEDRAL CHURCH OF ST. JAMES • 1853'], 2.8, 0.6, { bg: '#1c1917', fg: '#fef08a', borderColor: '#b45309', size: 44 });
+      cathedSign.position.set(tcx, 1.55, tcz + 12.0);
       cathedGrp.add(cathedSign);
 
       addSolid({ type: 'poly', pts: [[tcx - 7, tcz - 7], [tcx + 7, tcz - 7], [tcx + 7, tcz + 7], [tcx - 7, tcz + 7]], h: 42, name: 'St. James Cathedral Tower' });
@@ -10706,11 +10703,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         cathedGrp.add(lCap);
       });
 
-      const parkSign = signMesh([
-        'ST. JAMES PARK',
-        'HISTORIC VICTORIAN GARDENS • EST. 1834'
-      ], 13, 1.8, { bg: '#064e3b', fg: '#fde68a', borderColor: '#10b981', size: 56 });
-      parkSign.position.set(835, 2.2, -699);
+      const parkSign = signMesh(['ST. JAMES PARK'], 2.8, 0.6, { bg: '#1c1917', fg: '#e7e5e4', borderColor: '#78716c', size: 48 });
+      parkSign.position.set(835, 1.45, -699);
       parkSign.rotation.y = -0.29;
       cathedGrp.add(parkSign);
 
@@ -11157,12 +11151,9 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           berczyGrp.add(bg);
         });
 
-        // Berczy Park entrance sign facing Scott Street
-        const berczySign = signMesh([
-          'BERCZY PARK',
-          'LE PARC BERCZY • CLAUDE CORMIER DOG FOUNTAIN'
-        ], 10, 1.4, { bg: '#064e3b', fg: '#fef08a', borderColor: '#10b981', size: 54 });
-        berczySign.position.set(617.0, 2.0, -425.0);
+        // Berczy Park discrete park post sign facing Scott Street
+        const berczySign = signMesh(['BERCZY PARK'], 2.6, 0.58, { bg: '#1c1917', fg: '#e7e5e4', borderColor: '#78716c', size: 48 });
+        berczySign.position.set(617.0, 1.45, -425.0);
         berczySign.rotation.y = Math.PI / 2;
         berczyGrp.add(berczySign);
 
@@ -11294,10 +11285,10 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         fenceMesh.rotation.y = Math.atan2(dz, dx);
         csGrp.add(fenceMesh);
       }
-      const dogRunSign = signMesh(['CLARENCE SQUARE DOG RUN', 'OFF-LEASH ENCLOSURE'], 5.2, 0.8, {
-        bg: '#0f291e', fg: '#86efac', borderColor: '#22c55e', size: 52
+      const dogRunSign = signMesh(['OFF-LEASH DOG AREA'], 1.9, 0.44, {
+        bg: '#1c1917', fg: '#e7e5e4', borderColor: '#78716c', size: 44
       });
-      dogRunSign.position.set(-828, 1.4, -43);
+      dogRunSign.position.set(-828, 1.35, -43);
       dogRunSign.rotation.y = Math.PI / 2;
       csGrp.add(dogRunSign);
 
@@ -11339,11 +11330,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         csGrp.add(lantern);
       });
 
-      const csSign = signMesh([
-        'CLARENCE SQUARE',
-        'EST. 1834 • HISTORIC PUBLIC SQUARE'
-      ], 11, 1.6, { bg: '#0f291e', fg: '#fde68a', borderColor: '#15803d', size: 54 });
-      csSign.position.set(-805, 2.2, -58);
+      const csSign = signMesh(['CLARENCE SQUARE'], 2.6, 0.58, { bg: '#1c1917', fg: '#e7e5e4', borderColor: '#78716c', size: 48 });
+      csSign.position.set(-805, 1.45, -58);
       csGrp.add(csSign);
 
       scene.add(csGrp);
@@ -11530,11 +11518,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         roseMesh.rotation.y = streetRot + Math.PI;
         stGrp.add(roseMesh);
 
-        const stSign = signMesh([
-          "ST. ANDREW'S PRESBYTERIAN CHURCH",
-          '73 SIMCOE ST AT KING ST W • SCOTTISH ROMANESQUE • EST. 1830'
-        ], 11.5, 1.5, { bg: '#1e1b18', fg: '#fde68a', borderColor: '#d4af37', size: 52 });
-        signOnEdge(stPts, [scx - 10, scz - 60], stSign, 4.2, 10);
+        const stSign = signMesh(["ST. ANDREW'S CHURCH • 1830"], 2.8, 0.6, { bg: '#1c1917', fg: '#fef08a', borderColor: '#b45309', size: 46 });
+        signOnEdge(stPts, [scx - 10, scz - 60], stSign, 1.8, 10);
 
         scene.add(stGrp);
         addSolid({ type: 'poly', pts: rawStA, h: 26, name: "St. Andrew's Church" });
@@ -11567,11 +11552,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           pil.position.set(colX, 14.2, colZ);
           scene.add(pil);
         }
-        const sign212 = signMesh([
-          '212 KING STREET WEST • HISTORIC BANKING HALL',
-          'KING & SIMCOE HERITAGE CORNER • ENTERTAINMENT DISTRICT'
-        ], 12.5, 1.5, { bg: '#141820', fg: '#fef08a', borderColor: '#d4af37', size: 52 });
-        signOnEdge(pts212, [bx + 15, bz + 50], sign212, 4.8, 10);
+        const sign212 = signMesh(['212 KING ST W'], 3.0, 0.6, { bg: '#1c1917', fg: '#fef08a', borderColor: '#b45309', size: 46 });
+        signOnEdge(pts212, [bx + 15, bz + 50], sign212, 2.4, 10);
       }
 
       // ------------------------------------------------------------------------
@@ -11698,11 +11680,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           raCanopy.position.set(rx + streetSouth[0] * 16.5, 4.4, rz + streetSouth[1] * 16.5);
           raCanopy.rotation.y = streetRot;
           kwGrp.add(raCanopy);
-          const raMarquee = signMesh([
-            'ROYAL ALEXANDRA THEATRE',
-            '260 KING ST W • NORTH AMERICA\'S OLDEST CONTINUOUSLY OPERATING ROYAL THEATRE'
-          ], 14.0, 1.8, { bg: '#450a0a', fg: '#fef08a', borderColor: '#f59e0b', size: 52 });
-          signOnEdge(raPts, [rx + 10, rz + 50], raMarquee, 5.8, 12);
+          const raMarquee = signMesh(['ROYAL ALEXANDRA THEATRE'], 10.5, 1.25, { bg: '#450a0a', fg: '#fef08a', borderColor: '#f59e0b', size: 50 });
+          signOnEdge(raPts, [rx + 10, rz + 50], raMarquee, 5.5, 12);
           // Vertical Broadway-style glowing blade sign
           const raBlade = signMesh(['R O Y A L   A L E X'], 2.2, 9.5, {
             bg: '#7f1d1d', fg: '#fef08a', borderColor: '#f59e0b', size: 62
@@ -11720,11 +11699,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           pwCanopy.position.set(px + streetSouth[0] * 15.5, 4.4, pz + streetSouth[1] * 15.5);
           pwCanopy.rotation.y = streetRot;
           kwGrp.add(pwCanopy);
-          const pwMarquee = signMesh([
-            'PRINCESS OF WALES THEATRE',
-            '300 KING STREET WEST • MIRVISH PRODUCTIONS'
-          ], 15.5, 1.9, { bg: '#1e1b4b', fg: '#fde047', borderColor: '#f59e0b', size: 54 });
-          signOnEdge(pwPts, [px + 10, pz + 50], pwMarquee, 5.8, 12);
+          const pwMarquee = signMesh(['PRINCESS OF WALES THEATRE'], 11.5, 1.35, { bg: '#1e1b4b', fg: '#fde047', borderColor: '#f59e0b', size: 52 });
+          signOnEdge(pwPts, [px + 10, pz + 50], pwMarquee, 5.5, 12);
         }
 
         // TIFF Bell Lightbox (#284, 350 King St W at John St): Cantilevered Glass/Steel Canopy & Marquee
@@ -11735,11 +11711,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           tiffCanopy.position.set(tx + streetSouth[0] * 19.0, 4.8, tz + streetSouth[1] * 19.0);
           tiffCanopy.rotation.y = streetRot;
           kwGrp.add(tiffCanopy);
-          const tiffSign = signMesh([
-            'TIFF BELL LIGHTBOX',
-            'TORONTO INTERNATIONAL FILM FESTIVAL • 350 KING ST W'
-          ], 22.0, 2.4, { bg: '#090d16', fg: '#ffffff', borderColor: '#f97316', size: 58 });
-          signOnEdge(tiffPts, [tx + 15, tz + 60], tiffSign, 6.8, 14);
+          const tiffSign = signMesh(['TIFF BELL LIGHTBOX'], 12.5, 1.5, { bg: '#090d16', fg: '#ffffff', borderColor: '#f97316', size: 56 });
+          signOnEdge(tiffPts, [tx + 15, tz + 60], tiffSign, 6.2, 14);
         }
 
         // Theatre Park (#7, 224 King St W): Signature White Diagonal Structural Diagrid Exoskeleton
@@ -11778,25 +11751,25 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       {
         const keGrp = new THREE.Group();
 
-        // TD Banking Pavilion (#212, King & Bay): Miesian black steel roofline & glowing green TD shield
+        // TD Banking Pavilion (#212, King & Bay): Miesian black steel roofline & understated TD sign
         if (MAP.buildings[212]) {
           const tdPts = toPairs(MAP.buildings[212].p);
           const [tx, tz] = centroid(tdPts);
-          const tdSign = signMesh(['TD', 'TORONTO-DOMINION CENTRE BANKING HALL'], 12.0, 1.8, {
-            bg: '#052e16', fg: '#4ade80', borderColor: '#22c55e', size: 60
+          const tdSign = signMesh(['TD BANKING PAVILION'], 6.8, 1.0, {
+            bg: '#091810', fg: '#4ade80', borderColor: '#22c55e', size: 54
           });
-          signOnEdge(tdPts, [tx, tz - 50], tdSign, 4.8, 12);
+          signOnEdge(tdPts, [tx, tz - 50], tdSign, 4.5, 12);
         }
 
-        // One King West (#98 / #289, SW corner of King & Yonge): Beaux-Arts podium cornice & hotel marquee
+        // One King West (#98 / #289, SW corner of King & Yonge): Beaux-Arts podium cornice & hotel plaque
         if (MAP.buildings[98]) {
           const okPts = toPairs(MAP.buildings[98].p);
           const [ox, oz] = centroid(okPts);
           keGrp.add(new THREE.Mesh(wallsGeo(scaledPoly(okPts, 1.03), 18.0, () => 19.2, 8, 1.2), stoneTrimMat));
-          const okSign = signMesh(['ONE KING WEST HOTEL & RESIDENCE', 'HISTORIC 1914 DOMINION BANK HEADQUARTERS'], 14.0, 1.7, {
-            bg: '#1c1917', fg: '#fef08a', borderColor: '#d4af37', size: 54
+          const okSign = signMesh(['ONE KING WEST'], 5.8, 0.9, {
+            bg: '#1c1917', fg: '#fef08a', borderColor: '#b45309', size: 50
           });
-          signOnEdge(okPts, [ox + 10, oz - 50], okSign, 5.2, 10);
+          signOnEdge(okPts, [ox + 10, oz - 50], okSign, 4.4, 10);
         }
 
         // The Omni King Edward Hotel (#180, 37 King St E): 1903 Beaux-Arts cornice & gilded porte-cochère canopy
@@ -11806,11 +11779,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           const [kx, kz] = centroid(kePts);
           keGrp.add(new THREE.Mesh(wallsGeo(scaledPoly(kePts, 1.025), 14.0, () => 15.0, 8, 1.0), stoneTrimMat));
           keGrp.add(new THREE.Mesh(wallsGeo(scaledPoly(kePts, 1.03), 65.5, () => 67.2, 8, 1.7), stoneTrimMat));
-          const keSign = signMesh([
-            'THE OMNI KING EDWARD HOTEL',
-            '37 KING STREET EAST • TORONTO\'S FIRST LUXURY HOTEL • EST. 1903'
-          ], 16.0, 1.9, { bg: '#1e1b18', fg: '#fde68a', borderColor: '#d4af37', size: 54 });
-          signOnEdge(kePts, [kx - 10, kz + 50], keSign, 5.5, 14);
+          const keSign = signMesh(['OMNI KING EDWARD HOTEL'], 7.2, 1.0, { bg: '#1e1b18', fg: '#fde68a', borderColor: '#b45309', size: 50 });
+          signOnEdge(kePts, [kx - 10, kz + 50], keSign, 4.6, 14);
         }
 
         // St. Lawrence Hall (#11, 157 King St E at Jarvis St): 1850 Renaissance Revival Portico, Pediment & Domed Clock Cupola
@@ -11849,11 +11819,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           cupSpire.position.set(hx, H_SL + 11.4, hz);
           keGrp.add(cupSpire);
 
-          const slSign = signMesh([
-            'ST. LAWRENCE HALL • EST. 1850',
-            'NATIONAL HISTORIC SITE • 157 KING STREET EAST'
-          ], 13.0, 1.6, { bg: '#1c1917', fg: '#fef08a', borderColor: '#d4af37', size: 54 });
-          signOnEdge(slPts, [hx - 10, hz - 50], slSign, 5.0, 12);
+          const slSign = signMesh(['ST. LAWRENCE HALL • 1850'], 3.2, 0.65, { bg: '#1c1917', fg: '#fef08a', borderColor: '#b45309', size: 46 });
+          signOnEdge(slPts, [hx - 10, hz - 50], slSign, 2.4, 12);
         }
 
         scene.add(keGrp);
@@ -11885,11 +11852,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           cube1.position.set(cx + streetSouth[0] * 36.0, 22.0, cz + streetSouth[1] * 36.0);
           cube1.rotation.y = streetRot + 0.18;
           frGrp.add(cube1);
-          const cbcSign = signMesh([
-            'CBC • RADIO-CANADA • CANADIAN BROADCASTING CENTRE',
-            '250 FRONT STREET WEST • NATIONAL BROADCAST HEADQUARTERS'
-          ], 24.0, 2.5, { bg: '#991b1b', fg: '#ffffff', borderColor: '#f87171', size: 56 });
-          signOnEdge(cbcPts, [cx + 15, cz + 80], cbcSign, 6.8, 16);
+          const cbcSign = signMesh(['CBC • RADIO-CANADA'], 12.0, 1.45, { bg: '#991b1b', fg: '#ffffff', borderColor: '#f87171', size: 54 });
+          signOnEdge(cbcPts, [cx + 15, cz + 80], cbcSign, 6.4, 16);
         }
 
         // 2. Metro Toronto Convention Centre North (#41, 255 Front St W) & Simcoe Place (#52, 200 Front St W)
@@ -11902,11 +11866,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           );
           rotunda.position.set(mx - streetSouth[0] * 24.0, 19.5, mz - streetSouth[1] * 24.0);
           frGrp.add(rotunda);
-          const mtccSign = signMesh([
-            'METRO TORONTO CONVENTION CENTRE • NORTH BUILDING',
-            '255 FRONT STREET WEST • CONSTITUTION HALL & JOHN BASSETT THEATRE'
-          ], 24.0, 2.4, { bg: '#0f172a', fg: '#7dd3fc', borderColor: '#0284c7', size: 54 });
-          signOnEdge(mtccPts, [mx - 15, mz - 60], mtccSign, 6.5, 16);
+          const mtccSign = signMesh(['METRO TORONTO CONVENTION CENTRE'], 14.0, 1.5, { bg: '#0f172a', fg: '#e2e8f0', borderColor: '#0284c7', size: 52 });
+          signOnEdge(mtccPts, [mx - 15, mz - 60], mtccSign, 6.2, 16);
         }
         if (MAP.buildings[52]) {
           const spPts = toPairs(MAP.buildings[52].p);
@@ -11940,31 +11901,22 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           spireCrown.position.set(bx, 270.0, bz);
           spireCrown.rotation.y = streetRot;
           frGrp.add(spireCrown);
-          const bpSign = signMesh([
-            'BROOKFIELD PLACE • ALLEN LAMBERT GALLERIA',
-            '181 BAY STREET • SANTIAGO CALATRAVA HERITAGE GALLERIA'
-          ], 20.0, 2.2, { bg: '#1e293b', fg: '#f8fafc', borderColor: '#94a3b8', size: 54 });
-          signOnEdge(bpPts, [bx + 10, bz + 60], bpSign, 6.2, 14);
+          const bpSign = signMesh(['BROOKFIELD PLACE'], 6.5, 0.95, { bg: '#1e293b', fg: '#f8fafc', borderColor: '#94a3b8', size: 50 });
+          signOnEdge(bpPts, [bx + 10, bz + 60], bpSign, 4.8, 14);
         }
 
         // 5. Meridian Hall (#97, 1 Front St E) & St. Lawrence Centre for the Arts (#111, 27 Front St E)
         if (MAP.buildings[97]) {
           const mhPts = toPairs(MAP.buildings[97].p);
           const [mx, mz] = centroid(mhPts);
-          const mhSign = signMesh([
-            'MERIDIAN HALL • 1 FRONT STREET EAST',
-            'TORONTO\'S PREMIER PERFORMING ARTS CENTRE (FORMERLY O\'KEEFE CENTRE)'
-          ], 22.0, 2.2, { bg: '#1c1917', fg: '#fde68a', borderColor: '#f59e0b', size: 54 });
-          signOnEdge(mhPts, [mx - 10, mz - 60], mhSign, 6.2, 14);
+          const mhSign = signMesh(['MERIDIAN HALL'], 8.0, 1.1, { bg: '#1c1917', fg: '#fde68a', borderColor: '#f59e0b', size: 52 });
+          signOnEdge(mhPts, [mx - 10, mz - 60], mhSign, 5.5, 14);
         }
         if (MAP.buildings[111]) {
           const slcPts = toPairs(MAP.buildings[111].p);
           const [lx, lz] = centroid(slcPts);
-          const slcSign = signMesh([
-            'ST. LAWRENCE CENTRE FOR THE ARTS',
-            '27 FRONT STREET EAST • JANE MALLETT THEATRE & BLUMA APPEL THEATRE'
-          ], 18.0, 2.0, { bg: '#0f172a', fg: '#fde047', borderColor: '#38bdf8', size: 52 });
-          signOnEdge(slcPts, [lx - 10, lz - 50], slcSign, 5.8, 12);
+          const slcSign = signMesh(['ST. LAWRENCE CENTRE FOR THE ARTS'], 7.8, 1.0, { bg: '#0f172a', fg: '#fde047', borderColor: '#38bdf8', size: 48 });
+          signOnEdge(slcPts, [lx - 10, lz - 50], slcSign, 5.2, 12);
         }
 
         // 6. 35–49 Front Street East Heritage Cast-Iron & Stone Row (#209 Beardmore Bldg, #208, #210, #357, #358)
@@ -11982,11 +11934,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           frGrp.add(new THREE.Mesh(capGeo(m.top, () => h + 2.8), idx % 2 === 0 ? darkSlateMat : copperRoofMat));
           if (bi === 209) {
             const [bx, bz] = centroid(pts);
-            const bmSign = signMesh([
-              'THE BEARDMORE BUILDING • 35–39 FRONT ST E',
-              'EST. 1872 • CAST-IRON & ITALIANATE HERITAGE ROW'
-            ], 14.0, 1.6, { bg: '#1c1917', fg: '#fde68a', borderColor: '#d4af37', size: 52 });
-            signOnEdge(pts, [bx - 10, bz - 50], bmSign, 4.8, 10);
+            const bmSign = signMesh(['35–39 FRONT ST E • BEARDMORE'], 3.2, 0.62, { bg: '#1c1917', fg: '#fde68a', borderColor: '#b45309', size: 46 });
+            signOnEdge(pts, [bx - 10, bz - 50], bmSign, 2.5, 10);
           }
         });
 
@@ -12004,11 +11953,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
             vault.position.set(nx + streetDir[0] * off, 16.5, nz + streetDir[1] * off);
             frGrp.add(vault);
           });
-          const nmSign = signMesh([
-            'ST. LAWRENCE MARKET NORTH',
-            '92 FRONT STREET EAST • SATURDAY FARMERS\' MARKET HALL'
-          ], 18.0, 2.0, { bg: '#7f1d1d', fg: '#fde68a', borderColor: '#f59e0b', size: 56 });
-          signOnEdge(nmPts, [nx + 10, nz + 50], nmSign, 5.5, 14);
+          const nmSign = signMesh(['ST. LAWRENCE MARKET NORTH'], 9.0, 1.15, { bg: '#7f1d1d', fg: '#fde68a', borderColor: '#f59e0b', size: 52 });
+          signOnEdge(nmPts, [nx + 10, nz + 50], nmSign, 5.2, 14);
         }
 
         // 8. New Times Square Condominiums (109 Front Street East, SE Front & Lower Jarvis):
@@ -12074,12 +12020,9 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
             portico.add(lantern);
           });
 
-          // Signature Illuminated Marquee Signage
-          const ntsSign = signMesh([
-            'NEW TIMES SQUARE • 109 FRONT STREET EAST',
-            'RESIDENTIAL CONDOMINIUMS & LOFTS • EST. 2000'
-          ], 16.0, 2.0, { bg: '#1c1917', fg: '#fde68a', borderColor: '#d4af37', size: 54 });
-          ntsSign.position.set(0, 6.2, -0.98);
+          // Discrete residential canopy nameplate
+          const ntsSign = signMesh(['109 FRONT ST E'], 3.8, 0.7, { bg: '#1c1917', fg: '#fde68a', borderColor: '#b45309', size: 46 });
+          ntsSign.position.set(0, 4.8, -0.98);
           ntsSign.rotation.y = Math.PI;
           portico.add(ntsSign);
           ntsGrp.add(portico);
@@ -12187,11 +12130,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           mwCanopy.rotation.y = 0.28;
           mwGrp.add(mwCanopy);
 
-          const mwSign = signMesh([
-            'MARKET WHARF • 18 LOWER JARVIS STREET',
-            'ARCHITECTSALLIANCE • RESIDENCES AT THE MARKET'
-          ], 16.0, 1.8, { bg: '#090d16', fg: '#38bdf8', borderColor: '#0284c7', size: 52 });
-          signOnEdge(mwPts, [mwx - 80, mwz - 50], mwSign, 5.6, 12);
+          const mwSign = signMesh(['18 LOWER JARVIS'], 3.8, 0.7, { bg: '#090d16', fg: '#e2e8f0', borderColor: '#475569', size: 46 });
+          signOnEdge(mwPts, [mwx - 80, mwz - 50], mwSign, 4.4, 12);
 
           frGrp.add(mwGrp);
         }
@@ -12223,11 +12163,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           if (polyArea(tcPts) < 0) tcPts.reverse();
           const [tx, tz] = centroid(tcPts);
           otherGrp.add(new THREE.Mesh(wallsGeo(scaledPoly(tcPts, 1.03), 14.8, () => 15.8, 8, 1.0), stoneTrimMat));
-          const tcSign = signMesh([
-            'THE TORONTO CLUB • EST. 1837',
-            '107 WELLINGTON STREET WEST AT YORK • 1888 ROMANESQUE LANDMARK'
-          ], 12.0, 1.5, { bg: '#450a0a', fg: '#fde68a', borderColor: '#d4af37', size: 52 });
-          signOnEdge(tcPts, [tx - 10, tz - 50], tcSign, 4.6, 10);
+          const tcSign = signMesh(['THE TORONTO CLUB • 1837'], 2.8, 0.58, { bg: '#1c1917', fg: '#fde68a', borderColor: '#b45309', size: 44 });
+          signOnEdge(tcPts, [tx - 10, tz - 50], tcSign, 2.2, 10);
         }
 
         // 2. ADELAIDE ST W & BAY ST: Toronto Fire Station 332 (#146), John/Nelson Victorian Row (#549–#560),
@@ -12241,11 +12178,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           hoseTower.position.set(fx - 8.0, 11.0, fz - 4.0);
           hoseTower.rotation.y = streetRot;
           otherGrp.add(hoseTower);
-          const fsSign = signMesh([
-            'TORONTO FIRE STATION 332 • EMERGENCY SERVICES',
-            '260 ADELAIDE STREET WEST AT JOHN ST'
-          ], 13.0, 1.6, { bg: '#7f1d1d', fg: '#fef08a', borderColor: '#ef4444', size: 54 });
-          signOnEdge(fsPts, [fx - 10, fz - 45], fsSign, 5.0, 10);
+          const fsSign = signMesh(['TORONTO FIRE STATION 332'], 4.8, 0.78, { bg: '#7f1d1d', fg: '#fef08a', borderColor: '#ef4444', size: 48 });
+          signOnEdge(fsPts, [fx - 10, fz - 45], fsSign, 4.6, 10);
         }
         JOHN_NELSON_ROW_IDS.forEach(bi => {
           const b = MAP.buildings[bi];
@@ -12262,11 +12196,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           if (polyArea(ncPts) < 0) ncPts.reverse();
           const [nx, nz] = centroid(ncPts);
           otherGrp.add(new THREE.Mesh(wallsGeo(scaledPoly(ncPts, 1.03), 17.2, () => 18.2, 8, 1.0), stoneTrimMat));
-          const ncSign = signMesh([
-            'THE NATIONAL CLUB • 303 BAY STREET',
-            'EST. 1874 • HISTORIC EDWARDIAN CLUBHOUSE'
-          ], 11.5, 1.5, { bg: '#1e1b18', fg: '#fde68a', borderColor: '#d4af37', size: 52 });
-          signOnEdge(ncPts, [nx - 40, nz], ncSign, 4.6, 10);
+          const ncSign = signMesh(['THE NATIONAL CLUB • 303 BAY'], 2.8, 0.58, { bg: '#1e1b18', fg: '#fde68a', borderColor: '#b45309', size: 44 });
+          signOnEdge(ncPts, [nx - 40, nz], ncSign, 2.2, 10);
         }
 
         // 3. RICHMOND ST W & QUEEN ST W: 299 Queen St W — MuchMusic / CTV HQ (#15),
@@ -12286,11 +12217,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           const mmSpire = new THREE.Mesh(new THREE.ConeGeometry(3.6, 7.5, 16), copperRoofMat);
           mmSpire.position.set(qx - 14.0, 28.2, qz - 10.0);
           otherGrp.add(mmSpire);
-          const mmSign = signMesh([
-            '299 QUEEN STREET WEST • MUCHMUSIC & CTV HEADQUARTERS',
-            'SPEAKERS CORNER • HISTORIC CHUM-CITY BUILDING (EST. 1913)'
-          ], 18.0, 2.2, { bg: '#090d16', fg: '#38bdf8', borderColor: '#f43f5e', size: 56 });
-          signOnEdge(mmPts, [qx - 10, qz - 50], mmSign, 6.2, 14);
+          const mmSign = signMesh(['299 QUEEN WEST • CTV / MUCH'], 9.5, 1.2, { bg: '#090d16', fg: '#38bdf8', borderColor: '#f43f5e', size: 52 });
+          signOnEdge(mmPts, [qx - 10, qz - 50], mmSign, 5.5, 14);
         }
         QUEEN_WEST_ROW_IDS.forEach(bi => {
           const b = MAP.buildings[bi];
@@ -12318,11 +12246,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
             otherGrp.add(bulb);
           }
           if (idx === 1) {
-            const msSign = signMesh([
-              'MARKET STREET HISTORIC DINING COLONNADE',
-              'ST. LAWRENCE MARKET PRECINCT • PEDESTRIAN PATIO PROMENADE'
-            ], 12.0, 1.5, { bg: '#1c1917', fg: '#fde68a', borderColor: '#f59e0b', size: 52 });
-            signOnEdge(pts, [mx + 40, mz], msSign, 4.6, 8);
+            const msSign = signMesh(['MARKET STREET'], 3.2, 0.6, { bg: '#1c1917', fg: '#e7e5e4', borderColor: '#78716c', size: 46 });
+            signOnEdge(pts, [mx + 40, mz], msSign, 2.2, 8);
           }
         });
 
@@ -12840,12 +12765,9 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           och.add(col);
         });
 
-        // Historic Bronze Notice Plaque
-        const ochSign = signMesh([
-          'TORONTO OLD CITY HALL • 1899',
-          'RICHARDSONIAN ROMANESQUE CIVIC MONUMENT • E.J. LENNOX'
-        ], 14, 1.8, { bg: '#1c1917', fg: '#fef08a', borderColor: '#d4af37', size: 48 });
-        ochSign.position.set(0, 2.2, 34.5);
+        // Discrete Historic Bronze Notice Plaque
+        const ochSign = signMesh(['OLD CITY HALL • 1899'], 2.8, 0.6, { bg: '#1c1917', fg: '#fef08a', borderColor: '#b45309', size: 44 });
+        ochSign.position.set(0, 1.65, 34.5);
         och.add(ochSign);
 
         expGroup.add(och);
@@ -13038,12 +12960,9 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         saucerSkylight.position.set(0, 29.5, 0);
         tch.add(saucerSkylight);
 
-        // City of Toronto Civic Sign
-        const chSign = signMesh([
-          'TORONTO CITY HALL • 100 QUEEN STREET WEST',
-          'VILJO REVELL ARCHITECT (1965) • SEAT OF MUNICIPAL GOVERNMENT'
-        ], 16, 2.0, { bg: '#0f172a', fg: '#38bdf8', borderColor: '#38bdf8', size: 52 });
-        chSign.position.set(0, 3.5, 39.5);
+        // Discrete civic plaque (Nathan Phillips Square already has the 3D TORONTO sign)
+        const chSign = signMesh(['TORONTO CITY HALL'], 3.0, 0.6, { bg: '#1e293b', fg: '#e2e8f0', borderColor: '#64748b', size: 46 });
+        chSign.position.set(0, 2.2, 39.5);
         tch.add(chSign);
 
         expGroup.add(tch);
@@ -13072,8 +12991,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         const hbcWindows = new THREE.Mesh(new THREE.BoxGeometry(4, 9, 28), curtainWallMat);
         hbcWindows.position.set(372.5, 6, -730);
         tec.add(hbcWindows);
-        const hbcSign = signMesh(['HUDSON\'S BAY • SAKS FIFTH AVENUE', 'QUEEN & YONGE FLAGSHIP • EST. 1670'], 15, 2.0, { bg: '#1c1917', fg: '#fef08a', borderColor: '#d4af37', size: 48 });
-        hbcSign.position.set(373, 6, -730);
+        const hbcSign = signMesh(["HUDSON'S BAY • SAKS"], 8.5, 1.15, { bg: '#1c1917', fg: '#fef08a', borderColor: '#d4af37', size: 48 });
+        hbcSign.position.set(373, 5.2, -730);
         hbcSign.rotation.y = Math.PI / 2;
         tec.add(hbcSign);
 
@@ -13129,8 +13048,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           const portal = new THREE.Mesh(new THREE.BoxGeometry(4, 5.5, 12), darkGlassMat);
           portal.position.set(374, 2.75, pz);
           tec.add(portal);
-          const eSign = signMesh(['TORONTO EATON CENTRE', 'GALLERIA ENTRANCE'], 10, 1.4, { bg: '#047857', fg: '#ffffff', borderColor: '#34d399', size: 48 });
-          eSign.position.set(376.5, 4.2, pz);
+          const eSign = signMesh(['EATON CENTRE'], 6.2, 0.85, { bg: '#18181b', fg: '#f8fafc', borderColor: '#94a3b8', size: 48 });
+          eSign.position.set(376.5, 4.1, pz);
           eSign.rotation.y = Math.PI / 2;
           tec.add(eSign);
         });
@@ -13308,11 +13227,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         bp.position.set(22, 8, 4);
         smc.add(bp);
 
-        const smcSign = signMesh([
-          'ST. MICHAEL\'S CATHEDRAL BASILICA • 1845',
-          'ENGLISH GOTHIC REVIVAL • WILLIAM THOMAS ARCHITECT'
-        ], 14, 1.8, { bg: '#1c1917', fg: '#fef08a', borderColor: '#d4af37', size: 48 });
-        smcSign.position.set(-13.5, 2.4, 16);
+        const smcSign = signMesh(["ST. MICHAEL'S CATHEDRAL • 1845"], 2.8, 0.58, { bg: '#1c1917', fg: '#fef08a', borderColor: '#b45309', size: 44 });
+        smcSign.position.set(-13.5, 1.55, 16);
         smcSign.rotation.y = -Math.PI / 2;
         smc.add(smcSign);
 
@@ -13347,11 +13263,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         hospBridge.position.set(0, 22, -36.5);
         smh.add(hospBridge);
 
-        const smhSign = signMesh([
-          'ST. MICHAEL\'S HOSPITAL • LEVEL 1 TRAUMA CENTRE',
-          'PETER GILGAN PATIENT CARE TOWER • EMERGENCY'
-        ], 16, 2.0, { bg: '#991b1b', fg: '#ffffff', borderColor: '#ef4444', size: 50 });
-        smhSign.position.set(-20.5, 3.5, 0);
+        const smhSign = signMesh(["ST. MICHAEL'S HOSPITAL", 'EMERGENCY'], 7.2, 1.05, { bg: '#991b1b', fg: '#ffffff', borderColor: '#ef4444', size: 48 });
+        smhSign.position.set(-20.5, 3.2, 0);
         smhSign.rotation.y = -Math.PI / 2;
         smh.add(smhSign);
 
@@ -13374,11 +13287,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         urbanPorch.position.set(-10, 6, -8);
         slc.add(urbanPorch);
 
-        const slcSign = signMesh([
-          'TMU STUDENT LEARNING CENTRE • SNØHETTA ARCHITECTS',
-          'ICONIC PRISMATIC DIGITAL-FRITTED LANDMARK'
-        ], 14, 1.8, { bg: '#0369a1', fg: '#ffffff', borderColor: '#38bdf8', size: 48 });
-        slcSign.position.set(-14.5, 3.2, 0);
+        const slcSign = signMesh(['TMU STUDENT LEARNING CENTRE'], 3.8, 0.7, { bg: '#0f172a', fg: '#e2e8f0', borderColor: '#38bdf8', size: 46 });
+        slcSign.position.set(-14.5, 2.2, 0);
         slcSign.rotation.y = -Math.PI / 2;
         slc.add(slcSign);
 
@@ -13399,11 +13309,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         emtMarquee.position.set(-14, 4.5, 0);
         emt.add(emtMarquee);
 
-        const emtSign = signMesh([
-          'ED MIRVISH THEATRE • EST. 1920',
-          'BEAUX-ARTS BROADWAY PALACE • 244 VICTORIA'
-        ], 13, 1.6, { bg: '#1c1917', fg: '#fef08a', borderColor: '#d4af37', size: 46 });
-        emtSign.position.set(-17.2, 4.5, 0);
+        const emtSign = signMesh(['ED MIRVISH THEATRE'], 9.5, 1.2, { bg: '#1c1917', fg: '#fef08a', borderColor: '#d4af37', size: 48 });
+        emtSign.position.set(-17.2, 4.4, 0);
         emtSign.rotation.y = -Math.PI / 2;
         emt.add(emtSign);
 
@@ -13429,11 +13336,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         mucNave.position.set(0, 12, 10);
         muc.add(mucNave);
 
-        const mucSign = signMesh([
-          'METROPOLITAN UNITED CHURCH • 1872',
-          '73m CARILLON TOWER & HISTORIC CHURCHYARD'
-        ], 14, 1.8, { bg: '#1c1917', fg: '#fef08a', borderColor: '#d4af37', size: 48 });
-        mucSign.position.set(0, 2.4, 30);
+        const mucSign = signMesh(['METROPOLITAN UNITED CHURCH • 1872'], 2.8, 0.58, { bg: '#1c1917', fg: '#fef08a', borderColor: '#b45309', size: 44 });
+        mucSign.position.set(0, 1.55, 30);
         muc.add(mucSign);
 
         eec.add(muc);
@@ -13639,11 +13543,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           osgoode.add(gatepost);
         });
 
-        const osgoodeSign = signMesh([
-          'OSGOODE HALL • EST. 1832',
-          'COURT OF APPEAL FOR ONTARIO • HISTORIC PALLADIAN LAW COURTS'
-        ], 16, 2.0, { bg: '#1c1917', fg: '#fef08a', borderColor: '#d4af37', size: 48 });
-        osgoodeSign.position.set(0, 2.4, 45);
+        const osgoodeSign = signMesh(['OSGOODE HALL • 1832'], 2.8, 0.58, { bg: '#1c1917', fg: '#fef08a', borderColor: '#b45309', size: 44 });
+        osgoodeSign.position.set(0, 1.55, 45);
         osgoode.add(osgoodeSign);
 
         ct.add(osgoode);
@@ -13707,11 +13608,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         apexGlobe.position.set(0, 97.5, 0);
         canLife.add(apexGlobe);
 
-        const clSign = signMesh([
-          'CANADA LIFE BUILDING • 1931',
-          'BEAUX-ARTS NEOCLASSICAL TOWER & WEATHER BEACON • 330 UNIVERSITY'
-        ], 15, 1.8, { bg: '#1c1917', fg: '#fef08a', borderColor: '#d4af37', size: 48 });
-        clSign.position.set(18.5, 3.2, 0);
+        const clSign = signMesh(['CANADA LIFE • 330 UNIVERSITY'], 3.2, 0.62, { bg: '#1c1917', fg: '#fef08a', borderColor: '#b45309', size: 44 });
+        clSign.position.set(18.5, 2.2, 0);
         clSign.rotation.y = Math.PI / 2;
         canLife.add(clSign);
 
@@ -13783,12 +13681,9 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           pg.add(colEntablature);
         });
 
-        // Ceremonial Plaque
-        const pgSign = signMesh([
-          'PRINCES\' GATES • EXHIBITION PLACE',
-          'BEAUX-ARTS TRIUMPHAL ARCH • DEDICATED 1927'
-        ], 14, 1.8, { bg: '#1c1917', fg: '#fef08a', borderColor: '#d4af37', size: 48 });
-        pgSign.position.set(6.5, 3.5, 0);
+        // Ceremonial Bronze Plaque
+        const pgSign = signMesh(["PRINCES' GATES • 1927"], 3.0, 0.62, { bg: '#1c1917', fg: '#fef08a', borderColor: '#b45309', size: 44 });
+        pgSign.position.set(6.5, 1.8, 0);
         pgSign.rotation.y = Math.PI / 2;
         pg.add(pgSign);
 
@@ -13830,10 +13725,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           });
         });
 
-        const bmoSign = signMesh([
-          'BMO FIELD • NATIONAL SOCCER STADIUM',
-          'HOME OF TORONTO FC • TORONTO ARGONAUTS'
-        ], 14, 1.8, { bg: '#991b1b', fg: '#fef08a', borderColor: '#ffffff', size: 48 });
+        const bmoSign = signMesh(['BMO FIELD'], 9.0, 1.35, { bg: '#991b1b', fg: '#ffffff', borderColor: '#f87171', size: 54 });
         bmoSign.position.set(0, 3.5, 64);
         bmo.add(bmoSign);
 
@@ -13933,12 +13825,9 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           op.add(podGroup);
         }
 
-        // Ontario Place Landmark Sign
-        const opSign = signMesh([
-          'ONTARIO PLACE • EST. 1971',
-          'CINESPHERE GEODESIC DOME • WEST ISLAND FOREST TRAILS'
-        ], 14, 1.8, { bg: '#0369a1', fg: '#ffffff', borderColor: '#38bdf8', size: 48 });
-        opSign.position.set(-2120, 2.4, 645);
+        // Discrete Ontario Place trailhead marker
+        const opSign = signMesh(['ONTARIO PLACE'], 3.2, 0.65, { bg: '#1e293b', fg: '#e2e8f0', borderColor: '#64748b', size: 48 });
+        opSign.position.set(-2120, 1.6, 645);
         op.add(opSign);
 
         wEnd.add(op);
@@ -14146,7 +14035,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         // Side PA line-array speaker wing stacks & colorful concert light bars
         addBoxTo(opArch, -1765, 7.6, 611, 4.2, 11.5, 5.2, concreteRibMat);
         addBoxTo(opArch, -1725, 7.6, 611, 4.2, 11.5, 5.2, concreteRibMat);
-        const stageSign = signMesh('BUDWEISER STAGE', '#ffffff', '#0b3b75', 22, 3.4);
+        const stageSign = signMesh('BUDWEISER STAGE', '#ffffff', '#0b3b75', 14, 2.1);
         stageSign.position.set(-1745, 15.8, 615.4);
         stageSign.rotation.y = 0;
         opArch.add(stageSign);
@@ -14254,8 +14143,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           addBoxTo(opArch, gx, 0.15 + gh * 0.45, gz, gw, gh, gd, opGraniteBluffMat, 0, rot, 0);
           addSolid({ type: 'circle', x: gx, z: gz, r: Math.max(gw, gd) * 0.45, name: 'Trillium Park Muskoka Granite Bluff' });
         }
-        const trilliumSign = signMesh('TRILLIUM PARK', '#fef3c7', '#14532d', 16, 2.8);
-        trilliumSign.position.set(-1394, 6.4, 583.4);
+        const trilliumSign = signMesh(['TRILLIUM PARK'], 3.2, 0.65, { bg: '#1c1917', fg: '#e7e5e4', borderColor: '#78716c', size: 46 });
+        trilliumSign.position.set(-1394, 1.6, 583.4);
         opArch.add(trilliumSign);
         wEnd.add(opArch);
 
@@ -14294,8 +14183,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         // Parade Square Flagpole & Fort York Banner
         addBoxH(-1342, 9.0, 305, 0.35, 18.0, 0.35, whiteSteelMat);
         addBoxH(-1339, 16.5, 305, 5.2, 2.8, 0.15, redSteelMat);
-        const fySign = signMesh('FORT YORK', '#fef3c7', '#7f1d1d', 15, 2.8);
-        fySign.position.set(-1341, 4.2, 351.8);
+        const fySign = signMesh(['FORT YORK'], 3.6, 0.72, { bg: '#1c1917', fg: '#fef08a', borderColor: '#b45309', size: 48 });
+        fySign.position.set(-1341, 1.7, 351.8);
         westHeritage.add(fySign);
 
         // (b) Liberty Village Brick Carpet Factory Lofts (-1755, 130) & Annex (-1865, 138)
@@ -14307,8 +14196,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         const stack = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 2.5, 42, 12), historicBrickMat);
         stack.position.set(-1726, 21.0, 139);
         westHeritage.add(stack);
-        const lvSign = signMesh('TORONTO CARPET FACTORY', '#fef3c7', '#451a03', 24, 3.4);
-        lvSign.position.set(-1755, 14.5, 112.7);
+        const lvSign = signMesh(['TORONTO CARPET FACTORY'], 6.5, 0.95, { bg: '#292524', fg: '#fef3c7', borderColor: '#b45309', size: 48 });
+        lvSign.position.set(-1755, 6.5, 112.7);
         lvSign.rotation.y = Math.PI;
         westHeritage.add(lvSign);
         addSolid({ type: 'poly', pts: [[-1789, 113], [-1721, 113], [-1721, 147], [-1789, 147]], h: 20, name: 'Liberty Village Carpet Factory' });
@@ -14338,7 +14227,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         // Sculptural waving Heritage Court glass atrium roof spanning (-1780, 286)
         addBoxH(-1780, 16.5, 284, 30, 1.4, 34, blueGlassMat);
         addBoxH(-1780, 13.0, 304, 8.5, 26.0, 8.5, limestoneAshlarMat);
-        const enercareSign = signMesh('ENERCARE CENTRE', '#ffffff', '#0f172a', 26, 3.6);
+        const enercareSign = signMesh('ENERCARE CENTRE', '#ffffff', '#0f172a', 15, 2.0);
         enercareSign.position.set(-1780, 12.2, 299.6);
         westHeritage.add(enercareSign);
         addSolid({ type: 'poly', pts: [[-1832, 242], [-1728, 242], [-1728, 268], [-1832, 268]], h: 16, name: 'Enercare Centre North Hall' });
@@ -14360,8 +14249,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         colRoof.rotation.z = Math.PI * 0.5;
         colRoof.position.set(-1900, 13.0, 275);
         westHeritage.add(colRoof);
-        const colaSign = signMesh('COCA-COLA COLISEUM', '#ffffff', '#dc2626', 24, 3.4);
-        colaSign.position.set(-1900, 16.5, 301.5);
+        const colaSign = signMesh('COCA-COLA COLISEUM', '#ffffff', '#dc2626', 14, 2.0);
+        colaSign.position.set(-1900, 15.5, 301.5);
         westHeritage.add(colaSign);
         addSolid({ type: 'poly', pts: [[-1932, 244], [-1868, 244], [-1868, 266], [-1932, 266]], h: 19, name: 'Coca-Cola Coliseum North Stand' });
         addSolid({ type: 'poly', pts: [[-1932, 270], [-1908, 270], [-1908, 302], [-1932, 302]], h: 18, name: 'Coca-Cola Coliseum West Tribune' });
@@ -14372,8 +14261,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         addBoxH(-2165, 42.0, 336, 26, 76.0, 22, curtainWallMat);
         addBoxH(-2165, 81.5, 336, 24, 4.5, 20, blueGlassMat);
         addBoxH(-2165, 5.2, 313, 18, 0.8, 8, goldMat);
-        const hxSign = signMesh('HOTEL X TORONTO', '#fef3c7', '#1e293b', 20, 3.0);
-        hxSign.position.set(-2165, 11.8, 316.8);
+        const hxSign = signMesh('HOTEL X TORONTO', '#fef3c7', '#1e293b', 9.5, 1.35);
+        hxSign.position.set(-2165, 8.2, 316.8);
         hxSign.rotation.y = Math.PI;
         westHeritage.add(hxSign);
         addSolid({ type: 'poly', pts: [[-2187, 317], [-2143, 317], [-2143, 355], [-2187, 355]], h: 82, name: 'Hotel X Toronto' });
@@ -15991,8 +15880,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         rail.position.set(0, 1.35, depth * 0.48);
         wg.add(rail);
         if (label) {
-          const s = signMesh([label], 5.5, 0.65, { bg: '#0f172a', fg: '#38bdf8', borderColor: '#0284c7', size: 54 });
-          s.position.set(0, 1.65, -depth * 0.42);
+          const s = signMesh([label], 2.6, 0.48, { bg: '#1e293b', fg: '#e2e8f0', borderColor: '#64748b', size: 46 });
+          s.position.set(0, 1.35, -depth * 0.42);
           wg.add(s);
         }
         wg.position.set(cx, 0, cz);
@@ -16030,8 +15919,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           bg.add(rock);
         }
         if (signTitle) {
-          const s = signMesh([signTitle], 7.5, 0.85, { bg: '#0f172a', fg: '#fde047', borderColor: '#f59e0b', size: 58 });
-          s.position.set(0, 2.2, -rz * 0.75);
+          const s = signMesh([signTitle], 3.0, 0.6, { bg: '#1c1917', fg: '#e7e5e4', borderColor: '#78716c', size: 48 });
+          s.position.set(0, 1.45, -rz * 0.75);
           bg.add(s);
         }
         bg.position.set(cx, 0, cz);
@@ -16077,9 +15966,9 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         cap.position.set(124.2, 38.2, 522.0);
         ppg.add(cap);
         addSolid({ type: 'circle', x: 124.2, z: 522.0, r: 2.5 });
-        // Vertical "THE POWER PLANT" sign on the smokestack & gallery facade
-        const ppSign = signMesh(['THE POWER PLANT', 'CONTEMPORARY ART GALLERY'], 11, 1.6, { bg: '#7f1d1d', fg: '#ffffff', borderColor: '#ef4444', size: 60 });
-        ppSign.position.set(137, 15.5, 510.2);
+        // Gallery entrance fascia sign (not oversized)
+        const ppSign = signMesh(['THE POWER PLANT'], 6.2, 0.95, { bg: '#7f1d1d', fg: '#ffffff', borderColor: '#ef4444', size: 52 });
+        ppSign.position.set(137, 8.2, 510.2);
         ppSign.rotation.y = Math.PI;
         ppg.add(ppSign);
 
@@ -16090,8 +15979,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         const stageMast = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.35, 16.5, 8), railSteelMat);
         stageMast.position.set(42, 8.25, 588);
         ppg.add(stageMast);
-        const hcSign = signMesh(['HARBOURFRONT CENTRE', 'YORK QUAY • CONCERTS & ARTS'], 16, 2.2, { bg: '#0f172a', fg: '#38bdf8', borderColor: '#0284c7', size: 62 });
-        hcSign.position.set(42, 17.2, 522);
+        const hcSign = signMesh(['HARBOURFRONT CENTRE'], 8.0, 1.05, { bg: '#0f172a', fg: '#e2e8f0', borderColor: '#0284c7', size: 52 });
+        hcSign.position.set(42, 8.5, 522);
         hcSign.rotation.y = Math.PI;
         ppg.add(hcSign);
 
@@ -16106,20 +15995,20 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         ppg.add(pond);
 
         // Amsterdam Brewhouse waterfront sign
-        const amstSign = signMesh(['AMSTERDAM BREWHOUSE', 'CRAFT BREWERY ON THE LAKE'], 15, 2.1, { bg: '#450a0a', fg: '#fde047', borderColor: '#dc2626', size: 62 });
-        amstSign.position.set(-67, 13.0, 538);
+        const amstSign = signMesh(['AMSTERDAM BREWHOUSE'], 8.0, 1.05, { bg: '#450a0a', fg: '#fde047', borderColor: '#dc2626', size: 52 });
+        amstSign.position.set(-67, 7.2, 538);
         amstSign.rotation.y = Math.PI - 0.22;
         ppg.add(amstSign);
 
-        // West Waterfront Condominium Architectural Signs
-        const ttSign = signMesh(['TIP TOP TAILORS LOFTS', '637 LAKE SHORE BLVD W • HERITAGE 1929'], 15, 1.9, { bg: '#1e1b4b', fg: '#fde68a', borderColor: '#f59e0b', size: 54 });
-        ttSign.position.set(-1222, 22.5, 441.5);
+        // West Waterfront Condominium Entrance Signage
+        const ttSign = signMesh(['TIP TOP TAILORS'], 5.8, 0.9, { bg: '#1e1b4b', fg: '#fde68a', borderColor: '#b45309', size: 48 });
+        ttSign.position.set(-1222, 18.0, 441.5);
         ppg.add(ttSign);
-        const wpSign = signMesh(['WATERPARK CITY', 'NEPTUNE & ATLANTIS RESIDENCES'], 14, 1.8, { bg: '#0c4a6e', fg: '#e0f2fe', borderColor: '#38bdf8', size: 54 });
-        wpSign.position.set(-1113, 15.8, 449.5);
+        const wpSign = signMesh(['WATERPARK CITY'], 4.8, 0.8, { bg: '#1e293b', fg: '#e0f2fe', borderColor: '#64748b', size: 46 });
+        wpSign.position.set(-1113, 6.2, 449.5);
         ppg.add(wpSign);
-        const mqSign = signMesh(['MARINA QUAY WEST', 'HARBOURFRONT RESIDENCES'], 13, 1.6, { bg: '#0f172a', fg: '#bae6fd', borderColor: '#0284c7', size: 52 });
-        mqSign.position.set(-456, 17.5, 473);
+        const mqSign = signMesh(['MARINA QUAY WEST'], 4.8, 0.8, { bg: '#0f172a', fg: '#e2e8f0', borderColor: '#64748b', size: 46 });
+        mqSign.position.set(-456, 6.4, 473);
         mqSign.rotation.y = -0.22;
         ppg.add(mqSign);
 
@@ -16274,12 +16163,9 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           hspGrp.add(bg);
         });
 
-        // Park Entrance Sign along Queens Quay Promenade
-        const hspSign = signMesh([
-          'HARBOUR SQUARE PARK',
-          'TORONTO BAY WATERFRONT • SUNDIAL PLAZA'
-        ], 15, 2.0, { bg: '#0c4a6e', fg: '#7dd3fc', borderColor: '#0284c7', size: 56 });
-        hspSign.position.set(522, 2.6, 500.5);
+        // Discrete park trailhead sign along Queens Quay Promenade
+        const hspSign = signMesh(['HARBOUR SQUARE PARK'], 2.8, 0.58, { bg: '#1c1917', fg: '#e7e5e4', borderColor: '#78716c', size: 46 });
+        hspSign.position.set(522, 1.45, 500.5);
         hspSign.rotation.y = Math.PI;
         hspGrp.add(hspSign);
 
@@ -16381,11 +16267,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           mgGrp.add(boulder);
         }
 
-        const mgSign = signMesh([
-          'TORONTO MUSIC GARDEN',
-          'INSPIRED BY BACH SUITE NO. 1 • QUEENS QUAY W'
-        ], 15, 2.0, { bg: '#064e3b', fg: '#fde68a', borderColor: '#10b981', size: 54 });
-        mgSign.position.set(-522, 2.5, 576.5);
+        const mgSign = signMesh(['TORONTO MUSIC GARDEN'], 2.8, 0.58, { bg: '#1c1917', fg: '#e7e5e4', borderColor: '#78716c', size: 46 });
+        mgSign.position.set(-522, 1.45, 576.5);
         mgSign.rotation.y = Math.PI;
         mgGrp.add(mgSign);
 
@@ -16466,11 +16349,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         });
         addSolid({ type: 'circle', x: -1212, z: 536, r: 2.8, name: 'Little Norway Park Pavilion' });
 
-        const lnSign = signMesh([
-          'LITTLE NORWAY PARK',
-          'WWII ROYAL NORWEGIAN AIR FORCE MEMORIAL • 1940–45'
-        ], 15, 2.1, { bg: '#1e293b', fg: '#f8fafc', borderColor: '#ef4444', size: 54 });
-        lnSign.position.set(-1088, 2.5, 562);
+        const lnSign = signMesh(['LITTLE NORWAY PARK'], 2.8, 0.58, { bg: '#1c1917', fg: '#e7e5e4', borderColor: '#78716c', size: 46 });
+        lnSign.position.set(-1088, 1.45, 562);
         lnSign.rotation.y = -0.5;
         westParkGrp.add(lnSign);
 
@@ -16511,11 +16391,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         maltingGrp.add(corleckParapet);
         addSolid({ type: 'poly', pts: boxPoly(-1140, 616, 6.6, 5.1), h: 14.0, name: 'The Corleck Building' });
 
-        const maltSign = signMesh([
-          'CANADA MALTING SILOS • EST. 1928',
-          'THE CORLECK BUILDING & BATHURST QUAY HERITAGE'
-        ], 16, 2.2, { bg: '#292524', fg: '#fde68a', borderColor: '#d97706', size: 52 });
-        maltSign.position.set(-1110, 29.0, 613.5);
+        const maltSign = signMesh(['CANADA MALTING SILOS • 1928'], 3.2, 0.62, { bg: '#1c1917', fg: '#fef08a', borderColor: '#b45309', size: 46 });
+        maltSign.position.set(-1110, 2.4, 612.8);
         maltSign.rotation.y = Math.PI;
         maltingGrp.add(maltSign);
         westParkGrp.add(maltingGrp);
@@ -16557,11 +16434,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           addSolid({ type: 'circle', x: sx, z: sz, r: 0.8 });
         });
 
-        const ipSign = signMesh([
-          'IRELAND PARK • 1847 FAMINE MEMORIAL',
-          'ROWAN GILLESPIE BRONZE SCULPTURES & GLASS TOWER'
-        ], 15, 2.0, { bg: '#064e3b', fg: '#ffffff', borderColor: '#34d399', size: 52 });
-        ipSign.position.set(-1186, 2.9, 615.0);
+        const ipSign = signMesh(['IRELAND PARK'], 2.8, 0.58, { bg: '#1c1917', fg: '#e7e5e4', borderColor: '#78716c', size: 46 });
+        ipSign.position.set(-1186, 1.45, 615.0);
         ipSign.rotation.y = Math.PI;
         westParkGrp.add(ipSign);
 
@@ -16601,19 +16475,13 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         westParkGrp.add(vStep, vShaft, vUrn);
         addSolid({ type: 'circle', x: -1314, z: 512, r: 2.8, name: 'Coronation Park 1937 Cenotaph' });
 
-        const corSignE = signMesh([
-          'CORONATION PARK • ROYAL OAK GROVE',
-          'ESTABLISHED 1937 • LAKE SHORE BLVD W'
-        ], 15, 2.0, { bg: '#14532d', fg: '#fef08a', borderColor: '#22c55e', size: 54 });
-        corSignE.position.set(-1314, 2.5, 472);
+        const corSignE = signMesh(['CORONATION PARK'], 2.8, 0.58, { bg: '#1c1917', fg: '#e7e5e4', borderColor: '#78716c', size: 46 });
+        corSignE.position.set(-1314, 1.45, 472);
         corSignE.rotation.y = Math.PI;
         westParkGrp.add(corSignE);
 
-        const corSignW = signMesh([
-          'CORONATION PARK • WEST LAWN',
-          'MARTIN GOODMAN WATERFRONT TRAIL'
-        ], 14, 1.9, { bg: '#14532d', fg: '#fef08a', borderColor: '#22c55e', size: 54 });
-        corSignW.position.set(-1472, 2.4, 462);
+        const corSignW = signMesh(['CORONATION PARK'], 2.8, 0.58, { bg: '#1c1917', fg: '#e7e5e4', borderColor: '#78716c', size: 46 });
+        corSignW.position.set(-1472, 1.45, 462);
         corSignW.rotation.y = Math.PI;
         westParkGrp.add(corSignW);
 
@@ -16726,8 +16594,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         termRoof.position.set(708, 7.2, 294);
         termRoof.rotation.y = -0.35;
         ftg.add(termRoof);
-        const termSign = signMesh(['JACK LAYTON FERRY TERMINAL', 'TORONTO ISLAND FERRIES • CENTRE • WARD\'S • HANLAN\'S'], 22, 2.4, { bg: '#064e3b', fg: '#fef08a', borderColor: '#10b981', size: 56 });
-        termSign.position.set(706, 9.2, 286);
+        const termSign = signMesh(['JACK LAYTON FERRY TERMINAL', 'TORONTO ISLAND FERRIES'], 12, 1.5, { bg: '#0f2936', fg: '#f8fafc', borderColor: '#38bdf8', size: 52 });
+        termSign.position.set(706, 8.5, 286);
         termSign.rotation.y = Math.PI - 0.35;
         ftg.add(termSign);
 
@@ -16756,10 +16624,10 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
 
         // Boarding Gate Sign directly over the gangway ramp
         const boardGateSign = signMesh([
-          'TORONTO ISLAND FERRY • GATE 1',
-          'FERRY "SAM McBRIDE" TO CENTRE ISLAND • [E] TO BOARD'
-        ], 16, 2.2, { bg: '#064e3b', fg: '#fef08a', borderColor: '#10b981', size: 50 });
-        boardGateSign.position.set(712, 4.2, 310);
+          'GATE 1 • CENTRE ISLAND',
+          '[E] TO BOARD'
+        ], 7.5, 1.15, { bg: '#0f2936', fg: '#f8fafc', borderColor: '#38bdf8', size: 48 });
+        boardGateSign.position.set(712, 3.8, 310);
         boardGateSign.rotation.y = Math.PI - 0.35;
         ftg.add(boardGateSign);
 
@@ -16972,20 +16840,20 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         }));
 
         const bqSignN = signMesh(
-          ['BILLY BISHOP AIRPORT FERRY TERMINAL', 'BATHURST QUAY • WESTERN GAP SHUTTLE — PRESS [E] TO BOARD'],
-          16.5, 2.1,
+          ['BILLY BISHOP AIRPORT FERRY', '[E] TO BOARD'],
+          7.5, 1.1,
           { bg: '#0f172a', fg: '#38bdf8', borderColor: '#facc15', size: 46 }
         );
-        bqSignN.position.set(bqx, 5.8, 667.8);
+        bqSignN.position.set(bqx, 5.4, 667.8);
         bqSignN.rotation.y = Math.PI;
         bqGrp.add(bqSignN);
 
         const bqSignS = signMesh(
-          ['BATHURST QUAY MAINLAND SLIP', 'WELCOME TO DOWNTOWN TORONTO • BILLY BISHOP SHUTTLE'],
-          16.5, 2.1,
+          ['BATHURST QUAY FERRY SLIP'],
+          6.8, 0.95,
           { bg: '#0f172a', fg: '#f8fafc', borderColor: '#38bdf8', size: 46 }
         );
-        bqSignS.position.set(bqx, 5.8, 680.2);
+        bqSignS.position.set(bqx, 5.4, 680.2);
         bqGrp.add(bqSignS);
 
         scene.add(bqGrp);
@@ -17286,7 +17154,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         airportBeacon.add(bBeam);
         airportBeacon.position.set(110, 42.5, -58);
         ytzIsland.add(airportBeacon);
-        const ytzSign = signMesh(['BILLY BISHOP TORONTO CITY AIRPORT • YTZ'], 44, 5.5, { bg: '#0f172a', fg: '#38bdf8', borderColor: '#0284c7', size: 64 });
+        const ytzSign = signMesh(['BILLY BISHOP • YTZ'], 22, 2.8, { bg: '#0f172a', fg: '#38bdf8', borderColor: '#0284c7', size: 60 });
         ytzSign.material.forEach(m => { m.fog = false; });
         ytzSign.position.set(160, 17, -82);
         ytzSign.rotation.y = Math.PI;
@@ -17433,12 +17301,12 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         archTop.position.set(180, 7.8, 1088);
         dtg.add(gateL, gateR, archTop);
 
-        const welcomeSign = signMesh(['WELCOME TO CENTRE ISLAND', 'TORONTO ISLAND PARK • EST. 1870'], 20, 2.6, { bg: '#064e3b', fg: '#fef08a', borderColor: '#10b981', size: 56 });
-        welcomeSign.position.set(180, 7.8, 1087);
+        const welcomeSign = signMesh(['CENTRE ISLAND'], 7.2, 1.0, { bg: '#1c1917', fg: '#fef08a', borderColor: '#78716c', size: 52 });
+        welcomeSign.position.set(180, 7.6, 1087);
         dtg.add(welcomeSign);
 
-        const welcomeSignBack = signMesh(['CENTRE ISLAND FERRY TERMINAL', 'FERRIES TO DOWNTOWN TORONTO'], 19, 2.4, { bg: '#064e3b', fg: '#fef08a', borderColor: '#10b981', size: 54 });
-        welcomeSignBack.position.set(180, 7.8, 1089);
+        const welcomeSignBack = signMesh(['FERRIES TO DOWNTOWN'], 7.2, 1.0, { bg: '#1c1917', fg: '#fef08a', borderColor: '#78716c', size: 50 });
+        welcomeSignBack.position.set(180, 7.6, 1089);
         welcomeSignBack.rotation.y = Math.PI;
         dtg.add(welcomeSignBack);
 
@@ -17452,8 +17320,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           dtg.add(col);
         });
 
-        const infoBoard = signMesh(['TORONTO ISLAND PARK MAP', 'CENTREVILLE • BEACHES • HEDGE MAZE • PIZZA PIZZA'], 12, 2.2, { bg: '#1e3a8a', fg: '#38bdf8', borderColor: '#60a5fa', size: 48 });
-        infoBoard.position.set(194, 2.4, 1098);
+        const infoBoard = signMesh(['ISLAND PARK MAP', 'CENTREVILLE • BEACHES • MAZE'], 3.8, 0.85, { bg: '#1e293b', fg: '#e2e8f0', borderColor: '#64748b', size: 42 });
+        infoBoard.position.set(194, 1.65, 1098);
         infoBoard.rotation.y = -Math.PI / 2;
         dtg.add(infoBoard);
 
@@ -17608,8 +17476,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         hmg.add(mazeGround);
 
         // Entrance Archway
-        const mGate = signMesh(['WILLIAM MEANY HEDGE MAZE', 'TORONTO ISLAND PARK • DONATED 2015'], 18, 2.4, { bg: '#14532d', fg: '#bbf7d0', borderColor: '#22c55e', size: 52 });
-        mGate.position.set(85, 3.8, 1150);
+        const mGate = signMesh(['HEDGE MAZE'], 4.2, 0.72, { bg: '#292524', fg: '#fef08a', borderColor: '#78716c', size: 48 });
+        mGate.position.set(85, 3.6, 1150);
         hmg.add(mGate);
         [-7.5, 7.5].forEach(gx => {
           const post = new THREE.Mesh(new THREE.BoxGeometry(0.8, 4.0, 0.8), islandWoodMat);
@@ -17682,8 +17550,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         hmg.add(tRail);
 
         // Lookout sign
-        const lSign = signMesh(['MAZE LOOKOUT TOWER', 'BIRD’S-EYE VIEW OF WILLIAM MEANY MAZE'], 7.2, 1.1, { bg: '#78350f', fg: '#fef08a', borderColor: '#b45309', size: 44 });
-        lSign.position.set(85, 4.4, 1182);
+        const lSign = signMesh(['LOOKOUT'], 2.4, 0.5, { bg: '#451a03', fg: '#fef08a', borderColor: '#78350f', size: 44 });
+        lSign.position.set(85, 4.1, 1182);
         hmg.add(lSign);
 
         centreIsland.add(hmg);
@@ -17693,8 +17561,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       {
         const cpg = new THREE.Group();
         // Entrance Archway
-        const cGate = signMesh(['CENTREVILLE AMUSEMENT PARK', 'FAMILY FUN • OVER 30 RIDES & ATTRACTIONS'], 22, 2.8, { bg: '#dc2626', fg: '#fef08a', borderColor: '#facc15', size: 56 });
-        cGate.position.set(245, 4.4, 1145);
+        const cGate = signMesh(['CENTREVILLE'], 11, 1.45, { bg: '#b91c1c', fg: '#fef08a', borderColor: '#facc15', size: 56 });
+        cGate.position.set(245, 4.3, 1145);
         cpg.add(cGate);
         [-9.5, 9.5].forEach(gx => {
           const col = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 4.8, 10), islandRedMat);
@@ -17781,9 +17649,9 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         ppTrim.position.set(240, 5.2, 1220);
         ppBuilding.add(ppTrim);
 
-        // Rooftop Glowing Marquee Sign
-        const ppSign = signMesh(['PIZZA PIZZA', 'FRESH HOT SLICES • WHOLE PIZZAS • POUTINE'], 15, 2.2, { bg: '#c2410c', fg: '#ffedd5', borderColor: '#fdba74', size: 54 });
-        ppSign.position.set(240, 6.6, 1215.3);
+        // Rooftop Marquee Sign
+        const ppSign = signMesh(['PIZZA PIZZA'], 9.0, 1.3, { bg: '#c2410c', fg: '#ffedd5', borderColor: '#fdba74', size: 54 });
+        ppSign.position.set(240, 6.4, 1215.3);
         ppBuilding.add(ppSign);
 
         // Order Counter with Stainless Steel Sneeze Guards & Warmer Displays
@@ -17791,7 +17659,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         ppCounter.position.set(240, 0.55, 1215.2);
         ppBuilding.add(ppCounter);
 
-        const ppMenu = signMesh(['PEPPERONI SLICE $4.99 • CHEESE $4.79 • DIP $1.25', 'WHOLE PIZZA $19.99 • POUTINE • DRINKS'], 11, 1.2, { bg: '#1c1917', fg: '#fef08a', borderColor: '#f97316', size: 36 });
+        const ppMenu = signMesh(['PEPPERONI SLICE $4.99 • CHEESE $4.79 • DIP $1.25', 'WHOLE PIZZA $19.99 • POUTINE • DRINKS'], 5.2, 0.75, { bg: '#1c1917', fg: '#fef08a', borderColor: '#f97316', size: 36 });
         ppMenu.position.set(240, 3.2, 1215.3);
         ppBuilding.add(ppMenu);
 
@@ -17853,7 +17721,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         const dRoof = new THREE.Mesh(new THREE.BoxGeometry(15, 0.8, 9.5), islandTurfMat);
         dRoof.position.set(360, 4.7, 1240);
         depot.add(dRoof);
-        const dSign = signMesh(['CENTREVILLE EXPRESS', 'MINIATURE RAILROAD DEPOT'], 12, 1.6, { bg: '#14532d', fg: '#fef08a', borderColor: '#22c55e', size: 48 });
+        const dSign = signMesh(['CENTREVILLE EXPRESS'], 5.2, 0.8, { bg: '#292524', fg: '#fef08a', borderColor: '#78716c', size: 46 });
         dSign.position.set(360, 3.6, 1235.8);
         depot.add(dSign);
 
@@ -17999,8 +17867,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         binoHead.position.set(180, 2.1, 1472);
         breakwater.add(binoHead);
 
-        const binoSign = signMesh(['LAKE ONTARIO OVERLOOK', 'LOOKING 180 MILES SOUTH TO ROCHESTER, NY'], 8.5, 1.2, { bg: '#0c4a6e', fg: '#e0f2fe', borderColor: '#38bdf8', size: 40 });
-        binoSign.position.set(180, 2.9, 1471);
+        const binoSign = signMesh(['LAKE ONTARIO OVERLOOK'], 2.4, 0.55, { bg: '#1e293b', fg: '#e0f2fe', borderColor: '#64748b', size: 40 });
+        binoSign.position.set(180, 1.9, 1471);
         breakwater.add(binoSign);
 
         bg.add(breakwater);
@@ -18030,8 +17898,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         });
 
         // Panoramic Skyline Viewing Bench Area
-        const benchSign = signMesh(['TORONTO SKYLINE LOOKOUT', 'UNOBSTRUCTED VIEW OF CN TOWER & FINANCIAL DISTRICT'], 14, 1.8, { bg: '#0f172a', fg: '#fde047', borderColor: '#38bdf8', size: 48 });
-        benchSign.position.set(-80, 3.2, 1120);
+        const benchSign = signMesh(['TORONTO SKYLINE'], 2.6, 0.55, { bg: '#1c1917', fg: '#e7e5e4', borderColor: '#78716c', size: 42 });
+        benchSign.position.set(-80, 1.6, 1120);
         benchSign.rotation.y = Math.PI;
         oig.add(benchSign);
 
@@ -18271,8 +18139,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         lighthouseBeam.position.y = 36;
         lhGroup.add(lighthouseBeam);
 
-        const lhSign = signMesh(['GIBRALTAR POINT LIGHTHOUSE', 'OLDEST LANDMARK IN TORONTO • BUILT 1808'], 12, 1.8, { bg: '#450a0a', fg: '#fef08a', borderColor: '#ef4444', size: 44 });
-        lhSign.position.set(0, 4.2, 5.6);
+        const lhSign = signMesh(['GIBRALTAR POINT LIGHTHOUSE • 1808'], 2.8, 0.58, { bg: '#1c1917', fg: '#fef08a', borderColor: '#b45309', size: 42 });
+        lhSign.position.set(0, 1.8, 5.6);
         lhGroup.add(lhSign);
 
         lhGroup.position.set(-180, 0, 1340);
@@ -18301,9 +18169,9 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           cot.position.set(20 + (ci % 6) * 26, 5.2, -55 + Math.floor(ci / 6) * 28);
           wardsIsland.add(cot);
         }
-        const wSign = signMesh(["WARD'S ISLAND & RCYC"], 36, 4.8, { bg: '#1e3a8a', fg: '#ffffff', borderColor: '#38bdf8', size: 62 });
+        const wSign = signMesh(["WARD'S ISLAND • RCYC"], 6.5, 1.0, { bg: '#1e293b', fg: '#e2e8f0', borderColor: '#64748b', size: 48 });
         wSign.material.forEach(m => { m.fog = false; });
-        wSign.position.set(45, 11.5, -125);
+        wSign.position.set(45, 5.5, -125);
         wSign.rotation.y = Math.PI;
         wardsIsland.add(wSign);
       }
