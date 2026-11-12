@@ -759,7 +759,16 @@
     LM.berczyPark = [642.0, -428.0];
     LM.olympicPark = [-350.0, 205.0];
     LM.clarenceSquare = [-805.0, -15.0];
-    LM.harbourSquarePark = [470.0, 490.0];
+    LM.harbourSquarePark = [518.0, 508.0];
+    LM.torontoMusicGarden = [-520.0, 592.0];
+    LM.htoPark = [-204.0, 574.0];
+    LM.littleNorwayPark = [-1155.0, 548.0];
+    LM.irelandPark = [-1184.0, 628.0];
+    LM.canadaMalting = [-1114.0, 622.0];
+    LM.coronationPark = [-1324.0, 508.0];
+    LM.tipTopLofts = [-1222.0, 429.0];
+    LM.waterParkCity = [-1114.0, 438.0];
+    LM.marinaQuayWest = [-458.0, 461.0];
     LM.davidPecautSquare = [-308.0, -270.0];
     LM.jackLaytonTerminal = [708.0, 294.0];
     LM.oldCityHall = [265.0, -805.0];
@@ -948,21 +957,21 @@
     // and Sugar Beach in the east.
     const HARBOUR_SHORELINE = [
       [-2600, 505], [-2250, 505], [-1900, 505], [-1420, 505],
-      [-1340, 575], [-1250, 695], [-1050, 676], [-850, 624], [-690, 616],
-      [-675, 620], [-625, 620], // Spadina Slip & Spadina WaveDeck
-      [-615, 610], [-425, 608], // Toronto Music Garden & Marina Quay West
+      [-1368, 572], [-1285, 588], [-1248, 692], [-1050, 676], [-850, 624], [-690, 616],
+      [-678, 636], [-622, 636], // Spadina Slip & Spadina WaveDeck
+      [-612, 612], [-520, 616], [-425, 608], // Toronto Music Garden & Marina Quay West
       [-415, 604], [-355, 600], // Peter Street Basin / Slip
       [-345, 584], [-250, 574], // Fire Station 334 Marine Unit & Rees Pier
-      [-188, 568], [-175, 550], [-142, 548], [-130, 566], [-95, 568], // HTO Park West, HTO Bay & HTO East Beach
-      [-90, 588], [-44, 586],   // Amsterdam Brewhouse Pier
-      [-38, 518], [-6, 516],    // Rees Slip & Rees WaveDeck
+      [-228, 596], [-182, 592], [-170, 558], [-145, 558], [-132, 582], [-96, 580], // HTO Park West, HTO Bay & HTO East Beach
+      [-90, 590], [-44, 590],   // Amsterdam Brewhouse Pier
+      [-38, 520], [-6, 518],    // Rees Slip & Rees WaveDeck
       [-2, 560], [35, 602], [50, 632], [88, 626], [92, 592], [148, 574], // York Quay: Harbourfront Centre, Natrel Pond & Power Plant
       [151, 488],               // Simcoe Slip & Simcoe WaveDeck
       [198, 622], [218, 650], [284, 644], // Queen's Quay Terminal Pier & Pier 6
       [289, 488], [308, 488],   // York Slip
-      [335, 550], [352, 562], [384, 552], [392, 534], [468, 514], [485, 506], [540, 506], // Harbour Square Quays & Basin
-      [570, 490], [615, 454], [638, 482], [648, 478], [662, 440], [718, 404], [734, 374], // Westin Harbour Castle & Jack Layton Ferry Terminal
-      [738, 246], [768, 330], [802, 396], // Yonge Slip & Marina Pier
+      [335, 550], [352, 562], [384, 552], [392, 534], [468, 514], [492, 524], [576, 516], [596, 486], // Harbour Square Quays, Park Headland & Basin
+      [615, 454], [638, 482], [648, 478], [662, 440], [718, 404], [734, 374], // Westin Harbour Castle & Jack Layton Ferry Terminal
+      [738, 246], [764, 248], [766, 330], [802, 396], // Yonge Slip & Marina Pier (clear west of Pier 27)
       [838, 380], [918, 338], [992, 302], // Waterlink at Pier 27 Quay
       [1000, 270], [1035, 268], [1072, 248], [1090, 192], // Redpath Sugar Refinery Wharf & Jarvis Slip
       [1140, 98], [1250, 58], [2200, 40]  // Sugar Beach & East Bayfront
@@ -1081,9 +1090,29 @@
       return false;
     }
 
+    const WAVEDECK_RECTS = [
+      { cx: 150, cz: 494, hw: 12.2, hd: 5.8, rot: -0.22 },   // Simcoe WaveDeck
+      { cx: -22, cz: 524, hw: 11.2, hd: 5.2, rot: -0.22 },   // Rees WaveDeck
+      { cx: -650, cz: 622, hw: 13.2, hd: 6.2, rot: -0.04 }   // Spadina WaveDeck
+    ];
+    function isOnWaveDeck(x, z, pad) {
+      const p = pad || 0;
+      for (let i = 0; i < WAVEDECK_RECTS.length; i++) {
+        const d = WAVEDECK_RECTS[i];
+        const dx = x - d.cx, dz = z - d.cz;
+        const c = Math.cos(-d.rot), s = Math.sin(-d.rot);
+        const lx = dx * c - dz * s;
+        const lz = dx * s + dz * c;
+        if (Math.abs(lx) <= d.hw + p && Math.abs(lz) <= d.hd + p) return true;
+      }
+      return false;
+    }
+
     function isHarbourWater(x, z, pad) {
       const p = pad || 0;
       if (z <= getShorelineZ(x) - p) return false;
+      // Sculptural Harbourfront Cedar WaveDecks extend cleanly out over slips and are walkable
+      if (isOnWaveDeck(x, z, -p)) return false;
       // Jack Layton Ferry Terminal pier & boarding slip extension into slip
       if (x >= 692 - p && x <= 738 + p && z >= 280 - p && z <= 348 + p) return false;
       // Billy Bishop Airport Mainland Ferry Slip at Bathurst Quay (Western Gap)
@@ -1347,6 +1376,10 @@
       if ((x >= 166 && x <= 194 && z >= 1052 && z <= 1092) ||
           (x >= 692 && x <= 738 && z >= 295 && z <= 348)) {
         return 0.5;
+      }
+      // Sculptural cedar WaveDecks (Simcoe, Rees & Spadina)
+      if (isOnWaveDeck(x, z, 0)) {
+        return 0.42;
       }
       // Billy Bishop Airport Mainland Ferry Slip at Bathurst Quay
       if (x >= -1075 && x <= -1045 && z >= 665 && z <= 715) {
@@ -1854,6 +1887,8 @@
         { t: 'secondary', w: 13, p: [385.0, -910.0, 450.0, -910.0, 520.0, -910.0, 610.0, -910.0, 680.0, -910.0], n: 'Shuter Street' },
         { t: 'pedestrian', w: 11, p: [385.0, -1010.0, 450.0, -1010.0, 520.0, -1010.0, 610.0, -1010.0], n: 'Gould Street' },
         // --- West End Waterfront Corridor, Exhibition Place & Ontario Place Archipelago ---
+        { t: 'secondary', w: 10, _noWellAnchor: true, p: [-160.4, 543.3, -178.0, 549.5, -245.0, 560.0, -380.0, 558.0, -550.0, 560.0, -591.0, 563.0, -618.0, 570.5, -640.0, 563.0, -711.0, 562.5, -721.5, 552.0, -734.1, 538.1], n: 'Queens Quay West' },
+        { t: 'secondary', w: 10, _noWellAnchor: true, p: [-711.0, 562.5, -768.0, 558.0, -868.0, 552.0, -965.0, 550.0, -1049.0, 568.0], n: 'Queens Quay West' },
         { t: 'primary', w: 16, _noWellAnchor: true, p: [-694.9, 606.8, -880.0, 565.0, -1030.0, 495.0, -1180.0, 460.0, -1350.0, 445.0, -1520.0, 405.0, -1620.0, 385.0, -1900.0, 385.0, -2260.0, 385.0], n: 'Lake Shore Boulevard West' },
         { t: 'secondary', w: 10, _noWellAnchor: true, p: [-1030.0, 495.0, -1052.0, 580.0, -1060.0, 660.0], n: 'Eireann Quay' },
         { t: 'secondary', w: 12, _noWellAnchor: true, p: [-881.6, 416.2, -1040.0, 412.0, -1220.0, 405.0, -1385.0, 396.0, -1480.0, 355.0, -1530.0, 320.0], n: 'Fleet Street' },
@@ -1878,7 +1913,7 @@
         { t: 'tertiary', w: 10, _noWellAnchor: true, p: [-774.9, -49.7, -878.0, -32.0, -918.0, -22.0, -1105.0, 36.0, -1285.0, 88.0, -1604.0, 180.0], n: 'Wellington Street West' },
         { t: 'secondary', w: 12, _noWellAnchor: true, p: [-827.7, 134.6, -860.0, 146.0, -1048.0, 212.0, -1140.0, 215.0, -1248.0, 195.0], n: 'Front Street West' },
         { t: 'tertiary', w: 10, _noWellAnchor: true, p: [-1604.0, 158.0, -1760.0, 165.0, -1965.0, 172.0], n: 'East Liberty Street' },
-        { t: 'primary', w: 14, _noWellAnchor: true, p: [-1185.0, 405.0, -1248.0, 195.0, -1285.0, 88.0, -1321.0, -48.0, -1368.0, -205.0, -1400.0, -310.0, -1431.0, -413.0, -1546.0, -798.0], n: 'Bathurst Street' },
+        { t: 'primary', w: 14, _noWellAnchor: true, p: [-1178.0, 460.0, -1185.0, 405.0, -1248.0, 195.0, -1285.0, 88.0, -1321.0, -48.0, -1368.0, -205.0, -1400.0, -310.0, -1431.0, -413.0, -1546.0, -798.0], n: 'Bathurst Street' },
         { t: 'secondary', w: 12, _noWellAnchor: true, p: [-1510.0, 385.0, -1530.0, 320.0, -1565.0, 232.0, -1604.0, 180.0, -1640.0, 45.0, -1687.0, -112.0, -1718.0, -217.0, -1750.0, -320.0], n: 'Strachan Avenue' },
         { t: 'tertiary', w: 10, _noWellAnchor: true, p: [-1795.0, -307.0, -1859.0, -520.0, -1915.0, -705.0], n: 'Ossington Avenue' },
         { t: 'tertiary', w: 10, _noWellAnchor: true, p: [-1820.0, 96.0, -1795.0, 166.0], n: 'Atlantic Avenue' },
@@ -2713,7 +2748,10 @@
       const area = polyArea(pts);
       if (area < 6) return;
       const [cx, cz] = centroid(pts);
-      const name = b.n || '';
+      const rawName = b.n || '';
+      const name = (bi === 413 || rawName.indexOf('Home Game Toronto') === 0)
+        ? 'The Power Plant Contemporary Art Gallery'
+        : rawName;
 
       // 1. Skip CN Tower, base plaza terraces, and elevated skywalks that trap the player
       if (Math.hypot(cx - LM.cnTower[0], cz - LM.cnTower[1]) < 45 && (name.indexOf('CN Tower') === 0 || (b.h && b.h > 300))) return;
@@ -2879,7 +2917,7 @@
       }
 
       // Real Toronto Waterfront building base heights & styles (towers/superstructures added in Waterfront section)
-      const isPowerPlant = name.indexOf('Home Game Toronto') === 0;
+      const isPowerPlant = bi === 413 || name.indexOf('The Power Plant') === 0;
       const isHarbourfrontMain = name.indexOf('Harbourfront Centre Main Building') === 0;
       const isWaterclub = name === 'Waterclub Condos';
       const isWestinHarbour = name === 'Westin Harbour Castle';
@@ -3163,8 +3201,14 @@
       if (x >= -860 && x <= -760 && z >= -65 && z <= 30) return true;
       // Olympic Park
       if (x >= -390 && x <= -310 && z >= 170 && z <= 245) return true;
-      // Harbour Square Park
-      if (x >= 430 && x <= 520 && z >= 450 && z <= 530) return true;
+      // Harbour Square Park & Waterfront Promenade
+      if (x >= 488 && x <= 582 && z >= 492 && z <= 526) return true;
+      // Amsterdam Brewhouse Pier, HTO Park, Toronto Music Garden & Spadina Slip
+      if (x >= -96 && x <= -40 && z >= 526 && z <= 586) return true;
+      if (x >= -240 && x <= -92 && z >= 546 && z <= 608) return true;
+      if (x >= -685 && x <= -420 && z >= 548 && z <= 645) return true;
+      // Marina Quay West boutique waterfront condos block (custom-built)
+      if (x >= -538 && x <= -415 && z >= 438 && z <= 485) return true;
       // Nathan Phillips Square & Toronto City Hall
       if (x >= -30 && x <= 220 && z >= -1010 && z <= -765) return true;
       // Osgoode Hall & Historic Law Courts
@@ -3197,8 +3241,9 @@
       if (x >= -1995 && x <= -1690 && z >= 82 && z <= 155) return true;
       // Historic Fort York National Historic Site
       if (x >= -1465 && x <= -1220 && z >= 230 && z <= 395) return true;
-      // Princes' Gates, Exhibition Place, BMO Field & Ontario Place
-      if (x <= -1540 && z >= 205 && z <= 900) return true;
+      // Coronation Park, Tip Top Lofts, WaterPark City, Little Norway Park, Ireland Park, Canada Malting & Ontario Place
+      if (x <= -1535 && z >= 205 && z <= 900) return true;
+      if (x >= -1535 && x <= -865 && z >= 412 && z <= 700) return true;
       // Waterfront shoreline & Lake Ontario waters
       if (x <= -650 && z >= getShorelineZ(x) - 14) return true;
       return false;
@@ -3724,7 +3769,7 @@
       MAP.buildings.forEach(b => {
         const nm = b.n || '';
         if (!nm) return;
-        if (/Fairmont Royal York|Hockey Hall of Fame|Union Station|Dominion Public|Google|65 King|St\. James|Cathedral/i.test(nm)) return; // Dedicated historic architecture & signs
+        if (/Fairmont Royal York|Hockey Hall of Fame|Union Station|Dominion Public|Google|65 King|St\. James|Cathedral|Home Game Toronto/i.test(nm)) return; // Dedicated historic architecture & signs
         let pts = toPairs(b.p);
         if (pts.length < 3) return;
         if (polyArea(pts) < 0) pts = pts.reverse();
@@ -4002,6 +4047,74 @@
       const amstPoly = rotRect(-67, 556, 18, 20, -0.22);
       addBuilding(amstPoly, 11.5, 'warehouse', 0, { tint: [1.0, 1.0, 1.0], shops: true });
       addSolid({ type: 'poly', pts: amstPoly, h: 11.5, name: 'Amsterdam Brewhouse' });
+
+      // 9. Marina Quay West Boutique Waterfront Condos (Queens Quay W & Van de Water Cres)
+      const mq1Pod = rotRect(-474, 461, 13, 10, -0.22);
+      const mq1Tow = rotRect(-474, 461, 10, 8, -0.22);
+      addBuilding(mq1Pod, 16.0, 'brick', 0, { tint: [0.95, 0.85, 0.78], shops: true });
+      addBuilding(mq1Tow, 56.0, 'condo', 16.0, { tint: [0.76, 0.92, 1.08], shops: false });
+      addSolid({ type: 'poly', pts: mq1Pod, h: 56.0, name: 'Marina Quay West Tower 1' });
+      const mq2Pod = rotRect(-438, 462, 12, 9.5, -0.22);
+      const mq2Tow = rotRect(-438, 462, 9.5, 7.5, -0.22);
+      addBuilding(mq2Pod, 14.0, 'stone', 0, { tint: [1.05, 1.02, 0.96], shops: true });
+      addBuilding(mq2Tow, 44.0, 'condo', 14.0, { tint: [0.78, 0.94, 1.12], shops: false });
+      addSolid({ type: 'poly', pts: mq2Pod, h: 44.0, name: 'Marina Quay West Tower 2' });
+
+      // 10. Tip Top Tailors Lofts (637 Lake Shore Blvd W): 1929 Art Deco Heritage + 2005 Glass Penthouse
+      const ttRot = -0.08;
+      const ttBase = rotRect(-1222, 429, 23, 11, ttRot);
+      const ttCrown = rotRect(-1222, 429, 6.5, 8.5, ttRot);
+      const ttLofts = rotRect(-1222, 429, 20.5, 9.2, ttRot);
+      addBuilding(ttBase, 19.5, 'stone', 0, { tint: [1.14, 1.08, 0.96], shops: true, roof: false });
+      addBuilding(ttCrown, 27.5, 'stone', 19.5, { tint: [1.18, 1.12, 1.00], shops: false });
+      addBuilding(ttLofts, 31.0, 'glass', 19.5, { tint: [0.68, 0.88, 1.08], shops: false });
+      addSolid({ type: 'poly', pts: ttBase, h: 31.0, name: 'Tip Top Tailors Lofts' });
+
+      // 11. WaterPark City Condos (Bathurst & Fleet / Lake Shore: Neptune & Atlantis Towers)
+      const wpPod1 = rotRect(-1140, 434, 15, 12, -0.05);
+      const wpTow1 = ellipPoly(-1140, 434, 11.5, 10.5, 16);
+      addBuilding(wpPod1, 14.0, 'brick', 0, { tint: [0.98, 0.88, 0.80], shops: true });
+      addBuilding(wpTow1, 118.0, 'glass', 14.0, { tint: [0.66, 0.88, 1.06], shops: false });
+      addSolid({ type: 'poly', pts: wpPod1, h: 118.0, name: 'WaterPark City Neptune' });
+      roofLights.push(new THREE.Vector3(-1140, 120.0, 434));
+
+      const wpPod2 = rotRect(-1086, 442, 15, 11, -0.10);
+      const wpTow2 = ellipPoly(-1086, 442, 12.0, 9.5, 16);
+      addBuilding(wpPod2, 13.5, 'stone', 0, { tint: [1.04, 1.02, 0.98], shops: true });
+      addBuilding(wpTow2, 98.0, 'condo', 13.5, { tint: [0.74, 0.92, 1.10], shops: false });
+      addSolid({ type: 'poly', pts: wpPod2, h: 98.0, name: 'WaterPark City Atlantis' });
+      roofLights.push(new THREE.Vector3(-1086, 100.0, 442));
+
+      const wpCourt = rotRect(-1113, 424, 10, 7.5, -0.04);
+      addBuilding(wpCourt, 24.0, 'condo', 0, { tint: [0.88, 0.84, 0.80], shops: false });
+      addSolid({ type: 'poly', pts: wpCourt, h: 24.0, name: 'Fleet Courtyard Residence' });
+
+      // 12. Bathurst Quay Waterfront Condos (Harbourside Residences & Kings Landing Ziggurat)
+      const bqPod1 = rotRect(-992, 456, 20, 14, -0.14);
+      const bqTow1A = rotRect(-1003, 452, 9.5, 9.5, -0.14);
+      const bqTow1B = rotRect(-978, 460, 9.0, 9.0, -0.14);
+      addBuilding(bqPod1, 16.5, 'victorian', 0, { tint: [1.06, 0.82, 0.72], shops: true });
+      addBuilding(bqTow1A, 84.0, 'condo', 16.5, { tint: [0.76, 0.90, 1.06], shops: false });
+      addBuilding(bqTow1B, 68.0, 'glass', 16.5, { tint: [0.70, 0.86, 1.04], shops: false });
+      addSolid({ type: 'poly', pts: bqPod1, h: 84.0, name: 'Bathurst Quay Harbourside Condos' });
+      roofLights.push(new THREE.Vector3(-1003, 86.0, 452));
+
+      // Kings Landing Terraced Ziggurat stepping down south toward Lake Ontario
+      const klRot = -0.18;
+      const klTier1 = rotRect(-920, 450, 18, 10, klRot);
+      const klTier2 = rotRect(-917, 469, 17, 9.5, klRot);
+      const klTier3 = rotRect(-914, 488, 16, 9, klRot);
+      addBuilding(klTier1, 48.0, 'concrete', 0, { tint: [1.06, 1.04, 0.98], shops: false });
+      addBuilding(klTier2, 34.0, 'condo', 0, { tint: [0.84, 0.96, 1.08], shops: true });
+      addBuilding(klTier3, 21.0, 'condo', 0, { tint: [0.88, 0.98, 1.08], shops: true });
+      addSolid({ type: 'poly', pts: klTier1, h: 48.0, name: 'Kings Landing Waterfront Upper' });
+      addSolid({ type: 'poly', pts: klTier2, h: 34.0, name: 'Kings Landing Waterfront Terrace' });
+      addSolid({ type: 'poly', pts: klTier3, h: 21.0, name: 'Kings Landing Waterfront Lower' });
+
+      // Harbourside Waterside Townhomes (south of MGT/Queens Quay W, cleanly north of Gardiner)
+      const hsRow = rotRect(-968, 598, 22, 8.5, -0.22);
+      addBuilding(hsRow, 13.5, 'victorian', 0, { tint: [1.08, 0.88, 0.78], shops: false });
+      addSolid({ type: 'poly', pts: hsRow, h: 13.5, name: 'Bathurst Quay Boathouse Terraces' });
     }
 
     if (cutDeckGB.pos.length) {
@@ -13177,7 +13290,7 @@
       }
       buildWaveDeck(150, 494, 24, 11, -0.22, 'SIMCOE WAVEDECK');
       buildWaveDeck(-22, 524, 22, 10, -0.22, 'REES WAVEDECK');
-      buildWaveDeck(-650, 560, 26, 12, -0.10, 'SPADINA WAVEDECK');
+      buildWaveDeck(-650, 622, 26, 12, -0.04, 'SPADINA WAVEDECK');
 
       // ---------- B. HTO Park Beach (Yellow Umbrellas) & Sugar Beach (Candy-Pink Umbrellas) ----------
       const buildBeach = (cx, cz, rx, rz, rotY, umbMat, umbPositions, signTitle, rockColor) => {
@@ -13214,13 +13327,29 @@
         bg.rotation.y = rotY;
         scene.add(bg);
       };
-      // HTO Park West & East sandy beaches with iconic bright yellow umbrellas
-      buildBeach(-205, 588, 28, 14, -0.18, yellowUmbMat, [
-        [-16, -2], [-8, 3], [0, -1], [8, 4], [16, -2], [-12, 6], [4, 6], [14, 5]
+      // HTO Park West & East sandy beaches with iconic bright yellow umbrellas (on dry sculpted shoreline peninsulas)
+      buildBeach(-204, 574, 21, 10.5, -0.16, yellowUmbMat, [
+        [-14, -2], [-7, 2], [0, -1], [7, 3], [14, -2], [-9, 5], [3, 5], [12, 4]
       ], 'HTO PARK • URBAN BEACH', 0);
-      buildBeach(-122, 566, 22, 12, -0.22, yellowUmbMat, [
-        [-12, 0], [-4, 3], [4, -1], [12, 2], [-6, 5], [6, 5]
+      buildBeach(-116, 563, 17, 9.0, -0.22, yellowUmbMat, [
+        [-10, 0], [-3, 3], [4, -1], [10, 2], [-5, 4], [5, 4]
       ], null, 0);
+      // HTO Park sculpted emerald rolling dunes & cedar boardwalk between West & East bays
+      {
+        const htoGrassMat = new THREE.MeshStandardMaterial({ color: 0x2d6a27, roughness: 0.94 });
+        const htoDeckMat = new THREE.MeshStandardMaterial({ color: 0x8a5a36, roughness: 0.82 });
+        const htoGrp = new THREE.Group();
+        [[-224, 568, 12, 7, 1.15], [-186, 564, 11, 6.5, 1.0], [-128, 557, 10, 6, 0.95]].forEach(([hx, hz, rx, rz, hh]) => {
+          const hill = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 10), htoGrassMat);
+          hill.scale.set(rx, hh, rz);
+          hill.position.set(hx, 0.02, hz);
+          htoGrp.add(hill);
+        });
+        const htoWalk = new THREE.Mesh(capGeo([[-238, 564], [-96, 564], [-96, 570], [-238, 570]], () => 0.08), htoDeckMat);
+        htoWalk.receiveShadow = true;
+        htoGrp.add(htoWalk);
+        scene.add(htoGrp);
+      }
       // Sugar Beach (11 Dockside Dr, just east of Redpath Sugar) with iconic candy-pink umbrellas
       buildBeach(1112, 102, 24, 14, -0.35, pinkUmbMat, [
         [-14, -2], [-6, 2], [2, -2], [10, 3], [16, -1], [-10, 6], [0, 5], [9, 6]
@@ -13229,16 +13358,17 @@
       // ---------- C. The Power Plant Contemporary Art Gallery Smokestack & Harbourfront Centre ----------
       {
         const ppg = new THREE.Group();
-        // 38m tall historic 1926 red-brick powerhouse smokestack at (137, 520)
+        // 38m tall historic 1926 red-brick powerhouse smokestack beside gallery west wall (124.2, 522.0)
         const stack = new THREE.Mesh(new THREE.CylinderGeometry(1.65, 2.35, 38, 16), smokestackBrickMat);
-        stack.position.set(137, 19, 520);
+        stack.position.set(124.2, 19, 522.0);
         ppg.add(stack);
         const cap = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 1.75, 1.4, 16), railSteelMat);
-        cap.position.set(137, 38.2, 520);
+        cap.position.set(124.2, 38.2, 522.0);
         ppg.add(cap);
+        addSolid({ type: 'circle', x: 124.2, z: 522.0, r: 2.5 });
         // Vertical "THE POWER PLANT" sign on the smokestack & gallery facade
         const ppSign = signMesh(['THE POWER PLANT', 'CONTEMPORARY ART GALLERY'], 11, 1.6, { bg: '#7f1d1d', fg: '#ffffff', borderColor: '#ef4444', size: 60 });
-        ppSign.position.set(137, 16.5, 510.5);
+        ppSign.position.set(137, 15.5, 510.2);
         ppSign.rotation.y = Math.PI;
         ppg.add(ppSign);
 
@@ -13270,6 +13400,18 @@
         amstSign.rotation.y = Math.PI - 0.22;
         ppg.add(amstSign);
 
+        // West Waterfront Condominium Architectural Signs
+        const ttSign = signMesh(['TIP TOP TAILORS LOFTS', '637 LAKE SHORE BLVD W • HERITAGE 1929'], 15, 1.9, { bg: '#1e1b4b', fg: '#fde68a', borderColor: '#f59e0b', size: 54 });
+        ttSign.position.set(-1222, 22.5, 441.5);
+        ppg.add(ttSign);
+        const wpSign = signMesh(['WATERPARK CITY', 'NEPTUNE & ATLANTIS RESIDENCES'], 14, 1.8, { bg: '#0c4a6e', fg: '#e0f2fe', borderColor: '#38bdf8', size: 54 });
+        wpSign.position.set(-1113, 15.8, 449.5);
+        ppg.add(wpSign);
+        const mqSign = signMesh(['MARINA QUAY WEST', 'HARBOURFRONT RESIDENCES'], 13, 1.6, { bg: '#0f172a', fg: '#bae6fd', borderColor: '#0284c7', size: 52 });
+        mqSign.position.set(-456, 17.5, 473);
+        mqSign.rotation.y = -0.22;
+        ppg.add(mqSign);
+
         // Ice Condos signature lime-green & white sculptural "cheese-hole" rooftop canopies
         const iceCanopyMat1 = new THREE.MeshStandardMaterial({ color: 0x84cc16, emissive: 0x65a30d, emissiveIntensity: 0.45, roughness: 0.3, side: THREE.DoubleSide });
         const iceCanopyMat2 = new THREE.MeshStandardMaterial({ color: 0xf8fafc, emissive: 0x38bdf8, emissiveIntensity: 0.35, roughness: 0.3, side: THREE.DoubleSide });
@@ -13286,47 +13428,43 @@
       }
 
       // ---------- Harbour Square Park (Waterfront Promenade, Sundial Plaza, Weeping Willows) ----------
-      // Serene waterfront park & promenade between York Slip & Jack Layton Ferry Terminal (x=410..550, z=470..518).
-      // Features the weathered cedar boardwalk along the lake,
-      // circular salt-and-pepper granite Sundial Plaza with the iconic 2.4m angled bronze gnomon sculpture,
-      // sculpted rolling green lawn berms, weeping willow trees draping toward Lake Ontario,
-      // marine-grade teak benches, cast-iron mooring bollards, and waterfront trail signage.
+      // Placed cleanly on open waterfront parklands south & east of Harbour Sq loop (x=492..578, z=496..522).
       {
         const hspGrp = new THREE.Group();
 
-        // 1. Weathered Cedar Waterfront Boardwalk along the Quay (z=502 to 516)
+        // 1. Weathered Cedar Waterfront Boardwalk along the Quay edge (z=513 to 522)
         const bwalkPoly = [
-          [408, 502], [552, 502], [552, 516], [408, 516]
+          [492, 513], [576, 513], [588, 495], [576, 492], [566, 510], [492, 510]
         ];
         const bwalkMat = new THREE.MeshStandardMaterial({
           color: 0x857564, roughness: 0.85, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1
         });
-        const bwalkMesh = new THREE.Mesh(capGeo(bwalkPoly, () => 0.12), bwalkMat);
+        const bwalkMesh = new THREE.Mesh(capGeo([[492, 512], [576, 512], [576, 521], [492, 521]], () => 0.12), bwalkMat);
         bwalkMesh.receiveShadow = true;
         hspGrp.add(bwalkMesh);
 
         // Cast-iron mooring bollards along the boardwalk edge
         const bollardMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.85, roughness: 0.3 });
-        for (let bx = 415; bx <= 545; bx += 18) {
+        for (let bx = 496; bx <= 574; bx += 16) {
           const bollard = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.28, 0.75, 12), bollardMat);
-          bollard.position.set(bx, 0.48, 514.8);
+          bollard.position.set(bx, 0.48, 519.8);
           hspGrp.add(bollard);
         }
 
         // Marine safety cable posts
         const cableMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.9, roughness: 0.2 });
-        for (let rx = 412; rx <= 548; rx += 6) {
+        for (let rx = 494; rx <= 574; rx += 6) {
           const post = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.1, 8), cableMat);
-          post.position.set(rx, 0.65, 515.2);
+          post.position.set(rx, 0.65, 520.2);
           hspGrp.add(post);
         }
 
-        // 2. Sculpted Rolling Green Lawn Berms (z=470 to 502)
+        // 2. Sculpted Rolling Green Lawn Berms (z=498 to 513)
         const hspGrassMat = new THREE.MeshStandardMaterial({
           color: 0x26551e, roughness: 0.95, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1
         });
         const hspGrassMesh = new THREE.Mesh(
-          capGeo([[410, 470], [550, 470], [550, 502], [410, 502]], () => 0.08),
+          capGeo([[492, 498], [576, 498], [576, 513], [492, 513]], () => 0.08),
           hspGrassMat
         );
         hspGrassMesh.receiveShadow = true;
@@ -13335,8 +13473,8 @@
         // Undulating grassy berms
         const bermGrassMat = new THREE.MeshStandardMaterial({ color: 0x2d6824, roughness: 0.95 });
         [
-          { cx: 435, cz: 486, rx: 18, rz: 10, h: 1.1 },
-          { cx: 520, cz: 486, rx: 20, rz: 11, h: 1.2 }
+          { cx: 500, cz: 506, rx: 10, rz: 5.5, h: 0.85 },
+          { cx: 556, cz: 505, rx: 14, rz: 6.0, h: 1.0 }
         ].forEach(bm => {
           const mound = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), bermGrassMat);
           mound.scale.set(bm.rx, bm.h, bm.rz);
@@ -13344,12 +13482,12 @@
           hspGrp.add(mound);
         });
 
-        // 3. Circular Salt-and-Pepper Granite Sundial Plaza at [472, 494]
-        const spx = 472.0, spz = 494.0;
+        // 3. Circular Salt-and-Pepper Granite Sundial Plaza at [522, 509]
+        const spx = 522.0, spz = 509.0;
         const sundialPlazaMat = new THREE.MeshStandardMaterial({
           color: 0xd1d5db, roughness: 0.75, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
         });
-        const sdPlaza = new THREE.Mesh(new THREE.CircleGeometry(9.0, 32), sundialPlazaMat);
+        const sdPlaza = new THREE.Mesh(new THREE.CircleGeometry(7.2, 32), sundialPlazaMat);
         sdPlaza.rotation.x = -Math.PI / 2;
         sdPlaza.position.set(spx, 0.14, spz);
         sdPlaza.receiveShadow = true;
@@ -13357,24 +13495,24 @@
 
         // Circular granite seating curb around the plaza
         const curbMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.65 });
-        const sdCurb = new THREE.Mesh(new THREE.TorusGeometry(8.8, 0.28, 8, 32), curbMat);
+        const sdCurb = new THREE.Mesh(new THREE.TorusGeometry(7.0, 0.24, 8, 32), curbMat);
         sdCurb.rotation.x = Math.PI / 2;
-        sdCurb.position.set(spx, 0.35, spz);
+        sdCurb.position.set(spx, 0.32, spz);
         hspGrp.add(sdCurb);
 
         // Monumental Bronze Sundial Sculpture (2.4m tall angled gnomon at 43.6° latitude)
         const gnomonBronzeMat = new THREE.MeshStandardMaterial({
           color: 0xd4af37, metalness: 0.85, roughness: 0.25
         });
-        const dialRing = new THREE.Mesh(new THREE.TorusGeometry(3.6, 0.12, 8, 24), gnomonBronzeMat);
+        const dialRing = new THREE.Mesh(new THREE.TorusGeometry(3.2, 0.12, 8, 24), gnomonBronzeMat);
         dialRing.rotation.x = Math.PI / 2;
         dialRing.position.set(spx, 0.18, spz);
         hspGrp.add(dialRing);
 
         const gnomonShape = new THREE.Shape();
-        gnomonShape.moveTo(-1.6, 0);
-        gnomonShape.lineTo(1.6, 0);
-        gnomonShape.lineTo(-1.6, 2.4);
+        gnomonShape.moveTo(-1.5, 0);
+        gnomonShape.lineTo(1.5, 0);
+        gnomonShape.lineTo(-1.5, 2.3);
         gnomonShape.closePath();
         const gnomonGeo = new THREE.ExtrudeGeometry(gnomonShape, { depth: 0.18, bevelEnabled: false });
         gnomonGeo.translate(0, 0, -0.09);
@@ -13387,21 +13525,21 @@
         const willowFoliageMat = new THREE.MeshStandardMaterial({ color: 0x3d7a2e, roughness: 0.9 });
         const willowTrunkMat = new THREE.MeshStandardMaterial({ color: 0x473c35, roughness: 0.8 });
         const willowPositions = [
-          [422, 498, 4.2], [445, 501, 4.5], [498, 501, 4.5], [535, 498, 4.2],
-          [430, 478, 3.8], [525, 478, 4.0]
+          [496, 511, 3.8], [508, 511, 3.6], [538, 511, 3.8], [556, 510, 4.0],
+          [572, 505, 3.6], [546, 502, 3.4]
         ];
         willowPositions.forEach(([wx, wz, rad]) => {
-          const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.38, 4.2, 8), willowTrunkMat);
-          trunk.position.set(wx, 2.1, wz);
+          const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.36, 4.0, 8), willowTrunkMat);
+          trunk.position.set(wx, 2.0, wz);
           hspGrp.add(trunk);
-          const dome = new THREE.Mesh(new THREE.SphereGeometry(rad, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.7), willowFoliageMat);
-          dome.position.set(wx, 4.8, wz);
+          const dome = new THREE.Mesh(new THREE.SphereGeometry(rad, 12, 9, 0, Math.PI * 2, 0, Math.PI * 0.7), willowFoliageMat);
+          dome.position.set(wx, 4.6, wz);
           hspGrp.add(dome);
-          for (let fi = 0; fi < 8; fi++) {
-            const fang = (fi / 8) * Math.PI * 2;
-            const fx = wx + Math.cos(fang) * (rad * 0.85), fz = wz + Math.sin(fang) * (rad * 0.85);
-            const frond = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.04, 2.2, 6), willowFoliageMat);
-            frond.position.set(fx, 3.2, fz);
+          for (let fi = 0; fi < 6; fi++) {
+            const fang = (fi / 6) * Math.PI * 2;
+            const fx = wx + Math.cos(fang) * (rad * 0.82), fz = wz + Math.sin(fang) * (rad * 0.82);
+            const frond = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.04, 2.0, 6), willowFoliageMat);
+            frond.position.set(fx, 3.1, fz);
             hspGrp.add(frond);
           }
         });
@@ -13410,8 +13548,8 @@
         const teakSeatMat = new THREE.MeshStandardMaterial({ color: 0x9a3412, roughness: 0.75 });
         const sSteelMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.9, roughness: 0.2 });
         [
-          [440, 506, Math.PI], [455, 506, Math.PI], [488, 506, Math.PI], [505, 506, Math.PI],
-          [462, 490, 0.8], [482, 490, -0.8]
+          [504, 516, Math.PI], [518, 516, Math.PI], [534, 516, Math.PI], [552, 516, Math.PI],
+          [512, 504, 0.8], [532, 504, -0.8]
         ].forEach(([bx, bz, rotY]) => {
           const bg = new THREE.Group();
           const frame = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.45, 0.7), sSteelMat);
@@ -13425,15 +13563,447 @@
           hspGrp.add(bg);
         });
 
-        // Park Entrance Sign along Queens Quay West
+        // Park Entrance Sign along Queens Quay Promenade
         const hspSign = signMesh([
           'HARBOUR SQUARE PARK',
-          'TORONTO BAY WATERFRONT • LAKE ONTARIO PROMENADE'
-        ], 16, 2.2, { bg: '#0c4a6e', fg: '#7dd3fc', borderColor: '#0284c7', size: 56 });
-        hspSign.position.set(472, 2.4, 472);
+          'TORONTO BAY WATERFRONT • SUNDIAL PLAZA'
+        ], 15, 2.0, { bg: '#0c4a6e', fg: '#7dd3fc', borderColor: '#0284c7', size: 56 });
+        hspSign.position.set(522, 2.6, 500.5);
+        hspSign.rotation.y = Math.PI;
         hspGrp.add(hspSign);
 
         scene.add(hspGrp);
+      }
+
+      // ---------- Toronto Music Garden (Bach-Inspired Waterfront Garden & Copper Music Pavilion) ----------
+      {
+        const mgGrp = new THREE.Group();
+        const mgGrassMat = new THREE.MeshStandardMaterial({ color: 0x2a6623, roughness: 0.94, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+        const mgPathMat = new THREE.MeshStandardMaterial({ color: 0xc2b29b, roughness: 0.88, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+        const copperPatinaMat = new THREE.MeshStandardMaterial({ color: 0x2dd4bf, metalness: 0.35, roughness: 0.42 });
+        const darkIronMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.78, roughness: 0.32 });
+        const graniteMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.8 });
+        const flowerGoldMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.85 });
+        const wildFlowerMat = new THREE.MeshStandardMaterial({ color: 0xe879f9, roughness: 0.85 });
+
+        // Base sculpted lawn bed along harbour (-608..-428, z=575..610)
+        const mgLawn = new THREE.Mesh(
+          capGeo([[-608, 576], [-520, 574], [-428, 575], [-428, 606], [-520, 612], [-608, 608]], () => 0.05),
+          mgGrassMat
+        );
+        mgLawn.receiveShadow = true;
+        mgGrp.add(mgLawn);
+
+        // Sinuous lakeside crushed-granite promenade walk
+        const mgWalk = new THREE.Mesh(
+          capGeo([[-606, 594], [-560, 597], [-522, 588], [-482, 593], [-432, 591], [-432, 595], [-482, 597], [-522, 592], [-560, 601], [-606, 598]], () => 0.08),
+          mgPathMat
+        );
+        mgWalk.receiveShadow = true;
+        mgGrp.add(mgWalk);
+
+        // 1. Prelude: undulating river-bed stone & ornamental grass wave at (-590, 594)
+        for (let pi = 0; pi < 5; pi++) {
+          const ridge = new THREE.Mesh(new THREE.BoxGeometry(6.5, 0.42, 2.2), pi % 2 === 0 ? graniteMat : mgGrassMat);
+          ridge.position.set(-602 + pi * 6.5, 0.22, 588 + Math.sin(pi * 1.1) * 4.5);
+          ridge.rotation.y = (pi % 2 === 0 ? 0.24 : -0.22);
+          mgGrp.add(ridge);
+        }
+
+        // 2. Gigue: concentric stepped grassy spiral amphitheatre berm at (-558, 589)
+        [0, 1, 2].forEach(lvl => {
+          const step = new THREE.Mesh(new THREE.CylinderGeometry(8.5 - lvl * 2.4, 9.2 - lvl * 2.4, 0.45, 18), mgGrassMat);
+          step.scale.set(1.25, 1, 0.85);
+          step.position.set(-558, 0.22 + lvl * 0.42, 589);
+          mgGrp.add(step);
+        });
+
+        // 3. Menuett: circular granite plaza & iconic Copper-Domed Open-Air Music Pavilion at (-522, 592)
+        const pavX = -522, pavZ = 592;
+        const pavPlaza = new THREE.Mesh(new THREE.CircleGeometry(8.2, 28), graniteMat);
+        pavPlaza.rotation.x = -Math.PI / 2;
+        pavPlaza.position.set(pavX, 0.1, pavZ);
+        pavPlaza.receiveShadow = true;
+        mgGrp.add(pavPlaza);
+        for (let k = 0; k < 6; k++) {
+          const ang = (k / 6) * Math.PI * 2;
+          const px = pavX + Math.cos(ang) * 4.2, pz = pavZ + Math.sin(ang) * 4.2;
+          const col = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 4.4, 8), darkIronMat);
+          col.position.set(px, 2.2, pz);
+          mgGrp.add(col);
+          addSolid({ type: 'circle', x: px, z: pz, r: 0.45 });
+        }
+        const pavRing = new THREE.Mesh(new THREE.TorusGeometry(4.2, 0.16, 8, 24), darkIronMat);
+        pavRing.rotation.x = Math.PI / 2;
+        pavRing.position.set(pavX, 4.4, pavZ);
+        mgGrp.add(pavRing);
+        const pavDome = new THREE.Mesh(new THREE.SphereGeometry(4.3, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.48), copperPatinaMat);
+        pavDome.position.set(pavX, 4.35, pavZ);
+        mgGrp.add(pavDome);
+        const pavFinial = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1.4, 8), copperPatinaMat);
+        pavFinial.position.set(pavX, 8.9, pavZ);
+        mgGrp.add(pavFinial);
+
+        // 4. Courante: swirling wildflower & ornamental grass beds at (-484, 590)
+        const cMound = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 10), mgGrassMat);
+        cMound.scale.set(11, 0.9, 6.5);
+        cMound.position.set(-484, 0.05, 588);
+        mgGrp.add(cMound);
+        for (let fi = 0; fi < 10; fi++) {
+          const ang = fi * 0.65;
+          const patch = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 1.1, 0.35, 8), fi % 2 === 0 ? flowerGoldMat : wildFlowerMat);
+          patch.position.set(-484 + Math.cos(ang) * (2.5 + fi * 0.55), 0.35, 588 + Math.sin(ang) * (1.8 + fi * 0.35));
+          mgGrp.add(patch);
+        }
+
+        // 5. Sarabande (Poet's Corner): sculpted Muskoka boulders & circular reflection stone at (-448, 592)
+        const sarDisc = new THREE.Mesh(new THREE.CircleGeometry(5.2, 20), mgPathMat);
+        sarDisc.rotation.x = -Math.PI / 2;
+        sarDisc.position.set(-448, 0.1, 592);
+        mgGrp.add(sarDisc);
+        for (let bi = 0; bi < 6; bi++) {
+          const ang = (bi / 6) * Math.PI * 2 + 0.3;
+          const bx = -448 + Math.cos(ang) * 5.6, bz = 592 + Math.sin(ang) * 4.4;
+          const boulder = new THREE.Mesh(new THREE.DodecahedronGeometry(1.1 + (bi % 2) * 0.35, 0), graniteMat);
+          boulder.scale.set(1.2, 0.72, 1.0);
+          boulder.position.set(bx, 0.55, bz);
+          mgGrp.add(boulder);
+        }
+
+        const mgSign = signMesh([
+          'TORONTO MUSIC GARDEN',
+          'INSPIRED BY BACH SUITE NO. 1 • QUEENS QUAY W'
+        ], 15, 2.0, { bg: '#064e3b', fg: '#fde68a', borderColor: '#10b981', size: 54 });
+        mgSign.position.set(-522, 2.5, 576.5);
+        mgSign.rotation.y = Math.PI;
+        mgGrp.add(mgSign);
+
+        scene.add(mgGrp);
+      }
+
+      // ---------- West End Waterfront: Little Norway Park, Ireland Park, Canada Malting & Coronation Park ----------
+      {
+        const westParkGrp = new THREE.Group();
+        const turfMat = new THREE.MeshStandardMaterial({ color: 0x265d20, roughness: 0.94, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+        const granitePathMat = new THREE.MeshStandardMaterial({ color: 0xb8afa0, roughness: 0.88, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+        const limestoneMat = new THREE.MeshStandardMaterial({ color: 0xd6d3cb, roughness: 0.85 });
+        const darkKilkennyMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.78 });
+        const bronzeMat = new THREE.MeshStandardMaterial({ color: 0x6b4c2a, metalness: 0.65, roughness: 0.35 });
+        const steelWingMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.85, roughness: 0.22 });
+        const siloConcMat = new THREE.MeshStandardMaterial({ color: 0xdad5c7, roughness: 0.82 });
+        const corleckBrickMat = new THREE.MeshStandardMaterial({ color: 0x993e2e, roughness: 0.84 });
+        const glassTowerMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0ea5e9, emissiveIntensity: 0.45, roughness: 0.2, transparent: true, opacity: 0.86 });
+        const woodBenchMat = new THREE.MeshStandardMaterial({ color: 0x8c4a27, roughness: 0.78 });
+        const benchIronMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.8, roughness: 0.3 });
+
+        const addParkBench = (bx, bz, rotY) => {
+          if (onRoad(bx, bz, 1.5)) return;
+          const g = new THREE.Group();
+          const legs = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.42, 0.6), benchIronMat);
+          legs.position.y = 0.21;
+          g.add(legs);
+          const seat = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.12, 0.56), woodBenchMat);
+          seat.position.y = 0.46;
+          g.add(seat);
+          const back = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.38, 0.1), woodBenchMat);
+          back.position.set(0, 0.7, -0.24);
+          g.add(back);
+          g.position.set(bx, 0.04, bz);
+          g.rotation.y = rotY;
+          westParkGrp.add(g);
+        };
+
+        // 1. LITTLE NORWAY PARK (right northwest of Billy Bishop Airport Ferry, -1246..-1064, z=486..592)
+        const lnTurf = new THREE.Mesh(
+          capGeo([[-1244, 492], [-1182, 474], [-1066, 514], [-1062, 592], [-1242, 592]], () => 0.02),
+          turfMat
+        );
+        lnTurf.receiveShadow = true;
+        westParkGrp.add(lnTurf);
+
+        // Central Little Norway Circular WWII Memorial Plaza & Royal Norwegian Air Force Monument (-1158, 558)
+        const lnx = -1158, lnz = 558;
+        const lnPlaza = new THREE.Mesh(new THREE.CircleGeometry(8.5, 28), granitePathMat);
+        lnPlaza.rotation.x = -Math.PI / 2;
+        lnPlaza.position.set(lnx, 0.06, lnz);
+        lnPlaza.receiveShadow = true;
+        westParkGrp.add(lnPlaza);
+
+        // Diagonal walkway connecting Memorial Plaza to Martin Goodman Trail & Eireann Quay
+        const lnWalk1 = new THREE.Mesh(capGeo([[-1160, 556], [-1110, 540], [-1068, 560], [-1070, 564], [-1110, 544], [-1156, 560]], () => 0.05), granitePathMat);
+        westParkGrp.add(lnWalk1);
+
+        // Granite Cairn & Sweeping RNoAF Wing Sculpture
+        const cairnBase = new THREE.Mesh(new THREE.CylinderGeometry(2.0, 2.4, 1.3, 8), darkKilkennyMat);
+        cairnBase.position.set(lnx, 0.68, lnz);
+        westParkGrp.add(cairnBase);
+        const wingBlade = new THREE.Mesh(new THREE.BoxGeometry(0.45, 5.2, 1.8), steelWingMat);
+        wingBlade.position.set(lnx, 3.6, lnz);
+        wingBlade.rotation.z = -0.18;
+        westParkGrp.add(wingBlade);
+        addSolid({ type: 'circle', x: lnx, z: lnz, r: 2.5, name: 'Little Norway Memorial Cairn' });
+
+        // North Sports Lawn Diamond & Children's Pavilion in west Little Norway (-1208, 534)
+        const pavRoof = new THREE.Mesh(new THREE.ConeGeometry(4.2, 2.2, 4), corleckBrickMat);
+        pavRoof.position.set(-1212, 4.2, 536);
+        pavRoof.rotation.y = Math.PI / 4;
+        westParkGrp.add(pavRoof);
+        [[-1214.2, 533.8], [-1209.8, 533.8], [-1214.2, 538.2], [-1209.8, 538.2]].forEach(([px, pz]) => {
+          const post = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 3.2, 6), darkKilkennyMat);
+          post.position.set(px, 1.6, pz);
+          westParkGrp.add(post);
+        });
+        addSolid({ type: 'circle', x: -1212, z: 536, r: 2.8, name: 'Little Norway Park Pavilion' });
+
+        const lnSign = signMesh([
+          'LITTLE NORWAY PARK',
+          'WWII ROYAL NORWEGIAN AIR FORCE MEMORIAL • 1940–45'
+        ], 15, 2.1, { bg: '#1e293b', fg: '#f8fafc', borderColor: '#ef4444', size: 54 });
+        lnSign.position.set(-1088, 2.5, 562);
+        lnSign.rotation.y = -0.5;
+        westParkGrp.add(lnSign);
+
+        [[-1170, 562, 0.4], [-1146, 562, -0.4], [-1132, 578, Math.PI], [-1184, 578, Math.PI]].forEach(([bx, bz, r]) => addParkBench(bx, bz, r));
+
+        // 2. CANADA MALTING SILOS & THE CORLECK BUILDING (-1148..-1076, z=600..644, cleanly north of Gardiner)
+        const maltingGrp = new THREE.Group();
+        const siloR = 2.85, siloH = 34.0;
+        for (let row = 0; row < 3; row++) {
+          for (let col = 0; col < 5; col++) {
+            const sx = -1122 + col * 6.0;
+            const sz = 616 + row * 5.8;
+            const silo = new THREE.Mesh(new THREE.CylinderGeometry(siloR, siloR, siloH, 14), siloConcMat);
+            silo.position.set(sx, siloH / 2, sz);
+            silo.castShadow = true;
+            maltingGrp.add(silo);
+          }
+        }
+        // Silo bridge gallery deck & elevated malting headhouse cupola (43m)
+        const binDeck = new THREE.Mesh(new THREE.BoxGeometry(28.5, 3.2, 16.0), siloConcMat);
+        binDeck.position.set(-1110, 35.4, 622);
+        maltingGrp.add(binDeck);
+        const headhouse = new THREE.Mesh(new THREE.BoxGeometry(11.0, 7.5, 9.5), siloConcMat);
+        headhouse.position.set(-1104, 40.5, 622);
+        maltingGrp.add(headhouse);
+        const boxPoly = (cx, cz, hw, hd) => [
+          [cx - hw, cz - hd], [cx + hw, cz - hd], [cx + hw, cz + hd], [cx - hw, cz + hd]
+        ];
+        addSolid({ type: 'poly', pts: boxPoly(-1110, 622, 15.2, 9.0), h: 43.0, name: 'Canada Malting Silos' });
+
+        // Historic 1928 Brick Corleck Administration Building attached west (-1140, 616)
+        const corleck = new THREE.Mesh(new THREE.BoxGeometry(12.5, 13.0, 9.5), corleckBrickMat);
+        corleck.position.set(-1140, 6.5, 616);
+        corleck.castShadow = true;
+        maltingGrp.add(corleck);
+        const corleckParapet = new THREE.Mesh(new THREE.BoxGeometry(13.2, 1.2, 10.2), limestoneMat);
+        corleckParapet.position.set(-1140, 13.4, 616);
+        maltingGrp.add(corleckParapet);
+        addSolid({ type: 'poly', pts: boxPoly(-1140, 616, 6.6, 5.1), h: 14.0, name: 'The Corleck Building' });
+
+        const maltSign = signMesh([
+          'CANADA MALTING SILOS • EST. 1928',
+          'THE CORLECK BUILDING & BATHURST QUAY HERITAGE'
+        ], 16, 2.2, { bg: '#292524', fg: '#fde68a', borderColor: '#d97706', size: 52 });
+        maltSign.position.set(-1110, 29.0, 613.5);
+        maltSign.rotation.y = Math.PI;
+        maltingGrp.add(maltSign);
+        westParkGrp.add(maltingGrp);
+
+        // 3. IRELAND PARK (Kilkenny Limestone Wall, 5 Emigrant Bronze Sculptures, Stacked-Glass Beacon at -1215..-1156, z=600..654)
+        const ipPlaza = new THREE.Mesh(
+          capGeo([[-1215, 602], [-1156, 602], [-1156, 650], [-1215, 650]], () => 0.05),
+          granitePathMat
+        );
+        ipPlaza.receiveShadow = true;
+        westParkGrp.add(ipPlaza);
+
+        // Kilkenny limestone relief wall (-1186, 616)
+        const irWall = new THREE.Mesh(new THREE.BoxGeometry(16.0, 3.6, 1.4), darkKilkennyMat);
+        irWall.position.set(-1186, 1.8, 616);
+        westParkGrp.add(irWall);
+        addSolid({ type: 'poly', pts: boxPoly(-1186, 616, 8.2, 0.9), h: 3.6, name: 'Ireland Park Kilkenny Limestone Wall' });
+
+        // Illuminated 8.5m architectural stacked-glass memorial beacon (-1164, 622)
+        const beaconCore = new THREE.Mesh(new THREE.BoxGeometry(1.7, 8.4, 1.7), glassTowerMat);
+        beaconCore.position.set(-1164, 4.2, 622);
+        westParkGrp.add(beaconCore);
+        addSolid({ type: 'circle', x: -1164, z: 622, r: 1.35, name: 'Ireland Park Glass Beacon' });
+
+        // Five sculpted bronze Irish Famine Emigrant figures gazing inland along the quay promenade
+        [[-1200, 636], [-1192, 634], [-1184, 637], [-1176, 634], [-1168, 638]].forEach(([sx, sz], idx) => {
+          const fig = new THREE.Group();
+          const plinth = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 0.72, 0.55, 10), limestoneMat);
+          plinth.position.y = 0.28;
+          fig.add(plinth);
+          const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.30, 1.35 + (idx % 2) * 0.15, 8), bronzeMat);
+          torso.position.y = 1.25;
+          fig.add(torso);
+          const head = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), bronzeMat);
+          head.position.y = 2.08 + (idx % 2) * 0.12;
+          fig.add(head);
+          fig.position.set(sx, 0.05, sz);
+          westParkGrp.add(fig);
+          addSolid({ type: 'circle', x: sx, z: sz, r: 0.8 });
+        });
+
+        const ipSign = signMesh([
+          'IRELAND PARK • 1847 FAMINE MEMORIAL',
+          'ROWAN GILLESPIE BRONZE SCULPTURES & GLASS TOWER'
+        ], 15, 2.0, { bg: '#064e3b', fg: '#ffffff', borderColor: '#34d399', size: 52 });
+        ipSign.position.set(-1186, 2.9, 615.0);
+        ipSign.rotation.y = Math.PI;
+        westParkGrp.add(ipSign);
+
+        // 4. CORONATION PARK (West Lawn -1520..-1424, z=418..470 & East Royal Oak Lawn -1356..-1272, z=462..556)
+        const corWestTurf = new THREE.Mesh(
+          capGeo([[-1520, 418], [-1424, 418], [-1424, 470], [-1520, 470]], () => 0.03),
+          turfMat
+        );
+        corWestTurf.receiveShadow = true;
+        westParkGrp.add(corWestTurf);
+
+        const corEastTurf = new THREE.Mesh(
+          capGeo([[-1356, 464], [-1272, 464], [-1272, 554], [-1356, 554]], () => 0.03),
+          turfMat
+        );
+        corEastTurf.receiveShadow = true;
+        westParkGrp.add(corEastTurf);
+
+        // Radial crushed-granite Royal Oak Alleys converging at the 1937 Victory Cenotaph (-1314, 512)
+        const corWalkEW = new THREE.Mesh(capGeo([[-1354, 510], [-1274, 510], [-1274, 514], [-1354, 514]], () => 0.05), granitePathMat);
+        const corWalkNS = new THREE.Mesh(capGeo([[-1316, 466], [-1312, 466], [-1312, 552], [-1316, 552]], () => 0.05), granitePathMat);
+        const corLakesideWalk = new THREE.Mesh(capGeo([[-1354, 544], [-1274, 544], [-1274, 549], [-1354, 549]], () => 0.06), granitePathMat);
+        westParkGrp.add(corWalkEW, corWalkNS, corLakesideWalk);
+
+        const corPlaza = new THREE.Mesh(new THREE.CircleGeometry(7.0, 24), granitePathMat);
+        corPlaza.rotation.x = -Math.PI / 2;
+        corPlaza.position.set(-1314, 0.07, 512);
+        westParkGrp.add(corPlaza);
+
+        // 1937 Coronation Victory Cenotaph Column
+        const vStep = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 3.0, 1.1, 8), limestoneMat);
+        vStep.position.set(-1314, 0.55, 512);
+        const vShaft = new THREE.Mesh(new THREE.BoxGeometry(1.6, 5.2, 1.6), limestoneMat);
+        vShaft.position.set(-1314, 3.6, 512);
+        const vUrn = new THREE.Mesh(new THREE.SphereGeometry(0.9, 12, 10), bronzeMat);
+        vUrn.position.set(-1314, 6.7, 512);
+        westParkGrp.add(vStep, vShaft, vUrn);
+        addSolid({ type: 'circle', x: -1314, z: 512, r: 2.8, name: 'Coronation Park 1937 Cenotaph' });
+
+        const corSignE = signMesh([
+          'CORONATION PARK • ROYAL OAK GROVE',
+          'ESTABLISHED 1937 • LAKE SHORE BLVD W'
+        ], 15, 2.0, { bg: '#14532d', fg: '#fef08a', borderColor: '#22c55e', size: 54 });
+        corSignE.position.set(-1314, 2.5, 472);
+        corSignE.rotation.y = Math.PI;
+        westParkGrp.add(corSignE);
+
+        const corSignW = signMesh([
+          'CORONATION PARK • WEST LAWN',
+          'MARTIN GOODMAN WATERFRONT TRAIL'
+        ], 14, 1.9, { bg: '#14532d', fg: '#fef08a', borderColor: '#22c55e', size: 54 });
+        corSignW.position.set(-1472, 2.4, 462);
+        corSignW.rotation.y = Math.PI;
+        westParkGrp.add(corSignW);
+
+        [[-1340, 545, Math.PI], [-1322, 545, Math.PI], [-1296, 545, Math.PI], [-1280, 545, Math.PI],
+         [-1492, 464, Math.PI], [-1452, 464, Math.PI]].forEach(([bx, bz, r]) => addParkBench(bx, bz, r));
+
+        scene.add(westParkGrp);
+      }
+
+      // ---------- Instanced Waterfront Park Tree Canopy & Promenade Globe Lamps (Low Draw Calls) ----------
+      {
+        const wfTreeList = [];
+        const wfLampList = [];
+        const addWfTree = (tx, tz, sc, hexCol) => {
+          if (onRoad(tx, tz, 2.0) || nearStreetcarTrack(tx, tz, 2.8) || isHarbourWater(tx, tz, 1.2)) return;
+          if (!canMoveTo(tx, tz, 0.75, 0.2)) return;
+          wfTreeList.push([tx, tz, sc || 1.0, hexCol || 0x2f7024]);
+          addSolid({ type: 'circle', x: tx, z: tz, r: 0.45 });
+        };
+        const addWfLamp = (lx, lz) => {
+          if (onRoad(lx, lz, 1.0) || nearStreetcarTrack(lx, lz, 2.2) || isHarbourWater(lx, lz, 0.8)) return;
+          if (!canMoveTo(lx, lz, 0.45, 0.2)) return;
+          wfLampList.push([lx, lz]);
+        };
+
+        // A. Downtown Harbourfront Trees & Lamps (Sugar Beach, Queens Quay Promenade, HTO Park, Music Garden)
+        [[1096, 86, 1.1, 0x3a7d2c], [1128, 86, 1.05, 0x2e6f22], [1114, 72, 1.2, 0x458b34]].forEach(t => addWfTree(...t));
+        for (let px = -30; px <= 275; px += 34) {
+          addWfTree(px, 505, 1.0, 0x357a29);
+          addWfLamp(px + 14, 515);
+        }
+        [[-228, 558, 1.15, 0x2f7024], [-212, 555, 1.0, 0x3d822e], [-186, 554, 1.1, 0x2b6821],
+         [-136, 550, 1.05, 0x357a29], [-104, 550, 1.1, 0x438832]].forEach(t => addWfTree(...t));
+        [[-236, 566], [-200, 565], [-164, 565], [-128, 560], [-98, 560]].forEach(l => addWfLamp(...l));
+
+        // B. Toronto Music Garden Tree Grove & Promenade Lamps
+        [[-604, 582, 1.25, 0x2a6620], [-582, 580, 1.1, 0x3f842f], [-566, 603, 1.15, 0x5d8d2d],
+         [-540, 580, 1.2, 0x2e6f22], [-504, 582, 1.15, 0x438832], [-494, 603, 1.1, 0x2a6620],
+         [-466, 581, 1.2, 0x3b7f2b], [-438, 582, 1.15, 0x4d8c34], [-436, 602, 1.05, 0x2e6f22]].forEach(t => addWfTree(...t));
+        [[-600, 594], [-560, 598], [-522, 582], [-482, 594], [-442, 592]].forEach(l => addWfLamp(...l));
+
+        // C. Little Norway Park & Ireland Park Royal Avenues
+        [[-1236, 502, 1.2, 0x2e6f22], [-1218, 518, 1.15, 0x3a7d2c], [-1232, 552, 1.25, 0x285e1e],
+         [-1228, 578, 1.2, 0x3f842f], [-1190, 548, 1.15, 0x2e6f22], [-1186, 580, 1.2, 0x458b34],
+         [-1142, 540, 1.1, 0x3a7d2c], [-1126, 566, 1.2, 0x2a6620], [-1106, 576, 1.15, 0x4d8c34],
+         [-1082, 552, 1.1, 0x357a29], [-1080, 580, 1.2, 0x2e6f22],
+         [-1204, 610, 1.1, 0x2b6821], [-1204, 646, 1.05, 0x3d822e], [-1158, 646, 1.1, 0x2b6821]].forEach(t => addWfTree(...t));
+        [[-1200, 560], [-1158, 546], [-1116, 546], [-1076, 562], [-1186, 630], [-1162, 638]].forEach(l => addWfLamp(...l));
+
+        // D. Coronation Park (West Lawn & East 1937 Royal Oak Avenue)
+        for (let wx = -1512; wx <= -1432; wx += 20) {
+          addWfTree(wx, 428, 1.25, 0x255a1c);
+          addWfTree(wx + 8, 458, 1.15, 0x3b7f2b);
+          addWfLamp(wx + 4, 466);
+        }
+        [[-1348, 474, 1.3, 0x24581b], [-1328, 474, 1.25, 0x2e6f22], [-1300, 474, 1.3, 0x3d822e], [-1280, 474, 1.2, 0x24581b],
+         [-1348, 496, 1.25, 0x4d8c34], [-1300, 496, 1.2, 0x2e6f22], [-1280, 496, 1.25, 0x3a7d2c],
+         [-1348, 526, 1.3, 0x255a1c], [-1328, 528, 1.2, 0x357a29], [-1298, 528, 1.25, 0x458b34], [-1280, 526, 1.3, 0x24581b],
+         [-1350, 548, 1.2, 0x2e6f22], [-1314, 550, 1.15, 0x3d822e], [-1278, 548, 1.25, 0x255a1c]].forEach(t => addWfTree(...t));
+        [[-1344, 512], [-1284, 512], [-1344, 545], [-1314, 545], [-1284, 545]].forEach(l => addWfLamp(...l));
+
+        if (wfTreeList.length) {
+          const tTrunkMat = new THREE.MeshStandardMaterial({ color: 0x4a3728, roughness: 0.9 });
+          const tCanopyMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85 });
+          const trunkInst = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.22, 0.36, 3.6, 7), tTrunkMat, wfTreeList.length);
+          const crownInst = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(3.1, 1), tCanopyMat, wfTreeList.length);
+          const m4 = new THREE.Matrix4();
+          const posV = new THREE.Vector3();
+          const sclV = new THREE.Vector3();
+          const qId = new THREE.Quaternion();
+          const col = new THREE.Color();
+          wfTreeList.forEach(([tx, tz, sc, hx], i) => {
+            posV.set(tx, 1.8 * sc, tz);
+            sclV.set(sc, sc, sc);
+            m4.compose(posV, qId, sclV);
+            trunkInst.setMatrixAt(i, m4);
+            posV.set(tx, 4.9 * sc, tz);
+            sclV.set(sc, sc * 0.95, sc);
+            m4.compose(posV, qId, sclV);
+            crownInst.setMatrixAt(i, m4);
+            crownInst.setColorAt(i, col.setHex(hx));
+          });
+          trunkInst.castShadow = true;
+          crownInst.castShadow = true;
+          crownInst.receiveShadow = true;
+          scene.add(trunkInst, crownInst);
+        }
+        if (wfLampList.length) {
+          const lpPoleMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.85, roughness: 0.25 });
+          const lpGlobeMat = new THREE.MeshBasicMaterial({ color: 0xfef3c7, toneMapped: false });
+          const poleInst = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.08, 0.14, 4.2, 8), lpPoleMat, wfLampList.length);
+          const globeInst = new THREE.InstancedMesh(new THREE.SphereGeometry(0.32, 10, 8), lpGlobeMat, wfLampList.length);
+          const m4 = new THREE.Matrix4();
+          wfLampList.forEach(([lx, lz], i) => {
+            m4.makeTranslation(lx, 2.1, lz);
+            poleInst.setMatrixAt(i, m4);
+            m4.makeTranslation(lx, 4.35, lz);
+            globeInst.setMatrixAt(i, m4);
+          });
+          scene.add(poleInst, globeInst);
+        }
       }
 
       // ---------- D. Jack Layton Ferry Terminal & Redpath Sugar Refinery Landmarks ----------
@@ -13641,9 +14211,9 @@
 
         return fg;
       }
-      // Moored Secondary Island Ferry "THOMAS RENNIE" in maintenance slip
+      // Moored Secondary Island Ferry "THOMAS RENNIE" in Yonge Slip maintenance basin (west of Pier 27)
       const mooredFerry = makeIslandFerry('THOMAS RENNIE');
-      mooredFerry.position.set(782, WATER_Y, 280);
+      mooredFerry.position.set(752, WATER_Y, 295);
       mooredFerry.rotation.y = -0.32;
       scene.add(mooredFerry);
       bobbingBoats.push({ mesh: mooredFerry, baseY: WATER_Y, phase: 0.4, amp: 0.12 });
@@ -13891,16 +14461,16 @@
 
       // Moored sailboats & yachts in Spadina Slip, Peter Basin, Rees Slip, Simcoe Slip, York Slip, Harbour Square & Yonge Slip
       const mooredSpots = [
-        // Spadina Marina
-        [-662, 578, 0.1, false], [-652, 592, -0.1, false], [-638, 582, 0.05, true],
+        // Spadina Marina (south of Spadina Slip & WaveDeck)
+        [-662, 648, 0.1, false], [-650, 662, -0.1, false], [-634, 650, 0.05, true],
         // Peter Basin
-        [-395, 592, 0.0, false], [-375, 602, 0.15, true],
+        [-395, 616, 0.0, false], [-375, 620, 0.15, true],
         // HTO Bay & Rees Slip
-        [-175, 608, 0.2, true], [-28, 548, -0.2, false], [-16, 566, -0.15, true],
+        [-162, 605, 0.2, true], [-28, 548, -0.2, false], [-16, 566, -0.15, true],
         // Simcoe Slip & York Slip
-        [152, 524, -0.22, false], [164, 545, -0.18, true], [298, 492, -0.22, false],
+        [152, 524, -0.22, false], [164, 545, -0.18, true], [298, 498, -0.22, false],
         // Harbour Square Basin & Yonge Slip
-        [455, 442, -0.25, true], [482, 434, -0.28, false], [765, 272, -0.32, false], [782, 286, -0.30, true]
+        [445, 535, -0.25, true], [472, 534, -0.28, false], [748, 268, -0.32, false], [755, 316, -0.30, true]
       ];
       const sailPalette = [0xf8fafc, 0x38bdf8, 0xfacc15, 0xf43f5e, 0xf97316];
       mooredSpots.forEach(([bx, bz, rot, open], idx) => {
@@ -15657,7 +16227,35 @@
         id: 'harbourSquare',
         name: 'Harbour Square Park & Sundial Plaza',
         desc: 'Waterfront promenade, weeping willows & bronze gnomon sundial',
-        pos: { x: 472.0, y: 1.7, z: 506.0 },
+        pos: { x: 522.0, y: 1.7, z: 502.0 },
+        yaw: 0.0
+      },
+      {
+        id: 'torontoMusicGarden',
+        name: 'Toronto Music Garden (Harbourfront)',
+        desc: 'Bach-inspired lakeside botanical terrace, Music Pavilion & spiral amphitheatre',
+        pos: { x: -522.0, y: 1.7, z: 582.0 },
+        yaw: 0.0
+      },
+      {
+        id: 'littleNorwayPark',
+        name: 'Little Norway Park & Queens Quay West',
+        desc: 'WWII Royal Norwegian Air Force Memorial & Bathurst Quay green',
+        pos: { x: -1158.0, y: 1.7, z: 540.0 },
+        yaw: 0.0
+      },
+      {
+        id: 'irelandPark',
+        name: 'Ireland Park & Canada Malting Silos',
+        desc: 'Kilkenny limestone famine memorial, bronze emigrants, glass beacon & historic 1928 grain silos',
+        pos: { x: -1182.0, y: 1.7, z: 626.0 },
+        yaw: 0.0
+      },
+      {
+        id: 'coronationPark',
+        name: 'Coronation Park (Royal Oak Lawn)',
+        desc: '1937 lakeside commemorative parkland, Victory Monument & Martin Goodman Trail',
+        pos: { x: -1324.0, y: 1.7, z: 506.0 },
         yaw: 0.0
       },
       {
