@@ -806,7 +806,7 @@
       { id: 'king', name: 'King Station', line: 'Line 1 (Yonge)', x: 485, z: -586, streetX: 476, streetZ: -578, tileColor: 0xfef3c7, fontColor: '#991b1b', label: 'KING' },
       { id: 'queen', name: 'Queen Station', line: 'Line 1 (Yonge)', x: 390, z: -650, streetX: 390, streetZ: -716, tileColor: 0xf8fafc, fontColor: '#1d4ed8', label: 'QUEEN' },
       { id: 'osgoode', name: 'Osgoode Station', line: 'Line 1 (University)', x: -230, z: -625, streetX: -230, streetZ: -691, tileColor: 0xfde047, fontColor: '#000000', label: 'OSGOODE' },
-      { id: 'standrew', name: 'St. Andrew Station', line: 'Line 1 (University)', x: -125, z: -360, streetX: -125, streetZ: -426, tileColor: 0xffffff, fontColor: '#0f172a', label: 'ST. ANDREW' }
+      { id: 'standrew', name: 'St. Andrew Station', line: 'Line 1 (University)', x: -125, z: -376, streetX: -125, streetZ: -441, tileColor: 0xffffff, fontColor: '#0f172a', label: 'ST. ANDREW' }
     ];
     // Enclosed Underground Transfer Corridor & Union Station Streetcar Loop Bay (y = -14.0m)
     const UNION_SC_BAY = {
@@ -820,24 +820,29 @@
     function getSubwayStairInfo(x, z) {
       for (let i = 0; i < SUBWAY_STATIONS.length; i++) {
         const st = SUBWAY_STATIONS[i];
-        const sr = st.stair;
-        if (!sr) continue;
-        const s = (x - sr.ax) * sr.ux + (z - sr.az) * sr.uz;
-        const lat = (x - sr.ax) * (-sr.uz) + (z - sr.az) * sr.ux;
-        if (Math.abs(lat) <= 3.0 && s >= -6.5 && s <= sr.total) {
-          const t = Math.max(0, Math.min(1, s / sr.len));
-          return {
-            station: st,
-            stationIdx: i,
-            s,
-            lat,
-            len: sr.len,
-            total: sr.total,
-            t,
-            y: -14.0 * t,
-            ux: sr.ux,
-            uz: sr.uz
-          };
+        const list = (st.entrances && st.entrances.length) ? st.entrances : (st.stair ? [st] : []);
+        for (let ei = 0; ei < list.length; ei++) {
+          const ent = list[ei];
+          const sr = ent.stair;
+          if (!sr) continue;
+          const s = (x - sr.ax) * sr.ux + (z - sr.az) * sr.uz;
+          const lat = (x - sr.ax) * (-sr.uz) + (z - sr.az) * sr.ux;
+          if (Math.abs(lat) <= 3.0 && s >= -6.5 && s <= sr.total) {
+            const t = Math.max(0, Math.min(1, s / sr.len));
+            return {
+              station: st,
+              entrance: ent,
+              stationIdx: i,
+              s,
+              lat,
+              len: sr.len,
+              total: sr.total,
+              t,
+              y: -14.0 * t,
+              ux: sr.ux,
+              uz: sr.uz
+            };
+          }
         }
       }
       return null;
@@ -11718,8 +11723,11 @@
 
     // ---------- 1 & 2. TTC Flexity Outlook Streetcar Network (504 King, 509 Harbourfront-CNE, 510 Spadina) ----------
     const QUEENS_QUAY_EAST_PTS = [
-      [-734.1, 538.1], [-706.2, 555.0], [-550.0, 552.0], [-380.0, 548.0],
-      [-160.4, 543.3], [-139.4, 538.1], [-95.2, 527.7], [-62.8, 520.2],
+      [-734.1, 538.1], [-729.5, 542.5], [-721.5, 543.5], [-715.5, 546.0], [-714.0, 554.0], [-711.0, 562.5],
+      [-640.0, 563.0], [-618.0, 570.5], [-591.0, 563.0],
+      [-550.0, 560.0], [-380.0, 558.0], [-260.0, 559.0], [-192.0, 553.0],
+      [-176.0, 544.5], [-160.4, 543.3],
+      [-139.4, 538.1], [-95.2, 527.7], [-62.8, 520.2],
       [-15.1, 508.2], [42.9, 493.6], [59.5, 490.1], [105.6, 479.2],
       [153.1, 467.9], [190.9, 459.2], [211.8, 455.1]
     ];
@@ -11809,7 +11817,8 @@
         pts: [
           [-1935.0, 320.0], [-1780.0, 320.0], [-1620.0, 320.0], [-1530.0, 320.0],
           [-1480.0, 355.0], [-1385.0, 396.0], [-1220.0, 405.0], [-1040.0, 412.0],
-          [-881.6, 416.2], [-872.0, 544.0]
+          [-881.6, 416.2], [-862.8, 405.4], [-836.1, 392.3], [-789.7, 377.9],
+          [-769.4, 373.3], [-750.4, 443.0], [-735.5, 501.7]
         ].concat(QUEENS_QUAY_EAST_PTS),
         limit: 12,
         cars: 4,
@@ -11822,7 +11831,8 @@
         pts: [
           [-1140.0, -916.0], [-1085.0, -720.0], [-1027.9, -530.6], [-996.4, -427.0],
           [-964.2, -320.0], [-917.8, -165.6], [-860.0, 26.0], [-827.7, 134.6],
-          [-794.0, 255.0], [-765.0, 385.0]
+          [-825.0, 182.1], [-797.4, 276.5], [-769.4, 373.3], [-750.4, 443.0],
+          [-735.5, 501.7]
         ].concat(QUEENS_QUAY_EAST_PTS),
         limit: 11,
         cars: 4,
@@ -11850,7 +11860,7 @@
       { id: '509_fort_york', name: 'Fleet St & Strachan (Fort York)', sub: 'Historic Fort York National Site', x: -1385.0, z: 396.0 },
       { id: '509_bathurst', name: 'Fleet St & Bathurst St', sub: 'Bathurst Quay \u2022 Airport Ferry Access', x: -1040.0, z: 412.0 },
       { id: '509_spadina', name: 'Queens Quay & Spadina Ave', sub: '510 Spadina Transfer \u2022 Music Garden', x: -734.1, z: 538.1 },
-      { id: '509_harbourfront', name: 'Harbourfront Centre (Rees St)', sub: 'Waterfront Promenade & HTO Park', x: -380.0, z: 548.0 },
+      { id: '509_harbourfront', name: 'Harbourfront Centre (Rees St)', sub: 'Waterfront Promenade & HTO Park', x: -380.0, z: 558.0 },
       { id: '509_ferry', name: 'Queens Quay / Ferry Docks', sub: 'Jack Layton Ferry Terminal \u2022 Harbour Square', x: 105.6, z: 479.2 },
       { id: '509_union', name: 'Union Station Underground (Subway)', sub: 'Underground Loop \u2022 Walk North to Line 1 Subway', x: 211.8, z: 455.1, isUnionLoop: true }
     ]);
@@ -11860,16 +11870,19 @@
       { id: '510_queen', name: 'Queen St W & Spadina Ave', sub: 'Fashion District \u2022 Queen West', x: -1027.9, z: -530.6 },
       { id: '510_king', name: 'King St W & Spadina Ave', sub: '504 King Transfer', x: -917.8, z: -165.6 },
       { id: '510_front', name: 'Front St W & Spadina Ave', sub: 'The Well \u2022 Rogers Centre North', x: -827.7, z: 134.6 },
-      { id: '510_bremner', name: 'Bremner Blvd & Spadina Ave', sub: 'Canoe Landing \u2022 CN Tower West', x: -794.0, z: 255.0 },
+      { id: '510_bremner', name: 'Bremner Blvd & Spadina Ave', sub: 'Canoe Landing \u2022 CN Tower West', x: -797.4, z: 276.5 },
       { id: '510_queensquay', name: 'Queens Quay & Spadina Ave', sub: '509 CNE Transfer \u2022 Harbourfront', x: -734.1, z: 538.1 },
-      { id: '510_harbourfront', name: 'Harbourfront Centre (Rees St)', sub: 'Waterfront Promenade', x: -380.0, z: 548.0 },
+      { id: '510_harbourfront', name: 'Harbourfront Centre (Rees St)', sub: 'Waterfront Promenade', x: -380.0, z: 558.0 },
       { id: '510_ferry', name: 'Queens Quay / Ferry Docks', sub: 'Jack Layton Ferry Terminal', x: 105.6, z: 479.2 },
       { id: '510_union', name: 'Union Station Underground (Subway)', sub: 'Underground Loop \u2022 Walk North to Line 1 Subway', x: 211.8, z: 455.1, isUnionLoop: true }
     ]);
     streetcarRoutes[2].spadinaEnd = spGeom.projectD(-734.1, 538.1);
-    streetcarRoutes[2].stops = streetcarRoutes[2].namedStops.map(s => ({ d: s.d, dir: 0 }));
-    streetcarRoutes[1].stops = streetcarRoutes[1].namedStops.map(s => ({ d: s.d, dir: 0 }));
-    streetcarRoutes[0].stops = streetcarRoutes[0].namedStops.map(s => ({ d: s.d, dir: 0 }));
+    const splitXStop = s => (s.id === '504_spadina' || s.id === '510_king')
+      ? [{ d: s.d - 22, dir: 1 }, { d: s.d + 22, dir: -1 }]
+      : [{ d: s.d, dir: 0 }];
+    streetcarRoutes[2].stops = streetcarRoutes[2].namedStops.flatMap(splitXStop);
+    streetcarRoutes[1].stops = streetcarRoutes[1].namedStops.flatMap(splitXStop);
+    streetcarRoutes[0].stops = streetcarRoutes[0].namedStops.flatMap(splitXStop);
 
     // Steel double-track rails along ALL 3 streetcar routes (504 King, 509 Harbourfront-CNE, 510 Spadina)
     const scRailGB = new GeoBuilder();
@@ -11958,6 +11971,7 @@
         const ptex = new THREE.CanvasTexture(pc); ptex.wrapS = ptex.wrapT = THREE.RepeatWrapping;
         const rowGB = new GeoBuilder();
         ribbon(rowGB, spMedianPts, ROW_HW * 2, 0.06, 4);
+        ribbon(rowGB, QUEENS_QUAY_EAST_PTS.slice(0, 8), ROW_HW * 2, 0.06, 4);
         const rowMesh = new THREE.Mesh(rowGB.build(), new THREE.MeshStandardMaterial({ map: ptex, roughness: 0.9, side: THREE.DoubleSide }));
         rowMesh.receiveShadow = true; scene.add(rowMesh);
       }
@@ -12000,10 +12014,28 @@
       scene.add(cneSign);
     }
 
-    // ---------- Street lamps (instanced, strictly outside all roads & intersections) + pooled real lights ----------
+    function nearStreetcarTrack(x, z, pad) {
+      const lim = TRACK_OFFSET + (pad || 2.8);
+      const limSq = lim * lim;
+      for (let ri = 0; ri < streetcarRoutes.length; ri++) {
+        const pts = streetcarRoutes[ri].pts;
+        for (let i = 1; i < pts.length; i++) {
+          if (distToSegSq(x, z, pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]) < limSq) return true;
+        }
+      }
+      return false;
+    }
+    const nearPlannedSubwayKiosk = (x, z) => (
+      (x >= 286 && x <= 306 && z >= -193 && z <= -183) ||
+      SUBWAY_STATIONS.some(s => Math.hypot(x - s.streetX, z - s.streetZ) < 6)
+    );
+
+    // ---------- Street lamps (instanced, strictly outside all roads, tracks & subway kiosks) + pooled real lights ----------
     const lamps = lampSpots.filter(l =>
       canMoveTo(l.x, l.z, 0.5) &&
       !onRoad(l.x, l.z, -0.9, -1) &&
+      !nearStreetcarTrack(l.x, l.z, 3.0) &&
+      !nearPlannedSubwayKiosk(l.x, l.z) &&
       !onRoad(l.x + Math.sin(l.ang) * 0.6, l.z + Math.cos(l.ang) * 0.6, -0.3, -1)
     ).slice(0, 700);
     if (lamps.length) {
@@ -12064,7 +12096,7 @@
     }
 
     // ---------- Street trees (instanced, with per-tree colour + size variation) ----------
-    const trees = treeSpots.filter(t => canMoveTo(t.x, t.z, 1.4) && !onRoad(t.x, t.z, -1.2, -1)).slice(0, 900);
+    const trees = treeSpots.filter(t => canMoveTo(t.x, t.z, 1.4) && !onRoad(t.x, t.z, -1.2, -1) && !nearStreetcarTrack(t.x, t.z, 3.2) && !nearPlannedSubwayKiosk(t.x, t.z)).slice(0, 900);
     {
       if (trees.length) {
         const trunkGeo = new THREE.CylinderGeometry(0.11, 0.17, 3.2, 7);
@@ -12114,7 +12146,7 @@
       if (signs.length > 36) return;
       const prev = usedNames[c.name] || [];
       if (prev.some(p => Math.hypot(p.x - c.x, p.z - c.z) < 150)) return;
-      if (!canMoveTo(c.x, c.z, 0.5) || onRoad(c.x, c.z, -1.0, -1)) return;
+      if (!canMoveTo(c.x, c.z, 0.5) || onRoad(c.x, c.z, -1.0, -1) || nearStreetcarTrack(c.x, c.z, 3.0) || nearPlannedSubwayKiosk(c.x, c.z)) return;
       prev.push(c);
       usedNames[c.name] = prev;
       signs.push(c);
@@ -15249,7 +15281,10 @@
         stars.position.set(playerPos.x, 0, playerPos.z);
         const stairInfo = getSubwayStairInfo(playerPos.x, playerPos.z);
         const inStair = !!stairInfo;
-        const nearEntrance = SUBWAY_STATIONS.some(st => Math.hypot(playerPos.x - st.streetX, playerPos.z - st.streetZ) < 42);
+        const nearEntrance = SUBWAY_STATIONS.some(st => {
+          const list = (st.entrances && st.entrances.length) ? st.entrances : [st];
+          return list.some(e => Math.hypot(playerPos.x - e.streetX, playerPos.z - e.streetZ) < 42);
+        });
         if (subwayUndergroundGroup) {
           subwayUndergroundGroup.visible = (playerPos.y < 0.8 || inStair || nearEntrance);
         }
@@ -16260,9 +16295,9 @@
                 if (!canMoveTo(px, pz, 0.4, 1.7) || onRoad(px, pz, -0.6, -1)) { ok = false; break; }
               }
             }
-            // The buried tube must not pass under the open GO rail trench
+            // The buried tube / staircase guard must not pass under the open GO rail trench or cross streetcar rails
             for (let s = 0; s <= SUB_STAIR_LEN + corr && ok; s += 2) {
-              if (isInsideTrench(x, az - dir * s)) ok = false;
+              if (isInsideTrench(x, az - dir * s) || nearStreetcarTrack(x, az - dir * s, 4.0)) ok = false;
             }
             if (ok) return cand;
           }
@@ -16272,6 +16307,7 @@
     }
 
     SUBWAY_STATIONS.forEach(st => {
+      st.entrances = [];
       const wallMat = new THREE.MeshStandardMaterial({
         color: st.tileColor, roughness: 0.35, metalness: 0.1, side: THREE.DoubleSide,
         emissive: st.tileColor, emissiveIntensity: 0.22
@@ -16283,140 +16319,180 @@
         color: 0x3a3a42, roughness: 0.9, side: THREE.DoubleSide, emissive: 0x1f1f24, emissiveIntensity: 0.5
       });
 
-      // ---- Pick the entrance and register the walkable stair path (used by floorAt / canMoveTo) ----
+      function buildSubwayStaircase(cfg) {
+        const L = SUB_STAIR_LEN, corr = cfg.corr;
+        const slopeA = Math.atan2(14.0, L);
+        const slopeH = Math.hypot(L, 14.0);
+        const poleX = (cfg.poleSide || -1) * 2.5;
+
+        // Street kiosk + enclosed stairs + bottom flat corridor in stair-local frame (+Z = down stairs)
+        const stEnt = new THREE.Group();
+        stEnt.position.set(cfg.ax, 0, cfg.az);
+        stEnt.rotation.y = Math.atan2(cfg.ux, cfg.uz);
+
+        [-1.85, 1.85].forEach(wx => {
+          const kWall = new THREE.Mesh(new THREE.BoxGeometry(0.26, 3.5, 6.0), subGraniteMat);
+          kWall.position.set(wx, 1.75, 0.4);
+          stEnt.add(kWall);
+        });
+        const kRoof = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.28, 6.3), subGraniteMat);
+        kRoof.position.set(0, 3.64, 0.4);
+        stEnt.add(kRoof);
+        const kBand = new THREE.Mesh(new THREE.BoxGeometry(4.26, 0.22, 6.36), subTtcRedMat);
+        kBand.position.set(0, 3.38, 0.4);
+        stEnt.add(kBand);
+        const kLanding = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.12, 2.6), litFloorMat);
+        kLanding.position.set(0, -0.04, -1.3);
+        stEnt.add(kLanding);
+
+        const doorSign = signMesh([cfg.signTop || 'SUBWAY', cfg.signSub || st.name.toUpperCase()], 3.4, 0.62, { bg: '#dc2626', fg: '#ffffff', borderColor: '#ffffff', size: 44 });
+        doorSign.position.set(0, 2.95, -2.62);
+        doorSign.rotation.y = Math.PI;
+        stEnt.add(doorSign);
+
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 3.9, 8), subSteelMat);
+        pole.position.set(poleX, 1.95, -2.4);
+        stEnt.add(pole);
+        const poleSign = signMesh(['TTC', 'SUBWAY'], 1.1, 0.7, { bg: '#dc2626', fg: '#ffffff', borderColor: '#ffffff', size: 60 });
+        poleSign.position.set(poleX, 3.6, -2.4);
+        poleSign.rotation.y = Math.PI;
+        stEnt.add(poleSign);
+
+        const hole = new THREE.Mesh(new THREE.PlaneGeometry(3.66, 6.8), subGroundHoleMat);
+        hole.rotation.x = -Math.PI / 2;
+        hole.position.set(0, 0.004, 3.0);
+        hole.renderOrder = -1;
+        hole.frustumCulled = false;
+        stEnt.add(hole);
+
+        const N = 48, run = L / N, rise = 14.0 / N;
+        for (let i = 0; i < N; i++) {
+          const top = -(i + 0.5) * rise;
+          const tread = new THREE.Mesh(new THREE.BoxGeometry(3.3, rise + 0.3, run + 0.04), litFloorMat);
+          tread.position.set(0, top - (rise + 0.3) / 2, (i + 0.5) * run);
+          stEnt.add(tread);
+          const nosing = new THREE.Mesh(new THREE.BoxGeometry(3.24, 0.025, 0.07), subTactileYellowMat);
+          nosing.position.set(0, top + 0.012, i * run + 0.05);
+          stEnt.add(nosing);
+        }
+
+        const slope = new THREE.Group();
+        slope.position.set(0, -7.0, L / 2);
+        slope.rotation.x = slopeA;
+        [-1.70, 1.70].forEach(wx => {
+          const w = new THREE.Mesh(new THREE.BoxGeometry(0.28, 3.45, slopeH + 1.0), wallMat);
+          w.position.set(wx, 1.275, 0);
+          slope.add(w);
+          const rail = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, slopeH), subSteelMat);
+          rail.position.set(wx > 0 ? wx - 0.2 : wx + 0.2, 0.95, 0);
+          slope.add(rail);
+        });
+        const cRail = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, slopeH - 1.0), subSteelMat);
+        cRail.position.set(0, 0.95, 0);
+        slope.add(cRail);
+        for (let pz = -slopeH * 0.45; pz <= slopeH * 0.45; pz += 3.2) {
+          const post = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.95, 0.05), subSteelMat);
+          post.position.set(0, 0.47, pz);
+          slope.add(post);
+        }
+        const sCeil = new THREE.Mesh(new THREE.BoxGeometry(3.68, 0.3, slopeH + 1.0), litCeilMat);
+        sCeil.position.set(0, 2.95, 0);
+        slope.add(sCeil);
+        const sUnder = new THREE.Mesh(new THREE.BoxGeometry(3.68, 0.35, slopeH + 1.0), subFloorMat);
+        sUnder.position.set(0, -0.62, 0);
+        slope.add(sUnder);
+        for (let lz = -slopeH * 0.42; lz <= slopeH * 0.42; lz += 3.6) {
+          const lamp = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.06, 0.28), subWindowGlowMat);
+          lamp.position.set(0, 2.78, lz);
+          slope.add(lamp);
+        }
+        stEnt.add(slope);
+
+        const cMid = L + corr / 2;
+        const cFloor = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.3, corr + 0.3), litFloorMat);
+        cFloor.position.set(0, -14.15, cMid + 0.1);
+        stEnt.add(cFloor);
+        const cCeil = new THREE.Mesh(new THREE.BoxGeometry(3.68, 0.3, corr), litCeilMat);
+        cCeil.position.set(0, -10.85, cMid);
+        stEnt.add(cCeil);
+        [-1.72, 1.72].forEach(wx => {
+          const cw = new THREE.Mesh(new THREE.BoxGeometry(0.26, 3.6, corr), wallMat);
+          cw.position.set(wx, -12.4, cMid);
+          stEnt.add(cw);
+        });
+        for (let lz = L + 1.5; lz < L + corr; lz += 3.5) {
+          const lamp = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.06, 0.28), subWindowGlowMat);
+          lamp.position.set(0, -11.03, lz);
+          stEnt.add(lamp);
+        }
+        const downSign = signMesh([cfg.downTop || '⬇ TO TRAINS', cfg.downSub || 'LINE 1 YONGE-UNIVERSITY'], 3.0, 0.55, { bg: '#18181b', fg: '#facc15', borderColor: '#facc15', size: 44 });
+        downSign.position.set(0, 2.6, 3.2);
+        downSign.rotation.y = Math.PI;
+        stEnt.add(downSign);
+
+        stEnt.traverse(o => { if (o.isMesh && o !== hole) o.renderOrder = 0; });
+        subwayGroup.add(stEnt);
+
+        const stairObj = {
+          ax: cfg.ax, az: cfg.az,
+          ux: cfg.ux, uz: cfg.uz,
+          len: SUB_STAIR_LEN,
+          corr,
+          total: SUB_STAIR_LEN + corr + 1.2
+        };
+        const entObj = {
+          id: cfg.id || 'main',
+          label: cfg.label || st.name,
+          streetX: cfg.ax,
+          streetZ: cfg.az,
+          portalX: cfg.portalX,
+          portalZ: cfg.portalZ,
+          stair: stairObj
+        };
+        st.entrances.push(entObj);
+        return entObj;
+      }
+
+      // ---- Pick the main entrance and build its staircase ----
       const pick = chooseSubwayStair(st);
       const dir = pick.dir, corr = pick.corr, xo = pick.xo;
       st.streetX = pick.x;
       st.streetZ = pick.az;
       st.portalX = pick.x;
-      st.portalZ = st.z + dir * (SUB_END_Z - 3.0);   // on the platform, just inside the doorway
+      st.portalZ = st.z + dir * (SUB_END_Z - 3.0);
       st.stairDir = dir;
-      st.stair = {
-        ax: pick.x, az: pick.az,
-        ux: 0, uz: -dir,                 // unit vector from street (top) toward the station (bottom)
-        len: SUB_STAIR_LEN,
+      const mainEnt = buildSubwayStaircase({
+        id: 'main',
+        label: st.name,
+        ax: pick.x,
+        az: pick.az,
+        ux: 0,
+        uz: -dir,
         corr,
-        total: SUB_STAIR_LEN + corr + 1.2 // reaches 1.2m past the end-wall plane into the hall
-      };
-
-      // ================= A. STREET KIOSK + STAIRS + CORRIDOR (stair-local frame) =================
-      // Local +Z = down-stairs direction (s), local y = world y, origin = top of the stairs at street level.
-      const stEnt = new THREE.Group();
-      stEnt.position.set(pick.x, 0, pick.az);
-      stEnt.rotation.y = Math.atan2(st.stair.ux, st.stair.uz);
-      const L = SUB_STAIR_LEN;
-      const slopeA = Math.atan2(14.0, L);
-      const slopeH = Math.hypot(L, 14.0);
-
-      // Street kiosk: granite side walls, roof with TTC red band, open doorway facing the street (-Z)
-      [-1.85, 1.85].forEach(wx => {
-        const kWall = new THREE.Mesh(new THREE.BoxGeometry(0.26, 3.5, 6.0), subGraniteMat);
-        kWall.position.set(wx, 1.75, 0.4);
-        stEnt.add(kWall);
+        portalX: st.portalX,
+        portalZ: st.portalZ
       });
-      const kRoof = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.28, 6.3), subGraniteMat);
-      kRoof.position.set(0, 3.64, 0.4);
-      stEnt.add(kRoof);
-      const kBand = new THREE.Mesh(new THREE.BoxGeometry(4.26, 0.22, 6.36), subTtcRedMat);
-      kBand.position.set(0, 3.38, 0.4);
-      stEnt.add(kBand);
-      const kLanding = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.12, 2.6), litFloorMat);
-      kLanding.position.set(0, -0.04, -1.3);
-      stEnt.add(kLanding);
+      st.stair = mainEnt.stair;
 
-      const doorSign = signMesh(['SUBWAY', st.name.toUpperCase()], 3.4, 0.62, { bg: '#dc2626', fg: '#ffffff', borderColor: '#ffffff', size: 46 });
-      doorSign.position.set(0, 2.95, -2.62);
-      doorSign.rotation.y = Math.PI;      // signMesh faces +Z; turn it toward the street
-      stEnt.add(doorSign);
-
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 3.9, 8), subSteelMat);
-      pole.position.set(-2.5, 1.95, -2.4);
-      stEnt.add(pole);
-      const poleSign = signMesh(['TTC', 'SUBWAY'], 1.1, 0.7, { bg: '#dc2626', fg: '#ffffff', borderColor: '#ffffff', size: 60 });
-      poleSign.position.set(-2.5, 3.6, -2.4);
-      poleSign.rotation.y = Math.PI;
-      stEnt.add(poleSign);
-
-      // Depth "hole" over the stair opening (s = -0.4 .. 6.4): lets the steps show through the street ground
-      const hole = new THREE.Mesh(new THREE.PlaneGeometry(3.66, 6.8), subGroundHoleMat);
-      hole.rotation.x = -Math.PI / 2;
-      hole.position.set(0, 0.004, 3.0);
-      hole.renderOrder = -1;
-      hole.frustumCulled = false;
-      stEnt.add(hole);
-
-      // 48 physical steps, treads centred on the walking line (floorAt = -14 * s / L)
-      const N = 48, run = L / N, rise = 14.0 / N;
-      for (let i = 0; i < N; i++) {
-        const top = -(i + 0.5) * rise;
-        const tread = new THREE.Mesh(new THREE.BoxGeometry(3.3, rise + 0.3, run + 0.04), litFloorMat);
-        tread.position.set(0, top - (rise + 0.3) / 2, (i + 0.5) * run);
-        stEnt.add(tread);
-        const nosing = new THREE.Mesh(new THREE.BoxGeometry(3.24, 0.025, 0.07), subTactileYellowMat);
-        nosing.position.set(0, top + 0.012, i * run + 0.05);
-        stEnt.add(nosing);
+      // Union Station North Front Street TTC Entrance (Sir John A. Macdonald Plaza on Front St West)
+      if (st.id === 'union') {
+        buildSubwayStaircase({
+          id: 'front',
+          label: 'Union Station (Front St)',
+          ax: 298.0,
+          az: -188.0,
+          ux: -1,
+          uz: 0,
+          corr: 4.0,
+          poleSide: 1,
+          signTop: 'TTC • FRONT ST',
+          signSub: 'UNION SUBWAY & STREETCARS',
+          downTop: '⬇ TO SUBWAY & STREETCARS',
+          downSub: 'LINE 1 • 509 CNE • 510 SPADINA',
+          portalX: 268.5,
+          portalZ: -188.0
+        });
       }
-
-      // Enclosed sloped tube (tiled walls, ceiling, under-slab, handrails, lights). Built in a frame tilted
-      // along the stair slope so the walls stay a constant 3.2m tall above every step.
-      const slope = new THREE.Group();
-      slope.position.set(0, -7.0, L / 2);
-      slope.rotation.x = slopeA;
-      [-1.70, 1.70].forEach(wx => {
-        const w = new THREE.Mesh(new THREE.BoxGeometry(0.28, 3.45, slopeH + 1.0), wallMat);
-        w.position.set(wx, 1.275, 0);
-        slope.add(w);
-        const rail = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, slopeH), subSteelMat);
-        rail.position.set(wx > 0 ? wx - 0.2 : wx + 0.2, 0.95, 0);
-        slope.add(rail);
-      });
-      const cRail = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, slopeH - 1.0), subSteelMat);
-      cRail.position.set(0, 0.95, 0);
-      slope.add(cRail);
-      for (let pz = -slopeH * 0.45; pz <= slopeH * 0.45; pz += 3.2) {
-        const post = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.95, 0.05), subSteelMat);
-        post.position.set(0, 0.47, pz);
-        slope.add(post);
-      }
-      const sCeil = new THREE.Mesh(new THREE.BoxGeometry(3.68, 0.3, slopeH + 1.0), litCeilMat);
-      sCeil.position.set(0, 2.95, 0);
-      slope.add(sCeil);
-      const sUnder = new THREE.Mesh(new THREE.BoxGeometry(3.68, 0.35, slopeH + 1.0), subFloorMat);
-      sUnder.position.set(0, -0.62, 0);
-      slope.add(sUnder);
-      for (let lz = -slopeH * 0.42; lz <= slopeH * 0.42; lz += 3.6) {
-        const lamp = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.06, 0.28), subWindowGlowMat);
-        lamp.position.set(0, 2.78, lz);
-        slope.add(lamp);
-      }
-      stEnt.add(slope);
-
-      // Flat corridor from the bottom of the stairs (s = L) to the station end wall (s = L + corr)
-      const cMid = L + corr / 2;
-      const cFloor = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.3, corr + 0.3), litFloorMat);
-      cFloor.position.set(0, -14.15, cMid + 0.1);
-      stEnt.add(cFloor);
-      const cCeil = new THREE.Mesh(new THREE.BoxGeometry(3.68, 0.3, corr), litCeilMat);
-      cCeil.position.set(0, -10.85, cMid);
-      stEnt.add(cCeil);
-      [-1.72, 1.72].forEach(wx => {
-        const cw = new THREE.Mesh(new THREE.BoxGeometry(0.26, 3.6, corr), wallMat);
-        cw.position.set(wx, -12.4, cMid);
-        stEnt.add(cw);
-      });
-      for (let lz = L + 1.5; lz < L + corr; lz += 3.5) {
-        const lamp = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.06, 0.28), subWindowGlowMat);
-        lamp.position.set(0, -11.03, lz);
-        stEnt.add(lamp);
-      }
-      // "To trains" sign at the top of the stairs and "street exit" sign at the bottom (facing up the stairs)
-      const downSign = signMesh(['⬇ TO TRAINS', 'LINE 1 YONGE-UNIVERSITY'], 3.0, 0.55, { bg: '#18181b', fg: '#facc15', borderColor: '#facc15', size: 44 });
-      downSign.position.set(0, 2.6, 3.2);
-      downSign.rotation.y = Math.PI;
-      stEnt.add(downSign);
-
-      stEnt.traverse(o => { if (o.isMesh && o !== hole) o.renderOrder = 0; });
-      subwayGroup.add(stEnt);
 
       // ================= B. UNDERGROUND STATION HALL (station-local frame) =================
       const stUnder = new THREE.Group();
@@ -16602,10 +16678,21 @@
         bayFloor.position.set(-0.6, -1.15, bayMidZ);
         stUnder.add(bayFloor);
 
-        // Bay walls enclosing the loop platform (connecting cleanly around the north end walls)
-        const eastBayWall = new THREE.Mesh(new THREE.BoxGeometry(0.4, 5.6, 20.2), wallMat);
-        eastBayWall.position.set(6.3, 1.75, bayMidZ);
-        stUnder.add(eastBayWall);
+        // Bay walls enclosing the loop platform (connecting cleanly around north transfer + Front St staircase doorway)
+        // Front St stair lands at world z=-188 (local z=-48.0), so split eastBayWall around local z=-49.85..-46.15
+        [
+          { z0: -64.85, z1: -49.85, y0: -1.05, y1: 4.55 },
+          { z0: -49.85, z1: -46.15, y0: 3.1, y1: 4.55 },
+          { z0: -46.15, z1: -44.65, y0: -1.05, y1: 4.55 }
+        ].forEach(seg => {
+          const ew = new THREE.Mesh(new THREE.BoxGeometry(0.4, seg.y1 - seg.y0, seg.z1 - seg.z0), wallMat);
+          ew.position.set(6.3, (seg.y0 + seg.y1) / 2, (seg.z0 + seg.z1) / 2);
+          stUnder.add(ew);
+        });
+        const frontExitSign = signMesh(['⬆ FRONT ST NORTH EXIT', 'TO UNION STATION & ROYAL YORK'], 3.6, 0.8, { bg: '#18181b', fg: '#22c55e', borderColor: '#22c55e', size: 42 });
+        frontExitSign.position.set(5.95, 3.65, -48.0);
+        frontExitSign.rotation.y = -Math.PI / 2;
+        stUnder.add(frontExitSign);
         const westBayWall = new THREE.Mesh(new THREE.BoxGeometry(0.4, 5.6, 20.2), wallMat);
         westBayWall.position.set(-7.9, 1.75, bayMidZ);
         stUnder.add(westBayWall);

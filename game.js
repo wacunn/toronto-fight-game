@@ -4998,6 +4998,7 @@ function selectStreetcarStop(idxOrStopId, routeIdOverride) {
   closeStreetcarPanel();
 
   let sc = (state.onStreetcar && streetcarController.activeCar) ? streetcarController.activeCar : null;
+  let dispatchedNew = false;
   if (!sc || sc.route !== rt) {
     // Dispatch the nearest streetcar on the chosen route (moving a non-player car onto the boarding stop cleanly)
     const candidates = (traffic && Array.isArray(traffic.streetcars))
@@ -5044,16 +5045,21 @@ function selectStreetcarStop(idxOrStopId, routeIdOverride) {
       streetcarController.activeCar = null;
     }
     sc.d = Math.max(rt.endLo, Math.min(rt.endHi, originD));
-    if (traffic && traffic.placeStreetcar) traffic.placeStreetcar(sc);
+    dispatchedNew = true;
   }
 
+  const prevDir = sc.dir;
   const wantDir = targetStop.d >= sc.d ? 1 : -1;
   if (traffic && traffic.setStreetcarDirection) traffic.setStreetcarDirection(sc, wantDir);
   else sc.dir = wantDir;
+  if (dispatchedNew || prevDir !== sc.dir) {
+    if (traffic && traffic.clearStreetcarZone) traffic.clearStreetcarZone(sc);
+    else if (traffic && traffic.placeStreetcar) traffic.placeStreetcar(sc);
+    sc.speed = 0;
+  }
   sc.expressTargetD = Math.max(rt.endLo, Math.min(rt.endHi, targetStop.d));
   sc.servedD = -1e9;
   sc.mode = 'run';
-  sc.speed = Math.max(sc.speed || 0, 6.0);
   streetcarController.targetStop = targetStop;
 
   // Clear underground state cleanly upon boarding Queens Quay / Union Streetcar tunnel car
@@ -5938,14 +5944,19 @@ function updateObservationDeck(dt) {
       return;
     }
 
-    // TTC Line 1 Subway Street Entrances (Union, King, Queen, Osgoode, St. Andrew)
+    // TTC Line 1 Subway Street Entrances (Union Front St & Concourse, King, Queen, Osgoode, St. Andrew)
     if (city && city.subway && city.subway.stations) {
       for (const st of city.subway.stations) {
-        const dSub = Math.hypot(player.pos.x - st.streetX, player.pos.z - st.streetZ);
-        if (dSub < 6.5) {
-          activeDeckAction = 'enter_subway_' + st.id;
-          setDeckPrompt('[E]', 'ENTER ' + st.name.toUpperCase() + ' SUBWAY');
-          return;
+        const ents = (st.entrances && st.entrances.length) ? st.entrances : [{ id: 'main', label: st.name, streetX: st.streetX, streetZ: st.streetZ, portalX: st.portalX, portalZ: st.portalZ }];
+        for (let ei = 0; ei < ents.length; ei++) {
+          const ent = ents[ei];
+          const dSub = Math.hypot(player.pos.x - ent.streetX, player.pos.z - ent.streetZ);
+          if (dSub < 6.5) {
+            activeDeckAction = ei === 0 ? ('enter_subway_' + st.id) : ('enter_subway_' + st.id + ':' + ei);
+            const suffix = ent.id === 'front' ? ' (FRONT ST)' : '';
+            setDeckPrompt('[E]', 'ENTER ' + st.name.toUpperCase() + ' SUBWAY' + suffix);
+            return;
+          }
         }
       }
     }
@@ -5959,6 +5970,21 @@ function updateObservationDeck(dt) {
       setDeckPrompt('[E]', 'EXIT TRAIN (' + curStop.name.toUpperCase() + ')');
       return;
     }
+    const tState = city.subway.state;
+    // Check Union Front St stair doorway explicitly before streetcar loop bay overlap
+    for (const st of city.subway.stations) {
+      const ents = (st.entrances && st.entrances.length) ? st.entrances : [{ id: 'main', label: st.name, streetX: st.streetX, streetZ: st.streetZ, portalX: st.portalX, portalZ: st.portalZ }];
+      for (let ei = 0; ei < ents.length; ei++) {
+        const ent = ents[ei];
+        if (ent.id !== 'front') continue;
+        const dFrontExit = Math.hypot(player.pos.x - 270.5, player.pos.z - ent.portalZ);
+        if (dFrontExit < 3.6) {
+          activeDeckAction = ei === 0 ? ('exit_subway_' + st.id) : ('exit_subway_' + st.id + ':' + ei);
+          setDeckPrompt('[E]', 'EXIT TO FRONT ST (' + st.name.toUpperCase() + ')');
+          return;
+        }
+      }
+    }
     if (isAtUnionStreetcarLoop()) {
       activeDeckAction = { type: 'open_streetcar_panel', atUnionLoop: true, routeId: '509' };
       setDeckPrompt('[E]', 'UNION STREETCAR LOOP • PICK STOP (509 CNE / 510 SPADINA)');
@@ -5967,18 +5993,21 @@ function updateObservationDeck(dt) {
     if (streetcarPanel.open && !findNearbyStreetcarStop(20.0)) {
       closeStreetcarPanel();
     }
-    const tState = city.subway.state;
     for (const st of city.subway.stations) {
-      const exitX = st.portalX !== undefined ? st.portalX : st.x;
-      const exitZ = st.portalZ !== undefined ? st.portalZ : (st.z + 32);
-      const dExit = Math.min(
-        Math.hypot(player.pos.x - exitX, player.pos.z - exitZ),
-        Math.hypot(player.pos.x - st.x, player.pos.z - (st.z + 32))
-      );
-      if (dExit < 7.5 && Math.abs(player.pos.x - tState.x) > 3.5) {
-        activeDeckAction = 'exit_subway_' + st.id;
-        setDeckPrompt('[E]', 'EXIT TO STREET (' + st.name.toUpperCase() + ')');
-        return;
+      const ents = (st.entrances && st.entrances.length) ? st.entrances : [{ id: 'main', label: st.name, streetX: st.streetX, streetZ: st.streetZ, portalX: st.portalX, portalZ: st.portalZ }];
+      for (let ei = 0; ei < ents.length; ei++) {
+        const ent = ents[ei];
+        const exitX = ent.portalX !== undefined ? ent.portalX : st.x;
+        const exitZ = ent.portalZ !== undefined ? ent.portalZ : (st.z + 32);
+        const dExit = ei === 0
+          ? Math.min(Math.hypot(player.pos.x - exitX, player.pos.z - exitZ), Math.hypot(player.pos.x - st.x, player.pos.z - (st.z + 32)))
+          : Math.hypot(player.pos.x - exitX, player.pos.z - exitZ);
+        if (dExit < 7.5 && Math.abs(player.pos.x - tState.x) > 3.5) {
+          activeDeckAction = ei === 0 ? ('exit_subway_' + st.id) : ('exit_subway_' + st.id + ':' + ei);
+          const exitLabel = ent.id === 'front' ? 'EXIT TO FRONT ST (' : 'EXIT TO STREET (';
+          setDeckPrompt('[E]', exitLabel + st.name.toUpperCase() + ')');
+          return;
+        }
       }
     }
     if (tState.isStopped && tState.doorsOpen &&
@@ -6237,17 +6266,26 @@ function handleDeckAction() {
   }
   // TTC Line 1 Subway System Interactions
   if (typeof activeDeckAction === 'string' && activeDeckAction.startsWith('enter_subway_')) {
-    const stId = activeDeckAction.replace('enter_subway_', '');
+    const raw = activeDeckAction.replace('enter_subway_', '');
+    const parts = raw.split(':');
+    const stId = parts[0];
+    const entIdx = parts.length > 1 ? parseInt(parts[1], 10) : 0;
     const stations = (city && city.subway && city.subway.stations) ? city.subway.stations : [];
     const stIdx = stations.findIndex(s => s.id === stId);
     const st = stIdx >= 0 ? stations[stIdx] : null;
     if (st) {
       if (audio && audio.playPrestoChime) audio.playPrestoChime();
       else if (audio && audio.playPickup) audio.playPickup();
-      player.pos.set(st.x, city.subway.platformY + EYE_HEIGHT, st.z);
+      const ents = (st.entrances && st.entrances.length) ? st.entrances : [];
+      const ent = ents[entIdx] || null;
+      if (ent && ent.id === 'front') {
+        player.pos.set(ent.portalX, city.subway.platformY + EYE_HEIGHT, ent.portalZ);
+        player.yaw = Math.PI * 0.72;
+      } else {
+        player.pos.set(st.x, city.subway.platformY + EYE_HEIGHT, st.z);
+        player.yaw = Math.PI / 2;
+      }
       player.velocity.set(0, 0, 0);
-      // Face west (-X) toward the waiting Line 1 Toronto Rocket train on the platform track!
-      player.yaw = Math.PI / 2;
       player.pitch = 0;
       camera.rotation.order = 'YXZ';
       camera.rotation.y = player.yaw;
@@ -6275,10 +6313,15 @@ function handleDeckAction() {
     }
   }
   if (typeof activeDeckAction === 'string' && activeDeckAction.startsWith('exit_subway_')) {
-    const stId = activeDeckAction.replace('exit_subway_', '');
+    const raw = activeDeckAction.replace('exit_subway_', '');
+    const parts = raw.split(':');
+    const stId = parts[0];
+    const entIdx = parts.length > 1 ? parseInt(parts[1], 10) : 0;
     const st = (city && city.subway && city.subway.stations) ? city.subway.stations.find(s => s.id === stId) : null;
     if (st) {
-      player.pos.set(st.streetX, 1.7, st.streetZ);
+      const ents = (st.entrances && st.entrances.length) ? st.entrances : [];
+      const ent = ents[entIdx] || st;
+      player.pos.set(ent.streetX, 1.7, ent.streetZ);
       player.velocity.set(0, 0, 0);
       state.isUnderground = false;
       return true;

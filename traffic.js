@@ -207,6 +207,8 @@
       for (let i = 1; i < r.pts.length; i++) r.cum.push(r.cum[i - 1] + Math.hypot(r.pts[i][0] - r.pts[i - 1][0], r.pts[i][1] - r.pts[i - 1][1]));
       r.len = r.cum[r.cum.length - 1];
       r.limit = r.major ? 13 + rnd() * 2 : 8 + rnd() * 1.5; // ~50 km/h arterials, ~30 km/h side streets
+      // Divided Spadina Ave (w=13) has separate southbound/northbound carriageways flanking the center streetcar ROW
+      r.oneWay = !!(r.n && r.n.indexOf('Spadina Avenue') === 0 && r.w === 13);
     });
     const usable = roads.filter(r => r.len > 12);
     const NODE = 3;
@@ -558,15 +560,15 @@
         const p = sample(r, d);
         const dist = near ? Math.hypot(p.x - near.x, p.z - near.z) : 100;
         if (near && (dist < minD || dist > maxD)) continue;
-        c.road = r; c.dir = rnd() < 0.5 ? 1 : -1;
+        c.road = r; c.dir = r.oneWay ? 1 : (rnd() < 0.5 ? 1 : -1);
         c.s = c.dir > 0 ? d : r.len - d;
         computeLogical(c);
         if (cars.some(o => o !== c && o.road && Math.hypot(o.lx - c.lx, o.lz - c.lz) < 9)) continue;
-        if (streetcars.some(o => o.mode !== 'hidden' && Math.hypot(o.vx - c.lx, o.vz - c.lz) < SC.L / 2 + 6)) continue;
+        if (streetcars.some(o => o.mode !== 'hidden' && Math.hypot(o.vx - c.lx, o.vz - c.lz) < SC.L / 2 + 18)) continue;
         c.lane = 0;
         c.speed = r.limit * (0.6 + rnd() * 0.3);
         c.vx = c.lx; c.vz = c.lz; c.vh = c.lh;
-        c.stuck = 0; c.ghost = 0; c.honkCd = 0; c.whooshCd = 0; c.hitCd = 0; c.braking = false;
+        c.stuck = 0; c.scWait = 0; c.holdAtJunction = false; c.ghost = 0; c.honkCd = 0; c.whooshCd = 0; c.hitCd = 0; c.braking = false;
         return true;
       }
       return false;
@@ -576,9 +578,9 @@
       if (c.laneSel === undefined) {
         c.laneSel = rnd() < 0.5 ? 0 : 1;
         // don't pick the inside (track) lane right where a streetcar already is
-        if (c.laneSel === 0 && streetcars.some(o => o.mode !== 'hidden' && Math.hypot(o.vx - (c.vx || 0), o.vz - (c.vz || 0)) < SC.L / 2 + 20)) c.laneSel = 1;
+        if (c.laneSel === 0 && streetcars.some(o => o.mode !== 'hidden' && Math.hypot(o.vx - (c.vx || 0), o.vz - (c.vz || 0)) < SC.L / 2 + 30)) c.laneSel = 1;
       }
-      if (w >= 11 && c.road.n && c.road.n.indexOf('Queens Quay') === 0) return w * 0.375; // centre is a streetcar right-of-way
+      if (w >= 11 && c.road.n && (c.road.n.indexOf('Queens Quay') === 0 || c.road.n.indexOf('Spadina Avenue') === 0 || c.road.n.indexOf('Fleet Street') === 0 || c.road.n.indexOf('King Street') === 0 || c.road.n.indexOf("Princes' Boulevard") === 0 || c.road.n.indexOf('Strachan Avenue') === 0)) return Math.min(w * 0.405, w * 0.5 - 1.05); // centre is a streetcar right-of-way
       return w >= 11 ? (c.laneSel ? w * 0.375 : w * 0.125) : w * 0.25;
     }
     function computeLogical(c) {
@@ -592,11 +594,41 @@
       c.fx = fx; c.fz = fz;
       c.lh = Math.atan2(fx, fz);
     }
-    function advanceRoad(c) {
+    function streetcarNearPoint(px, pz, pad) {
+      for (let i = 0; i < streetcars.length; i++) {
+        const o = streetcars[i];
+        if (o.mode === 'hidden') continue;
+        if (Math.hypot(o.vx - px, o.vz - pz) > SC.L * 0.65 + pad) continue;
+        const oSecs = o.group && o.group.userData && o.group.userData.sections;
+        if (oSecs && oSecs.length) {
+          for (let si = 0; si < oSecs.length; si++) {
+            const s = oSecs[si], sp = s.group.position, ry = s.group.rotation.y;
+            const sfx = Math.sin(ry), sfz = Math.cos(ry);
+            const dx = px - sp.x, dz = pz - sp.z;
+            const f = dx * sfx + dz * sfz, l = -dx * sfz + dz * sfx;
+            const d = Math.hypot(Math.max(0, Math.abs(f) - s.len * 0.5), Math.max(0, Math.abs(l) - SC.W * 0.5));
+            if (d <= pad) return true;
+          }
+        } else {
+          const r = rel(o, px, pz);
+          const d = Math.hypot(Math.max(0, Math.abs(r.f) - SC.L * 0.5), Math.max(0, Math.abs(r.l) - SC.W * 0.5));
+          if (d <= pad) return true;
+        }
+      }
+      return false;
+    }
+    function advanceRoad(c, anchorPos) {
       const r = c.road;
       const end = c.dir > 0 ? r.pts[r.pts.length - 1] : r.pts[0];
-      const conns = connectionsAt(end[0], end[1], r);
-      if (!conns.length) { c.dir *= -1; c.s = 0; return; } // dead end: U-turn
+      const conns = connectionsAt(end[0], end[1], r).filter(e => !(e.r.oneWay && !e.atStart));
+      if (!conns.length) {
+        if (r.oneWay) {
+          if (!placeCar(c, anchorPos || null, 90, 220) && !placeCar(c, null)) c.s = 0;
+          c.laneSel = undefined;
+          return true;
+        }
+        c.dir *= -1; c.s = 0; return false; // dead end: U-turn
+      }
       // prefer going roughly straight, sometimes turn
       const scored = conns.map(e => {
         const startD = e.atStart ? 0 : e.r.len;
@@ -606,9 +638,26 @@
         const straight = (dx / l) * c.fx + (dz / l) * c.fz; // 1 = straight on
         return { e, wgt: Math.max(0.05, 0.35 + straight) * (0.5 + rnd()) };
       }).sort((a, b) => b.wgt - a.wgt);
-      const pick = scored[0].e;
+      // Wait before entering intersection if a streetcar is occupying the entry lane
+      const pickItem = scored.find(item => {
+        const e = item.e;
+        const dirN = e.atStart ? 1 : -1;
+        const offs = e.r.w >= 11 ? [0, e.r.w * 0.125, e.r.w * 0.375, e.r.w * 0.405] : [0, e.r.w * 0.25];
+        for (const stepD of [0, 4, 8]) {
+          const sd = e.atStart ? Math.min(e.r.len, stepD) : Math.max(0, e.r.len - stepD);
+          const sp = sample(e.r, sd);
+          const fxN = sp.tx * dirN, fzN = sp.tz * dirN;
+          for (const offN of offs) {
+            if (streetcarNearPoint(sp.x - fzN * offN, sp.z + fxN * offN, 5.4)) return false;
+          }
+        }
+        return true;
+      });
+      if (!pickItem) return 'hold';
+      const pick = pickItem.e;
       c.road = pick.r; c.dir = pick.atStart ? 1 : -1; c.s = 0;
       c.laneSel = undefined;
+      return false;
     }
 
     const SC = { L: 28.0, W: 2.54, H: 3.84 };   // TTC Flexity Outlook
@@ -623,7 +672,7 @@
     // TTC STREETCARS: 504 King and 509/510 Harbourfront, on fixed routes
     // ======================================================================
 
-    const STOP_DWELL = 7.0;
+    const STOP_DWELL = 4.5;
     const scRoutes = [];
     const scTmpA = { x: 0, z: 0 }, scTmpB = { x: 0, z: 0 };
     function setStreetcarDirection(sc, newDir) {
@@ -695,22 +744,31 @@
       scRoutes.push(rt);
 
       const n = src.cars || 4;
+      const routePhase = (scRoutes.length - 1) * 0.13;
       for (let i = 0; i < n; i++) {
         const initDir = i % 2 === 0 ? 1 : -1;
         const sign = initDir > 0 ? rt.signs[0] : (rt.signs[1] || rt.signs[0]);
         const span = Math.max(40, rt.endHi - rt.endLo - 20);
+        let initD = rt.endLo + 10 + span * (((i + 0.45 + routePhase) % n) / n);
         const sc = {
           isStreetcar: true, id: 10000 + streetcars.length, route: rt,
           dir: initDir,
-          d: rt.endLo + 10 + span * ((i + 0.5) / n),
+          d: initD,
           speed: 0, mode: 'run', timer: 0, servedD: -1e9,
           expressTargetD: null,
           vx: 0, vz: 0, fx: 1, fz: 0, vh: 0,
-          design: SC, lenScale: 1, hitCd: 0, gongCd: 0, stuck: 0, ghost: 0, braking: false,
+          design: SC, lenScale: 1, hitCd: 0, gongCd: 0, stuck: 0, braking: false,
           sign: sign, hasPlayer: false, boardGrace: 0,
           group: city.makeStreetcar(sign)
         };
         placeStreetcar(sc);
+        // Ensure staggered cross-route startup clearance (e.g. 509 & 510 sharing Queens Quay)
+        for (let t = 0; t < 8; t++) {
+          const hit = streetcars.some(o => o.dir === sc.dir && Math.hypot(o.vx - sc.vx, o.vz - sc.vz) < SC.L + 14);
+          if (!hit) break;
+          sc.d = Math.max(rt.endLo + 8, Math.min(rt.endHi - 8, sc.d - (SC.L + 16)));
+          placeStreetcar(sc);
+        }
         streetcars.push(sc);
       }
 
@@ -727,6 +785,15 @@
       });
     });
 
+    function trackLateralOffset(rt, dd, dir) {
+      const sgn = dir >= 0 ? 1 : -1;
+      if (!rt || !rt.portal) return TRACK * sgn;
+      const taperStart = rt.len - 46, taperEnd = rt.len - 30;
+      if (dd <= taperStart) return TRACK * sgn;
+      if (dd >= taperEnd) return 0;
+      return TRACK * ((taperEnd - dd) / (taperEnd - taperStart)) * sgn;
+    }
+
     function placeStreetcar(sc) {
       const rt = sc.route, half = SC.L * 0.42;
       const clampD = d => Math.max(0, Math.min(rt.len, d));
@@ -738,8 +805,9 @@
       if (fl < 0.5) { p = sample(rt, clampD(sc.d)); fx = p.tx * sc.dir; fz = p.tz * sc.dir; }
       else { fx /= fl; fz /= fl; }
       sc.fx = fx; sc.fz = fz;
-      sc.vx = (scTmpA.x + scTmpB.x) / 2 - fz * TRACK;
-      sc.vz = (scTmpA.z + scTmpB.z) / 2 + fx * TRACK;
+      const midOff = Math.abs(trackLateralOffset(rt, clampD(sc.d), sc.dir));
+      sc.vx = (scTmpA.x + scTmpB.x) / 2 - fz * midOff;
+      sc.vz = (scTmpA.z + scTmpB.z) / 2 + fx * midOff;
       sc.vh = Math.atan2(fx, fz);
 
       const secs = sc.group.userData.sections;
@@ -752,7 +820,8 @@
         let sx = ax - bx, sz = az - bz;
         const sl = Math.hypot(sx, sz);
         if (sl < 0.2) { sx = fx; sz = fz; } else { sx /= sl; sz /= sl; }
-        s.group.position.set((ax + bx) / 2 - sz * TRACK, 0.05, (az + bz) / 2 + sx * TRACK);
+        const secOff = Math.abs(trackLateralOffset(rt, clampD(c), sc.dir));
+        s.group.position.set((ax + bx) / 2 - sz * secOff, 0.05, (az + bz) / 2 + sx * secOff);
         s.group.rotation.y = Math.atan2(sx, sz);
       });
     }
@@ -772,10 +841,252 @@
       });
     }
 
+    function clearStreetcarZone(sc) {
+      if (!sc || !sc.route) return;
+      placeStreetcar(sc);
+      // Push any ambient streetcar on the same track/junction cleanly out of overlap range
+      streetcars.forEach(o => {
+        if (o === sc || o.hasPlayer || o.mode === 'hidden') return;
+        const r = rel(sc, o.vx, o.vz);
+        const dot = sc.fx * o.fx + sc.fz * o.fz;
+        const sameTrack = dot > 0.35 || Math.abs(r.l) < SC.W + 1.5;
+        if (sameTrack && Math.hypot(o.vx - sc.vx, o.vz - sc.vz) < SC.L + 22) {
+          const origD = o.d;
+          const stepSign = (r.f >= 0 ? 1 : -1) * sc.dir;
+          let bestD = origD;
+          for (const mult of [1, -1, 2, -2, 3, -3, 4, -4]) {
+            const cand = origD + stepSign * mult * (SC.L + 28);
+            if (cand < o.route.endLo + 6 || cand > o.route.endHi - 6) continue;
+            o.d = cand;
+            placeStreetcar(o);
+            const farFromSc = Math.hypot(o.vx - sc.vx, o.vz - sc.vz) >= SC.L + 12;
+            const farFromOthers = streetcars.every(q => q === o || q === sc || q.mode === 'hidden' || Math.hypot(o.vx - q.vx, o.vz - q.vz) >= SC.L + 8);
+            if (farFromSc && farFromOthers) { bestD = cand; break; }
+          }
+          o.d = bestD;
+          o.speed = 0;
+          placeStreetcar(o);
+        }
+      });
+      // Relocate any road car directly overlapping the dispatched streetcar footprint
+      cars.forEach(c => {
+        if (!c.road) return;
+        const r = rel(sc, c.vx, c.vz);
+        if (Math.abs(r.f) < SC.L / 2 + c.design.L * c.lenScale + 4 && Math.abs(r.l) < SC.W / 2 + c.design.W + 2) {
+          placeCar(c, { x: sc.vx, z: sc.vz }, 80, 220);
+        }
+      });
+    }
+
+    function streetcarTurnDist(sc) {
+      const rt = sc && sc.route;
+      if (!rt || !rt.cum || !rt.pts || rt.pts.length < 3) return Infinity;
+      const d = sc.d, cum = rt.cum, pts = rt.pts;
+      let seg = 0;
+      while (seg < cum.length - 2 && cum[seg + 1] < d) seg++;
+      if (sc.dir >= 0) {
+        for (let i = seg; i < pts.length - 2; i++) {
+          const ax = pts[i + 1][0] - pts[i][0], az = pts[i + 1][1] - pts[i][1];
+          const bx = pts[i + 2][0] - pts[i + 1][0], bz = pts[i + 2][1] - pts[i + 1][1];
+          const al = Math.hypot(ax, az) || 1, bl = Math.hypot(bx, bz) || 1;
+          if ((ax * bx + az * bz) / (al * bl) < 0.85) return Math.max(0, cum[i + 1] - d);
+        }
+      } else {
+        for (let i = seg; i >= 1; i--) {
+          const ax = pts[i][0] - pts[i + 1][0], az = pts[i][1] - pts[i + 1][1];
+          const bx = pts[i - 1][0] - pts[i][0], bz = pts[i - 1][1] - pts[i][1];
+          const al = Math.hypot(ax, az) || 1, bl = Math.hypot(bx, bz) || 1;
+          if ((ax * bx + az * bz) / (al * bl) < 0.85) return Math.max(0, d - cum[i]);
+        }
+      }
+      return Infinity;
+    }
+
+    function sampleStreetcarPoint(rt, d, dir) {
+      const dd = Math.max(0, Math.min(rt.len, d));
+      const cum = rt.cum, pts = rt.pts;
+      let seg = 0;
+      while (seg < cum.length - 2 && cum[seg + 1] < dd) seg++;
+      const sLen = Math.max(1e-6, cum[seg + 1] - cum[seg]);
+      const t = (dd - cum[seg]) / sLen;
+      const p0 = pts[seg], p1 = pts[seg + 1];
+      const tx = (p1[0] - p0[0]) / sLen, tz = (p1[1] - p0[1]) / sLen;
+      const off = trackLateralOffset(rt, dd, dir);
+      return {
+        x: p0[0] + (p1[0] - p0[0]) * t + (-tz) * off,
+        z: p0[1] + (p1[1] - p0[1]) * t + tx * off,
+        fx: tx * dir, fz: tz * dir
+      };
+    }
+
+    function computeStreetcarGap(sc, look, checkStopsAndSignals, people, P, rt) {
+      let gap = Infinity, personAhead = false, waitingForTraffic = false, blockedByVehicle = false, blockerCar = null;
+      const turnDist = streetcarTurnDist(sc);
+      sc.turnDist = turnDist;
+      const maxAhead = Math.max(SC.L * 0.5 + 14, look);
+      const trackPts = [];
+      for (let ds = SC.L * 0.5 + 0.2; ds <= maxAhead; ds += 2.0) {
+        const sd = sc.d + sc.dir * ds;
+        if (sd < -2 || sd > rt.len + 2) break;
+        const pt = sampleStreetcarPoint(rt, sd, sc.dir);
+        pt.ds = ds;
+        trackPts.push(pt);
+      }
+
+      if (checkStopsAndSignals) {
+        const rem = sc.dir > 0 ? rt.endHi - sc.d : sc.d - rt.endLo;
+        gap = rem + 3.2;
+
+        let stopRem = Infinity;
+        rt.stops.forEach(st => {
+          if (st.dir && st.dir !== sc.dir) return;
+          const sd = st.d;
+          if (sd < rt.endLo + 8 || sd > rt.endHi - 8) return;
+          if (Math.abs(sd - sc.servedD) < 1) return;
+          const r = (sd - sc.d) * sc.dir;
+          if (r > -0.3 && r < stopRem) stopRem = r;
+        });
+        if (stopRem < Infinity) gap = Math.min(gap, Math.max(0, stopRem) + 3.0);
+        if (stopRem < 0.5 && sc.speed < 0.6) {
+          sc.mode = 'dwell'; sc.timer = STOP_DWELL; sc.servedD = sc.d + stopRem * sc.dir; sc.speed = 0;
+        }
+
+        signals.forEach(sg => {
+          if (sg.fx * sc.fx + sg.fz * sc.fz < 0.8) return;
+          const r = rel(sc, sg.x, sg.z);
+          if (r.f < SC.L / 2 || r.f > 70 || Math.abs(r.l) > rt.sigLat) return;
+          const dStop = r.f - 5.2 - SC.L / 2;
+          if (sg.state === 'red' || (sg.state === 'yellow' && dStop > 10)) {
+            if (dStop + 2.5 < gap) { gap = dStop + 2.5; waitingForTraffic = true; }
+          }
+        });
+      }
+
+      // Check road cars against the true curved track corridor ahead (exact OBB distance, zero corner phantoms)
+      cars.forEach(o => {
+        if (!o.road) return;
+        const cLen = o.design.L * o.lenScale;
+        const hitR2 = 1.35 * 1.35;
+        for (let m = 0; m < trackPts.length; m++) {
+          const pt = trackPts[m];
+          const r = rel(o, pt.x, pt.z);
+          const dx = Math.max(0, Math.abs(r.f) - cLen * 0.5);
+          const dz = Math.max(0, Math.abs(r.l) - o.design.W * 0.5);
+          if (dx * dx + dz * dz <= hitR2) {
+            const g = Math.max(0, pt.ds - SC.L * 0.5 - 2.3);
+            if (g < gap) { gap = g; blockedByVehicle = true; blockerCar = o; }
+            break;
+          }
+        }
+      });
+
+      // Check ALL other active streetcars along true curved track corridor (parallel 3m opposite track passes cleanly)
+      streetcars.forEach(o => {
+        if (o === sc || o.mode === 'hidden') return;
+        const dot = sc.fx * o.fx + sc.fz * o.fz;
+        const back = rel(o, sc.vx, sc.vz);
+        const fwd = rel(sc, o.vx, o.vz);
+        const remSc = rt.len - sc.d;
+        const remO = o.route.len - o.d;
+        const scInPortal = !!(rt.portal && remSc < 52);
+        const oInPortal = !!(o.route.portal && remO < 52);
+        const inPortalThroat = scInPortal || oInPortal;
+        // Single-track terminal portal token: train leaving dead-end stub (dir<0, smaller rem) always clears before inbound enters
+        if (rt.portal && o.route.portal && oInPortal && sc.dir > 0 && remO < remSc) {
+          const gBlock = Math.max(0, (remSc > 52)
+            ? (remSc - 52 - SC.L * 0.5 - 1.5)
+            : (remSc - remO - SC.L - 2.0));
+          if (gBlock < gap) { gap = gBlock; blockedByVehicle = true; blockerCar = null; }
+          return;
+        }
+        if (inPortalThroat && sc.dir < 0 && o.dir > 0 && remSc < remO) return;
+        const sharedHarbour = (rt.id === '509' || rt.id === '510') && (o.route.id === '509' || o.route.id === '510');
+        const leftCrossWye = ((rt.id === '509' && sc.dir < 0 && o.route.id === '510' && o.dir > 0) || (rt.id === '510' && sc.dir > 0 && o.route.id === '509' && o.dir < 0))
+          && sc.vx < -730 && o.vx < -730 && sc.vz > 350 && sc.vz < 430 && o.vz > 350 && o.vz < 430;
+        const onOppositeTwinRail = !leftCrossWye && sc.dir !== o.dir && (rt === o.route || (sharedHarbour && sc.vz > 370 && o.vz > 370));
+        // Outside single-track portals and the 509/510 Wye left-turn crossing, opposing trams run on separate parallel rails
+        if (!inPortalThroat && !leftCrossWye && (onOppositeTwinRail || (dot < -0.55 && Math.abs(back.l) >= SC.W * 0.65))) return;
+        // Close same-direction leader guard (catches overlaps within the first half-car length before trackPts[0])
+        if (dot >= 0.45 && fwd.f > 0 && fwd.f < SC.L + 1.5 && Math.abs(fwd.l) < SC.W * 0.85) {
+          const closeG = Math.max(0, fwd.f - SC.L - 2.0);
+          if (closeG < gap) { gap = closeG; blockedByVehicle = true; blockerCar = null; }
+          return;
+        }
+        const hitR2 = 1.25 * 1.25;
+        const oSecs = (o.group && o.group.userData && o.group.userData.sections) || null;
+        for (let m = 0; m < trackPts.length; m++) {
+          const pt = trackPts[m];
+          let hitO = false;
+          if (oSecs) {
+            for (let si = 0; si < oSecs.length; si++) {
+              const s = oSecs[si], sp = s.group.position, ry = s.group.rotation.y;
+              const sfx = Math.sin(ry), sfz = Math.cos(ry);
+              const sx = pt.x - sp.x, sz = pt.z - sp.z;
+              const sf = sx * sfx + sz * sfz, sl = -sx * sfz + sz * sfx;
+              const dx = Math.max(0, Math.abs(sf) - s.len * 0.5);
+              const dz = Math.max(0, Math.abs(sl) - SC.W * 0.5);
+              if (dx * dx + dz * dz <= hitR2) { hitO = true; break; }
+            }
+          } else {
+            const r = rel(o, pt.x, pt.z);
+            const dx = Math.max(0, Math.abs(r.f) - SC.L * 0.48);
+            const dz = Math.max(0, Math.abs(r.l) - SC.W * 0.5);
+            hitO = (dx * dx + dz * dz <= hitR2);
+          }
+          if (hitO) {
+            const isSameDirAhead = dot >= 0.45 && fwd.f > 0;
+            const leftTurnYieldWye = leftCrossWye && rt.id === '509' && sc.dir < 0;
+            const oAlreadyAheadOrPast = dot > -0.35 && fwd.f > 0 && back.f <= 2.0;
+            const priorityYield = (!sc.hasPlayer && o.hasPlayer) || (!!sc.hasPlayer === !!o.hasPlayer && sc.id > o.id);
+            const crossYield = Math.abs(back.f - fwd.f) <= 0.5 ? priorityYield : (back.f < fwd.f);
+            const iMustYield = isSameDirAhead || leftTurnYieldWye || oAlreadyAheadOrPast || crossYield;
+            if (!iMustYield) continue;
+            const g = Math.max(0, pt.ds - SC.L * 0.5 - 2.2);
+            if (g < gap) { gap = g; blockedByVehicle = true; blockerCar = null; }
+            break;
+          }
+        }
+      });
+
+      people.forEach(p => {
+        if (!p.isPlayer) return; // idle street NPCs must not stall transit routes; contact physics handle them
+        if (sc.hasPlayer || sc.boardGrace > 0) return;
+        const r = rel(sc, p.x, p.z);
+        if (r.f > 0 && r.f < look && Math.abs(r.l) < SC.W / 2 + 0.7) {
+          const g = Math.max(0, r.f - SC.L / 2 - 0.4);
+          if (g < gap) { gap = g; personAhead = true; blockerCar = null; }
+        }
+      });
+
+      if ((personAhead || (blockedByVehicle && sc.hasPlayer)) && gap < 14 && sc.gongCd <= 0) {
+        streetcarGong(Math.hypot(sc.vx - P.x, sc.vz - P.z));
+        sc.gongCd = 2.5;
+      }
+      return { gap, personAhead, waitingForTraffic, blockedByVehicle, blockerCar, trackPts };
+    }
+
+    function clearGridlockedBlocker(sc, gapRes, dt, P) {
+      const bc = gapRes.blockerCar;
+      if (bc && bc.speed < 1.8 && sc.speed < 1.0) {
+        sc.carStallTimer = (sc.carStallTimer || 0) + dt;
+        if (sc.carStallTimer > 8.0) {
+          // Relocate stationary gridlocked road cars blocking this rail corridor (same as scWait)
+          cars.forEach(o => {
+            if (!o.road || o.speed >= 1.8) return;
+            const near = o === bc || gapRes.trackPts.some(pt => Math.hypot(o.vx - pt.x, o.vz - pt.z) < 4.5);
+            if (near && (!placeCar(o, P, 90, 220))) placeCar(o, null);
+          });
+          sc.carStallTimer = 0;
+        }
+      } else {
+        sc.carStallTimer = 0;
+      }
+    }
+
     function updateStreetcars(dt, ctx, people, P) {
       streetcars.forEach(sc => {
         const rt = sc.route;
-        sc.hitCd -= dt; sc.gongCd -= dt; sc.ghost -= dt;
+        sc.hitCd -= dt; sc.gongCd -= dt;
         sc.boardGrace = Math.max(0, (sc.boardGrace || 0) - dt);
 
         if (sc.hasPlayer && sc.mode === 'dwell') {
@@ -785,7 +1096,6 @@
         if (sc.mode === 'hidden') {
           sc.timer -= dt;
           if (sc.timer > 0) return;
-          // don't pop out on top of another car on the same track
           const blocked = streetcars.some(o => o !== sc && o.route === rt && o.mode !== 'hidden' && o.dir === sc.dir && Math.abs(o.d - sc.d) < SC.L + 12);
           if (blocked) { sc.timer = 1; return; }
           sc.mode = 'run'; sc.group.visible = true; sc.speed = 2;
@@ -797,9 +1107,8 @@
           if (sc.timer <= 0) { sc.mode = 'run'; if (sc.gongCd <= 0) { streetcarGong(Math.hypot(sc.vx - P.x, sc.vz - P.z)); sc.gongCd = 4; } }
         }
 
-        let gap = Infinity, personAhead = false, waitingForTraffic = false;
         if (sc.hasPlayer && sc.expressTargetD !== null && sc.expressTargetD !== undefined) {
-          // Guided passenger ride to player's clicked stop (travels either direction cleanly along rails)
+          // Guided passenger ride to clicked stop: travels briskly while strictly respecting cars & streetcars
           sc.mode = 'run';
           sc.timer = 0;
           const diff = sc.expressTargetD - sc.d;
@@ -813,79 +1122,37 @@
             sc.servedD = sc.d;
           } else {
             const wantDir = diff >= 0 ? 1 : -1;
-            if (sc.dir !== wantDir) setStreetcarDirection(sc, wantDir);
-            const target = Math.min(75.0, Math.max(9.0, Math.abs(diff) * 0.9));
-            sc.speed += Math.max(-24.0 * dt, Math.min(48.0 * dt, target - sc.speed));
-            sc.speed = Math.max(4.0, sc.speed);
+            if (sc.dir !== wantDir) {
+              setStreetcarDirection(sc, wantDir);
+              placeStreetcar(sc);
+            }
+            const look = SC.L / 2 + Math.max(24, 14 + sc.speed * 1.6);
+            const gapRes = computeStreetcarGap(sc, look, false, people, P, rt);
+            const gap = gapRes.gap;
+            clearGridlockedBlocker(sc, gapRes, dt, P);
+            const cruiseCap = Math.min(24.0, Math.max(6.0, Math.abs(diff) * 0.75));
+            const gapCap = gap < Infinity ? (gap <= 2.5 ? 0 : Math.max(0, (gap - 2.5) * 0.9)) : cruiseCap;
+            const target = Math.min(cruiseCap, gapCap);
+            const accelStep = target > sc.speed ? 18.0 * dt : 42.0 * dt;
+            sc.speed += Math.max(-accelStep, Math.min(accelStep, target - sc.speed));
+            sc.speed = gap <= 1.8 ? 0 : Math.max(0, sc.speed);
             sc.braking = target < sc.speed - 0.5;
             const step = Math.min(Math.abs(diff), sc.speed * dt);
             sc.d += wantDir * step;
           }
         } else if (sc.mode === 'run') {
-          // measured from the car's centre, so add half a car: you see 14-45 m past the nose
           const look = SC.L / 2 + Math.max(14, Math.min(45, 8 + sc.speed * 2.6));
-          const rem = sc.dir > 0 ? rt.endHi - sc.d : sc.d - rt.endLo;
-          gap = rem + 3.2;                                        // roll right to the end of the line
+          const gapRes = computeStreetcarGap(sc, look, true, people, P, rt);
+          const gap = gapRes.gap;
+          clearGridlockedBlocker(sc, gapRes, dt, P);
 
-          // next stop
-          let stopRem = Infinity;
-          rt.stops.forEach(st => {
-            if (st.dir && st.dir !== sc.dir) return;
-            const sd = st.d;
-            if (Math.abs(sd - sc.servedD) < 1) return;
-            const r = (sd - sc.d) * sc.dir;
-            if (r > -0.3 && r < stopRem) stopRem = r;
-          });
-          if (stopRem < Infinity) gap = Math.min(gap, Math.max(0, stopRem) + 3.0);
-          if (stopRem < 0.5 && sc.speed < 0.6) {
-            sc.mode = 'dwell'; sc.timer = STOP_DWELL; sc.servedD = sc.d + stopRem * sc.dir; sc.speed = 0;
-          }
-
-          // traffic lights (same ones the cars use)
-          signals.forEach(sg => {
-            if (sg.fx * sc.fx + sg.fz * sc.fz < 0.8) return;
-            const r = rel(sc, sg.x, sg.z);
-            if (r.f < SC.L / 2 || r.f > 70 || Math.abs(r.l) > rt.sigLat) return;
-            const dStop = r.f - 5.2 - SC.L / 2;
-            if (sg.state === 'red' || (sg.state === 'yellow' && dStop > 10)) {
-              if (dStop + 2.5 < gap) { gap = dStop + 2.5; waitingForTraffic = true; }
-            }
-          });
-
-          if (sc.ghost <= 0) {
-            cars.forEach(o => {
-              if (!o.road) return;
-              const r = rel(sc, o.vx, o.vz);
-              if (r.f <= SC.L / 2 || r.f > look + SC.L / 2 || Math.abs(r.l) > 1.9) return; // only cars clear ahead of our nose
-              if (sc.fx * o.fx + sc.fz * o.fz < -0.5) return;     // oncoming
-              gap = Math.min(gap, r.f - (SC.L + o.design.L * o.lenScale) / 2);
-            });
-            streetcars.forEach(o => {
-              if (o === sc || o.mode === 'hidden') return;
-              const r = rel(sc, o.vx, o.vz);
-              if (r.f <= 0 || r.f > look + SC.L || Math.abs(r.l) > 1.9) return;
-              if (sc.fx * o.fx + sc.fz * o.fz < -0.5) return;
-              gap = Math.min(gap, r.f - SC.L - 2);
-            });
-          }
-          people.forEach(p => {
-            const r = rel(sc, p.x, p.z);
-            if (r.f > 0 && r.f < look && Math.abs(r.l) < SC.W / 2 + 0.7) {
-              const g = r.f - SC.L / 2 - 0.4;
-              if (g < gap) { gap = g; personAhead = !!p.isPlayer; }
-            }
-          });
-          if (personAhead && gap < 14 && sc.gongCd <= 0) { streetcarGong(Math.hypot(sc.vx - P.x, sc.vz - P.z)); sc.gongCd = 2.5; }
-
-          // speed: streetcars pull away gently and brake smoothly
-          const target = Math.min(rt.limit, Math.max(0, (gap - 3) * 0.8));
-          const decel = gap < 6 ? 9 : 4;
-          sc.speed += Math.max(-decel * dt, Math.min(1.4 * dt, target - sc.speed));
-          sc.speed = Math.max(0, sc.speed);
+          // speed: streetcars pull away gently and brake decisively before vehicles without ever ghosting
+          const decel = gap < 8 ? 28 : 8;
+          const kin = gap < Infinity ? Math.sqrt(Math.max(0, 2 * 18 * Math.max(0, gap - 1.8))) : rt.limit;
+          const target = Math.min(rt.limit, kin, Math.max(0, (gap - 2.8) * 0.9));
+          sc.speed += Math.max(-decel * dt, Math.min(1.8 * dt, target - sc.speed));
+          sc.speed = gap <= 1.6 ? 0 : Math.max(0, sc.speed);
           sc.braking = target < sc.speed - 0.3;
-
-          if (sc.speed < 0.3 && gap < 6 && !personAhead && !waitingForTraffic) { sc.stuck += dt; if (sc.stuck > 8) { sc.ghost = 3; sc.stuck = 0; } }
-          else sc.stuck = 0;
 
           sc.d += sc.dir * sc.speed * dt;
           // End of the line (loop terminus or Union portal): reverse direction smoothly without vanishing
@@ -1052,9 +1319,9 @@
         pedLensMesh.instanceColor.needsUpdate = true;
       }
       const people = [];
-      const isPlayerUnderground = (ctx.state && (ctx.state.onSubway || ctx.state.isUnderground)) || (P.y < -2.0);
+      const isPlayerOffStreet = (ctx.state && (ctx.state.onSubway || ctx.state.isUnderground || ctx.state.onStreetcar || ctx.state.onTaxi)) || (P.y < -2.0);
       const isPlayerSky = P.y > 25.0;
-      if (!isPlayerUnderground && !isPlayerSky) {
+      if (!isPlayerOffStreet && !isPlayerSky) {
         people.push({ x: P.x, z: P.z, isPlayer: true, y: P.y });
       }
       ctx.enemies.forEach(e => {
@@ -1077,7 +1344,7 @@
         // ---- look ahead: cars + people in our path ----
         const L = c.design.L * c.lenScale;
         const look = Math.max(9, Math.min(28, 5 + c.speed * 1.7));
-        let gap = Infinity, personAhead = false;
+        let gap = Infinity, personAhead = false, queueBlocking = false;
         if (c.ghost <= 0) {
           cars.forEach(o => {
             if (o === c) return;
@@ -1089,22 +1356,63 @@
               const back = rel(o, c.vx, c.vz);
               if (back.f > 0 && back.f < look && Math.abs(back.l) < 1.7 && o.id > c.id) return;
             }
-            gap = Math.min(gap, r.f - (L + o.design.L * o.lenScale) / 2);
+            const g = r.f - (L + o.design.L * o.lenScale) / 2;
+            if (g < gap) {
+              gap = g;
+              if (g < 6 && o.waitingForStreetcar && o.speed < 0.5) queueBlocking = true;
+            }
           });
         }
         let streetcarAhead = false;
+        const lookSc = Math.max(look, 52);
         streetcars.forEach(o => {
           if (o.mode === 'hidden') return;
-          const inside = rel(o, c.vx, c.vz);
-          if (Math.abs(inside.f) < SC.L / 2 + 1 && Math.abs(inside.l) < SC.W / 2 + 0.8) return;
-          for (let k = -0.5; k <= 0.51; k += 0.1) {            // every ~2.8 m along the car
-            const r = rel(c, o.vx + o.fx * SC.L * k, o.vz + o.fz * SC.L * k);
-            if (r.f <= 0 || r.f > look || Math.abs(r.l) > 1.9) continue;
-            const g = r.f - L / 2 - 1.0;
-            if (g < gap) { gap = g; streetcarAhead = true; }
+          if (Math.hypot(o.vx - c.vx, o.vz - c.vz) > lookSc + SC.L * 0.7) return;
+          const oDot = c.fx * o.fx + c.fz * o.fz;
+          const latCarSc = (SC.W + c.design.W) * 0.5 + 0.55;
+          const centerRel = rel(c, o.vx, o.vz);
+          if (Math.abs(oDot) > 0.96 && Math.abs(centerRel.l) >= latCarSc + 4.0) return;
+          // Check actual articulated streetcar sections plus dynamic forward lead sweep on crossing/oncoming paths
+          const leadDist = (o.speed > 1.2 && oDot < 0.5) ? Math.max(20, Math.min(52, o.speed * 2.4)) : 0;
+          const leadSamples = leadDist > 0 ? Math.ceil(leadDist / 3.5) : 0;
+          const oSecs = o.group && o.group.userData && o.group.userData.sections;
+          if (oSecs && oSecs.length) {
+            for (let si = 0; si < oSecs.length; si++) {
+              const s = oSecs[si], sp = s.group.position, ry = s.group.rotation.y;
+              const sfx = Math.sin(ry), sfz = Math.cos(ry);
+              const sDot = c.fx * sfx + c.fz * sfz;
+              for (const k of [-0.45, 0, 0.45]) {
+                const r = rel(c, sp.x + sfx * s.len * k, sp.z + sfz * s.len * k);
+                if (r.f > -L * 0.25 && r.f <= lookSc && Math.abs(r.l) <= latCarSc) {
+                  if (sDot < -0.5 && Math.abs(r.l) > (SC.W + c.design.W) * 0.5 + 0.35) continue;
+                  const g = Math.max(0, r.f - L / 2 - 2.3);
+                  if (g < gap) { gap = g; streetcarAhead = true; }
+                }
+              }
+            }
+          } else {
+            for (let k = -0.5; k <= 0.51; k += 0.125) {
+              const ox = o.vx + o.fx * SC.L * k, oz = o.vz + o.fz * SC.L * k;
+              const r = rel(c, ox, oz);
+              if (r.f > -L * 0.25 && r.f <= lookSc && Math.abs(r.l) <= latCarSc) {
+                if (oDot < -0.5 && Math.abs(r.l) > (SC.W + c.design.W) * 0.5 + 0.35) continue;
+                const g = Math.max(0, r.f - L / 2 - 2.3);
+                if (g < gap) { gap = g; streetcarAhead = true; }
+              }
+            }
+          }
+          for (let ls = 1; ls <= leadSamples; ls++) {
+            const dAhead = SC.L / 2 + ls * 3.5;
+            if (o.turnDist !== undefined && dAhead > o.turnDist + 1.5) break;
+            const r = rel(c, o.vx + o.fx * dAhead, o.vz + o.fz * dAhead);
+            if (r.f > 0 && r.f <= lookSc && Math.abs(r.l) <= latCarSc + 0.15) {
+              const g = Math.max(0, r.f - L / 2 - 2.3);
+              if (g < gap) { gap = g; streetcarAhead = true; }
+            }
           }
         });
         people.forEach(p => {
+          if (c.ghost > 0 && !p.isPlayer) return;
           const r = rel(c, p.x, p.z);
           if (r.f > 0 && r.f < look && Math.abs(r.l) < c.design.W / 2 + 0.7) {
             const g = r.f - L / 2 - 0.4;
@@ -1113,7 +1421,7 @@
         });
 
         // ---- Look ahead for traffic lights & stop bars ----
-        const rem = c.dir > 0 ? (c.road.len - c.s) : c.s;
+        const rem = c.road.len - c.s;
         let isWaitingAtRed = false;
         if (rem < 36 && rem > 0.6) {
           const atStart = c.dir < 0;
@@ -1137,26 +1445,60 @@
         // ---- speed control (simple intelligent-driver model) ----
         const limit = c.road.limit;
         let target = limit;
-        if (gap < Infinity) target = Math.min(limit, Math.max(0, (gap - 2.5) * 1.1));
-        const accel = target > c.speed ? 3.2 : -9.0; // brake much harder than we accelerate
-        c.speed += Math.max(-9.0 * dt, Math.min(3.2 * dt, target - c.speed)) * (accel < 0 ? 1 : 1);
+        if (gap < Infinity) target = Math.min(limit, Math.max(0, (gap - 2.8) * 1.1));
+        if (c.holdAtJunction) target = 0;
+        const maxDecel = streetcarAhead ? 24.0 : 9.0; // emergency brake harder for streetcars
+        c.speed += Math.max(-maxDecel * dt, Math.min(3.2 * dt, target - c.speed));
+        if (c.holdAtJunction) c.speed = 0;
+        if (streetcarAhead) {
+          c.speed = Math.min(c.speed, Math.sqrt(Math.max(0, 2 * 14 * Math.max(0, gap - 2.0))));
+          if (gap <= 2.0) c.speed = 0;
+        }
         c.speed = Math.max(0, c.speed);
-        c.braking = target < c.speed - 0.5 || (c.speed < 0.5 && gap < 6);
+        c.braking = target < c.speed - 0.5 || (c.speed < 0.5 && gap < 6) || !!c.holdAtJunction;
         if (personAhead && gap < 10 && c.speed > 2 && c.honkCd <= 0) { honk(Math.hypot(c.vx - P.x, c.vz - P.z)); c.honkCd = 2.5; }
 
-        // gridlock breaker: if stuck behind cars for a while, ghost through
-        if (c.speed < 0.3 && gap < 6 && !personAhead && !isWaitingAtRed && !streetcarAhead) { c.stuck += dt; if (c.stuck > 6) { c.ghost = 2.5; c.stuck = 0; } } else c.stuck = 0;
+        c.waitingForStreetcar = streetcarAhead || queueBlocking || !!c.holdAtJunction;
+        let relocatedWait = false;
+        if (c.speed < 0.9 && !personAhead && !isWaitingAtRed && ((gap < 6 && (streetcarAhead || queueBlocking)) || c.holdAtJunction)) {
+          c.scWait = (c.scWait || 0) + dt;
+          if (c.scWait > 10) {
+            if (!placeCar(c, P, 90, 220)) placeCar(c, null);
+            c.scWait = 0; c.holdAtJunction = false;
+            relocatedWait = true;
+          }
+        } else {
+          c.scWait = 0;
+        }
+        // gridlock breaker: if stuck behind cars for a while, ghost through (never stack into streetcar queues)
+        if (c.speed < 0.9 && gap < 6 && !personAhead && !isWaitingAtRed && !c.waitingForStreetcar) { c.stuck += dt; if (c.stuck > 6) { c.ghost = 2.5; c.stuck = 0; } } else c.stuck = 0;
 
-        // ---- move along the network ----
-        c.s += c.speed * dt;
-        let guard = 0;
-        while (c.s >= c.road.len && guard++ < 4) { const over = c.s - c.road.len; advanceRoad(c); c.s += over; }
-        computeLogical(c);
-        // visual smoothing (hides lane hops at junctions)
-        const k = 1 - Math.exp(-dt * 8);
-        c.vx += (c.lx - c.vx) * k; c.vz += (c.lz - c.vz) * k;
-        let dh = c.lh - c.vh; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
-        c.vh += dh * (1 - Math.exp(-dt * 6));
+        if (!relocatedWait) {
+          // ---- move along the network ----
+          c.s += c.speed * dt;
+          let guard = 0;
+          let recheckHold = !!(c.holdAtJunction && !isWaitingAtRed);
+          while ((c.s >= c.road.len || recheckHold) && guard++ < 4) {
+            const over = recheckHold ? 0 : (c.s - c.road.len);
+            recheckHold = false;
+            const adv = advanceRoad(c, P);
+            if (adv === 'hold') {
+              c.s = Math.max(0, c.road.len - 0.15);
+              c.speed = 0; c.braking = true;
+              c.waitingForStreetcar = true;
+              c.holdAtJunction = true;
+              break;
+            }
+            c.holdAtJunction = false;
+            if (!adv) c.s += over;
+          }
+          computeLogical(c);
+          // visual smoothing (hides lane hops at junctions)
+          const k = 1 - Math.exp(-dt * 8);
+          c.vx += (c.lx - c.vx) * k; c.vz += (c.lz - c.vz) * k;
+          let dh = c.lh - c.vh; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+          c.vh += dh * (1 - Math.exp(-dt * 6));
+        }
 
         // ---- collisions with people ----
         const hx = L / 2 + 0.15, hz = c.design.W / 2 + 0.15;
@@ -1259,6 +1601,7 @@
       scRoutes,
       streetcarDots,
       placeStreetcar,
+      clearStreetcarZone,
       sampleRoute: sample,
       setStreetcarDirection,
       update,
