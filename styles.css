@@ -1874,18 +1874,19 @@ body.telescope-mode #crosshair-wrapper {
   display: none !important;
 }
 
-/* CN Tower elevator, Toronto Island Ferry & Beck Taxi select panels */
+/* CN Tower elevator, Toronto Island Ferry, Beck Taxi & TTC Streetcar select panels */
 #elevator-panel,
 #ferry-panel,
-#taxi-panel {
+#taxi-panel,
+#streetcar-panel {
   position: absolute;
   right: 28px;
   top: 50%;
   transform: translateY(-50%);
   z-index: 150;
-  width: 320px;
+  width: 340px;
   padding: 14px 14px 10px;
-  background: rgba(15, 23, 42, 0.94);
+  background: rgba(15, 23, 42, 0.95);
   border: 1.5px solid #38bdf8;
   border-radius: 14px;
   box-shadow: 0 0 22px rgba(56, 189, 248, 0.45), inset 0 0 12px rgba(56, 189, 248, 0.15);
@@ -1896,27 +1897,50 @@ body.telescope-mode #crosshair-wrapper {
   border-color: #f97316;
   box-shadow: 0 0 22px rgba(249, 115, 22, 0.45), inset 0 0 12px rgba(13, 148, 136, 0.2);
 }
+#streetcar-panel {
+  border-color: #ef4444;
+  box-shadow: 0 0 22px rgba(239, 68, 68, 0.48), inset 0 0 12px rgba(220, 38, 38, 0.2);
+}
 #elevator-panel.hidden,
 #ferry-panel.hidden,
-#taxi-panel.hidden { display: none !important; }
+#taxi-panel.hidden,
+#streetcar-panel.hidden { display: none !important; }
 #elevator-panel .elev-panel-head,
 #ferry-panel .elev-panel-head,
-#taxi-panel .elev-panel-head {
+#taxi-panel .elev-panel-head,
+#streetcar-panel .elev-panel-head {
   display: flex; justify-content: space-between; align-items: baseline;
   margin-bottom: 10px;
 }
 #elevator-panel .elev-panel-title,
 #ferry-panel .elev-panel-title,
-#taxi-panel .elev-panel-title {
+#taxi-panel .elev-panel-title,
+#streetcar-panel .elev-panel-title {
   font-family: 'Teko', sans-serif; font-size: 22px; font-weight: 700; color: #38bdf8; line-height: 1;
 }
 #taxi-panel .elev-panel-title { color: #fb923c; }
+#streetcar-panel .elev-panel-title { color: #f87171; }
 #elevator-panel .elev-panel-hint,
 #ferry-panel .elev-panel-hint,
-#taxi-panel .elev-panel-hint { font-size: 11px; color: #94a3b8; }
+#taxi-panel .elev-panel-hint,
+#streetcar-panel .elev-panel-hint { font-size: 11px; color: #94a3b8; }
 #elevator-floor-list,
 #ferry-dock-list,
-#taxi-dest-list { display: flex; flex-direction: column; gap: 6px; }
+#taxi-dest-list,
+#streetcar-stop-list { display: flex; flex-direction: column; gap: 6px; }
+#streetcar-stop-list { max-height: 350px; overflow-y: auto; padding-right: 2px; }
+.sc-route-tabs {
+  display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap;
+}
+.sc-route-tab {
+  flex: 1 1 auto; padding: 5px 8px;
+  border-radius: 8px; border: 1px solid rgba(248, 113, 113, 0.35);
+  background: rgba(30, 41, 59, 0.85); color: #cbd5e1;
+  font-size: 11px; font-weight: 700; cursor: pointer;
+}
+.sc-route-tab.is-active {
+  background: rgba(220, 38, 38, 0.85); color: #fff; border-color: #facc15;
+}
 .elev-floor-btn {
   display: flex; align-items: center; gap: 12px;
   width: 100%; padding: 8px 10px;
@@ -1943,11 +1967,13 @@ body.telescope-mode #crosshair-wrapper {
 .elev-floor-sub { font-size: 11px; color: #cbd5e1; }
 #elevator-panel .elev-panel-foot,
 #ferry-panel .elev-panel-foot,
-#taxi-panel .elev-panel-foot { margin-top: 10px; font-size: 11px; color: #94a3b8; text-align: center; }
+#taxi-panel .elev-panel-foot,
+#streetcar-panel .elev-panel-foot { margin-top: 10px; font-size: 11px; color: #94a3b8; text-align: center; }
 @media (max-width: 700px) {
   #elevator-panel,
   #ferry-panel,
-  #taxi-panel { right: 50%; transform: translate(50%, -50%); width: min(320px, 90vw); }
+  #taxi-panel,
+  #streetcar-panel { right: 50%; transform: translate(50%, -50%); width: min(340px, 92vw); }
 }
 
 /* ==========================================================================

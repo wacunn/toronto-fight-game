@@ -626,16 +626,36 @@
     const STOP_DWELL = 7.0;
     const scRoutes = [];
     const scTmpA = { x: 0, z: 0 }, scTmpB = { x: 0, z: 0 };
+    function setStreetcarDirection(sc, newDir) {
+      sc.dir = newDir >= 0 ? 1 : -1;
+      const rt = sc.route;
+      const nextSign = rt && rt.signs ? (sc.dir > 0 ? rt.signs[0] : (rt.signs[1] || rt.signs[0])) : sc.sign;
+      sc.sign = nextSign;
+      if (sc.group && sc.group.userData && typeof sc.group.userData.setSign === 'function') {
+        sc.group.userData.setSign(nextSign);
+      }
+      return sc.dir;
+    }
 
     (city.streetcarRoutes || []).forEach(src => {
       if (!src.pts || src.pts.length < 2 || typeof city.makeStreetcar !== 'function') return;
-      const rt = { id: src.id, pts: src.pts, limit: src.limit || 11, portal: src.portal, stops: [], cum: [0], sigLat: src.sigLat || 8 };
+      const rt = {
+        id: src.id,
+        name: src.name || src.id,
+        signs: src.signs || [src.id],
+        pts: src.pts,
+        limit: src.limit || 11,
+        portal: src.portal,
+        stops: [],
+        namedStops: [],
+        cum: [0],
+        sigLat: src.sigLat || 8
+      };
       for (let i = 1; i < rt.pts.length; i++) rt.cum.push(rt.cum[i - 1] + Math.hypot(rt.pts[i][0] - rt.pts[i - 1][0], rt.pts[i][1] - rt.pts[i - 1][1]));
       rt.len = rt.cum[rt.cum.length - 1];
-      // Turnaround points: the car centre stops here. At a tunnel portal the whole 18 m car
-      // must be inside the 24 m portal before it vanishes.
-      rt.endLo = 0.5;
-      rt.endHi = rt.portal ? rt.len - (rt.portal.len / 2) : rt.len - 0.5;
+      // Turnaround points: keep visible streetcars smoothly reversing at termini & portals
+      rt.endLo = 14.0;
+      rt.endHi = rt.portal ? Math.max(20.0, rt.len - 18.0) : Math.max(20.0, rt.len - 14.0);
 
       // Stops roughly every 240 m, kept 30 m clear of signalised intersections
       const clearOfSignals = d => {
@@ -645,23 +665,46 @@
       if (src.stops) {
         // explicit stops; dir 1/-1 = that direction only (Spadina's near-side platforms), 0 = both
         rt.stops = src.stops.map(st => ({ d: st.d, dir: st.dir || 0 }));
-        rt.platformsUntil = src.spadinaEnd || 0;            // those have platforms, not curb poles
+        rt.platformsUntil = src.spadinaEnd || 0;
       } else {
         for (let d = 140; d < rt.len - 80; d += 240) {
           const pick = [0, 35, -35, 70, -70].map(o => d + o).find(dd => dd > 60 && dd < rt.len - 60 && clearOfSignals(dd));
           if (pick !== undefined) rt.stops.push({ d: pick, dir: 0 });
         }
       }
+      if (src.namedStops && src.namedStops.length) {
+        rt.namedStops = src.namedStops.map(ns => {
+          const d = Math.max(0, Math.min(rt.len, ns.d));
+          const p = sample(rt, d);
+          return {
+            id: ns.id,
+            name: ns.name,
+            sub: ns.sub || rt.name,
+            routeId: rt.id,
+            routeName: rt.name,
+            d,
+            x: p.x,
+            z: p.z,
+            tx: p.tx,
+            tz: p.tz,
+            isUnionLoop: !!ns.isUnionLoop,
+            isCNE: !!ns.isCNE
+          };
+        });
+      }
       scRoutes.push(rt);
 
-      const n = src.cars || 2;
+      const n = src.cars || 4;
       for (let i = 0; i < n; i++) {
-        const sign = src.signs[i % src.signs.length];
+        const initDir = i % 2 === 0 ? 1 : -1;
+        const sign = initDir > 0 ? rt.signs[0] : (rt.signs[1] || rt.signs[0]);
+        const span = Math.max(40, rt.endHi - rt.endLo - 20);
         const sc = {
           isStreetcar: true, id: 10000 + streetcars.length, route: rt,
-          dir: i % 2 === 0 ? 1 : -1,
-          d: 40 + (rt.len - 80) * ((i + 0.5) / n),
+          dir: initDir,
+          d: rt.endLo + 10 + span * ((i + 0.5) / n),
           speed: 0, mode: 'run', timer: 0, servedD: -1e9,
+          expressTargetD: null,
           vx: 0, vz: 0, fx: 1, fz: 0, vh: 0,
           design: SC, lenScale: 1, hitCd: 0, gongCd: 0, stuck: 0, ghost: 0, braking: false,
           sign: sign, hasPlayer: false, boardGrace: 0,
@@ -672,7 +715,8 @@
       }
 
       // TTC stop poles on the right-hand curb for each direction (instanced, 3 draw calls total)
-      rt.stops.forEach(st => {
+      const poleList = rt.namedStops.length ? rt.namedStops.filter(ns => !ns.isUnionLoop) : rt.stops;
+      poleList.forEach(st => {
         const d = st.d;
         if (st.dir || d < (rt.platformsUntil || 0)) return;
         const p = sample(rt, d), tx = p.tx, tz = p.tz, cx = p.x, cz = p.z;
@@ -754,7 +798,30 @@
         }
 
         let gap = Infinity, personAhead = false, waitingForTraffic = false;
-        if (sc.mode === 'run') {
+        if (sc.hasPlayer && sc.expressTargetD !== null && sc.expressTargetD !== undefined) {
+          // Guided passenger ride to player's clicked stop (travels either direction cleanly along rails)
+          sc.mode = 'run';
+          sc.timer = 0;
+          const diff = sc.expressTargetD - sc.d;
+          if (Math.abs(diff) <= 0.65) {
+            sc.d = sc.expressTargetD;
+            sc.speed = 0;
+            sc.braking = false;
+            sc.expressTargetD = null;
+            sc.mode = 'dwell';
+            sc.timer = 3.0;
+            sc.servedD = sc.d;
+          } else {
+            const wantDir = diff >= 0 ? 1 : -1;
+            if (sc.dir !== wantDir) setStreetcarDirection(sc, wantDir);
+            const target = Math.min(75.0, Math.max(9.0, Math.abs(diff) * 0.9));
+            sc.speed += Math.max(-24.0 * dt, Math.min(48.0 * dt, target - sc.speed));
+            sc.speed = Math.max(4.0, sc.speed);
+            sc.braking = target < sc.speed - 0.5;
+            const step = Math.min(Math.abs(diff), sc.speed * dt);
+            sc.d += wantDir * step;
+          }
+        } else if (sc.mode === 'run') {
           // measured from the car's centre, so add half a car: you see 14-45 m past the nose
           const look = SC.L / 2 + Math.max(14, Math.min(45, 8 + sc.speed * 2.6));
           const rem = sc.dir > 0 ? rt.endHi - sc.d : sc.d - rt.endLo;
@@ -821,18 +888,14 @@
           else sc.stuck = 0;
 
           sc.d += sc.dir * sc.speed * dt;
-          // end of the line: off the map or into the Union Station tunnel; come back the other way
+          // End of the line (loop terminus or Union portal): reverse direction smoothly without vanishing
           if ((sc.dir > 0 && sc.d >= rt.endHi) || (sc.dir < 0 && sc.d <= rt.endLo)) {
             sc.d = Math.max(rt.endLo, Math.min(rt.endHi, sc.d));
-            sc.dir *= -1;
+            setStreetcarDirection(sc, -sc.dir);
             sc.servedD = -1e9; sc.speed = 0;
-            if (sc.hasPlayer) {
-              sc.mode = 'run';
-              sc.group.visible = true;
-            } else {
-              sc.mode = 'hidden'; sc.timer = rt.portal && sc.dir < 0 ? 14 : 9;
-              sc.group.visible = false;
-            }
+            sc.group.visible = !sc.hasPlayer;
+            sc.mode = sc.hasPlayer ? 'run' : 'dwell';
+            sc.timer = sc.hasPlayer ? 0 : 2.5;
           }
         }
 
@@ -911,7 +974,9 @@
     function whoosh(dist, speed) {
       if (!audio || !audio.ctx || audio.isMuted) return;
       const ctx = audio.ctx, t = ctx.currentTime, len = 0.7;
-      const buf = ctx.createBuffer(1, ctx.sampleRate * len, ctx.sampleRate), data = buf.getChannelData(0);
+      const buf = ctx.createBuffer(1, ctx.sampleRate * len, ctx.sampleRate);
+      if (!buf || typeof buf.getChannelData !== 'function') return;
+      const data = buf.getChannelData(0);
       for (let i = 0; i < data.length; i++) { const k = i / data.length; data[i] = (rnd() * 2 - 1) * Math.sin(Math.PI * k) * (1 - k * 0.5); }
       const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
       src.buffer = buf; f.type = 'bandpass'; f.frequency.setValueAtTime(900, t); f.frequency.exponentialRampToValueAtTime(300, t + len);
@@ -1188,7 +1253,20 @@
       return streetcars.filter(sc => sc.mode !== 'hidden').map(sc => ({ x: sc.vx, z: sc.vz }));
     }
 
-    return { cars, streetcars, streetcarDots, update, silence, ringGong: () => streetcarGong(0), getIntersections: () => signalIntersections, isSafeCrossing };
+    return {
+      cars,
+      streetcars,
+      scRoutes,
+      streetcarDots,
+      placeStreetcar,
+      sampleRoute: sample,
+      setStreetcarDirection,
+      update,
+      silence,
+      ringGong: () => streetcarGong(0),
+      getIntersections: () => signalIntersections,
+      isSafeCrossing
+    };
   }
 
   window.createTraffic = createTraffic;

@@ -4762,8 +4762,343 @@ const streetcarController = {
   lastHeading: 0,
   announceTimer: 0,
   localX: 0.0,
-  localZ: 3.2
+  localZ: 3.2,
+  targetStop: null
 };
+
+const streetcarPanel = {
+  open: false,
+  highlight: 0,
+  routeId: '509',
+  originStop: null,
+  atUnionLoop: false
+};
+
+function getStreetcarRoutes() {
+  if (traffic && Array.isArray(traffic.scRoutes) && traffic.scRoutes.length) return traffic.scRoutes;
+  if (city && Array.isArray(city.streetcarRoutes)) return city.streetcarRoutes;
+  return [];
+}
+
+function isAtUnionStreetcarLoop() {
+  const ub = (city && city.subway && city.subway.unionStreetcarLoop) || (city && city.streetcarNetwork && city.streetcarNetwork.unionLoop);
+  if (!ub || player.pos.y >= -6.0) return false;
+  return Math.hypot(player.pos.x - ub.x, player.pos.z - ub.z) < 12.5;
+}
+
+function findNearbyStreetcarStop(maxDist) {
+  const routes = getStreetcarRoutes();
+  const lim = maxDist || 16.0;
+  if (isAtUnionStreetcarLoop()) {
+    const r509 = routes.find(r => r.id === '509') || routes[0];
+    const uStop = r509 && r509.namedStops ? r509.namedStops.find(s => s.isUnionLoop) : null;
+    if (uStop) return { route: r509, stop: uStop, atUnionLoop: true, dist: 0 };
+  }
+  if (player.pos.y < -6.0) return null;
+  let best = null, bestD = lim;
+  for (let ri = 0; ri < routes.length; ri++) {
+    const rt = routes[ri];
+    const list = rt.namedStops || [];
+    for (let si = 0; si < list.length; si++) {
+      const st = list[si];
+      const d = Math.hypot(player.pos.x - st.x, player.pos.z - st.z);
+      if (d < bestD) {
+        bestD = d;
+        best = { route: rt, stop: st, atUnionLoop: false, dist: d };
+      }
+    }
+  }
+  return best;
+}
+
+function getActiveStreetcarRouteObj() {
+  const routes = getStreetcarRoutes();
+  if (!routes.length) return null;
+  return routes.find(r => r.id === streetcarPanel.routeId) || routes[0];
+}
+
+function getCurrentStopOnRoute(rt) {
+  if (!rt || !rt.namedStops || !rt.namedStops.length) return -1;
+  if (isAtUnionStreetcarLoop()) {
+    return rt.namedStops.findIndex(s => s.isUnionLoop);
+  }
+  const refX = (state.onStreetcar && streetcarController.activeCar) ? streetcarController.activeCar.vx : player.pos.x;
+  const refZ = (state.onStreetcar && streetcarController.activeCar) ? streetcarController.activeCar.vz : player.pos.z;
+  let bestIdx = -1, bestD = 38.0;
+  rt.namedStops.forEach((s, i) => {
+    const d = Math.hypot(refX - s.x, refZ - s.z);
+    if (d < bestD) { bestD = d; bestIdx = i; }
+  });
+  return bestIdx;
+}
+
+function buildStreetcarPanel() {
+  const listEl = document.getElementById('streetcar-stop-list');
+  const tabsEl = document.getElementById('streetcar-route-tabs');
+  const titleEl = document.getElementById('streetcar-panel-title');
+  const routes = getStreetcarRoutes();
+  if (!routes.length) return;
+  let rt = getActiveStreetcarRouteObj();
+  if (!rt) rt = routes[0];
+  streetcarPanel.routeId = rt.id;
+
+  if (titleEl) {
+    titleEl.innerText = streetcarPanel.atUnionLoop
+      ? '🚊 UNION UNDERGROUND STREETCAR LOOP'
+      : `🚊 ${(rt.name || rt.id).toUpperCase()} • PICK STOP`;
+  }
+
+  if (tabsEl) {
+    tabsEl.innerHTML = '';
+    const available = (streetcarPanel.atUnionLoop && !state.onStreetcar)
+      ? routes.filter(r => r.id === '509' || r.id === '510')
+      : routes;
+    if (!available.some(r => r.id === rt.id) && available.length) {
+      rt = available[0];
+      streetcarPanel.routeId = rt.id;
+    }
+    available.forEach(r => {
+      const tab = document.createElement('button');
+      tab.type = 'button';
+      tab.className = 'sc-route-tab' + (r.id === rt.id ? ' is-active' : '');
+      tab.innerText = r.name || r.id;
+      tab.addEventListener('click', (e) => {
+        e.stopPropagation();
+        streetcarPanel.routeId = r.id;
+        streetcarPanel.highlight = 0;
+        buildStreetcarPanel();
+      });
+      tabsEl.appendChild(tab);
+    });
+  }
+
+  if (!listEl) return;
+  listEl.innerHTML = '';
+  const stops = rt.namedStops || [];
+  const hereIdx = getCurrentStopOnRoute(rt);
+  const refD = (state.onStreetcar && streetcarController.activeCar && streetcarController.activeCar.route === rt)
+    ? streetcarController.activeCar.d
+    : (hereIdx >= 0 ? stops[hereIdx].d : (rt.len ? rt.len * 0.5 : 0));
+
+  stops.forEach((st, i) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    const isHere = i === hereIdx && !state.onStreetcar;
+    btn.className = 'elev-floor-btn' + (isHere ? ' is-here' : '') + (i === streetcarPanel.highlight ? ' is-highlight' : '');
+    let dirTag = '';
+    if (isHere) dirTag = 'HERE';
+    else if (st.isUnionLoop) dirTag = '🚇 SUBWAY TRANSFER';
+    else if (st.isCNE) dirTag = '🎡 CNE';
+    else dirTag = st.d >= refD ? '▲ EAST / SOUTH' : '▼ WEST / NORTH';
+
+    btn.innerHTML =
+      `<span class="elev-floor-key">${i + 1}</span>` +
+      `<span class="elev-floor-text">` +
+      `<span class="elev-floor-label">${rt.id} LINE • ${dirTag}</span>` +
+      `<span class="elev-floor-name">${st.name}</span>` +
+      `<span class="elev-floor-sub">${st.sub || ''}</span>` +
+      `</span>`;
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      selectStreetcarStop(i);
+    });
+    listEl.appendChild(btn);
+  });
+}
+
+function openStreetcarPanel(opts) {
+  if (state.onTaxi || state.onFerry || state.inElevator || state.onPlane || state.onSubway) return false;
+  const routes = getStreetcarRoutes();
+  if (!routes.length) return false;
+
+  const atUnion = (opts && opts.atUnionLoop) || isAtUnionStreetcarLoop();
+  const nearStopInfo = (!state.onStreetcar) ? findNearbyStreetcarStop(20.0) : null;
+  const activeRoute = (state.onStreetcar && streetcarController.activeCar && streetcarController.activeCar.route)
+    ? streetcarController.activeCar.route
+    : (opts && opts.routeId && routes.find(r => r.id === opts.routeId))
+      || (nearStopInfo && nearStopInfo.route)
+      || (atUnion ? (routes.find(r => r.id === '509') || routes[0]) : routes[0]);
+
+  streetcarPanel.routeId = activeRoute.id;
+  streetcarPanel.atUnionLoop = !!atUnion;
+  streetcarPanel.originStop = nearStopInfo ? nearStopInfo.stop : null;
+  const hereIdx = getCurrentStopOnRoute(activeRoute);
+  const stops = activeRoute.namedStops || [];
+  let defaultHighlight = 0;
+  if (atUnion) {
+    const cneIdx = stops.findIndex(s => s.isCNE);
+    defaultHighlight = cneIdx >= 0 ? cneIdx : 0;
+  } else if (hereIdx === 0 && stops.length > 1) {
+    defaultHighlight = stops.length - 1;
+  } else if (hereIdx > 0) {
+    defaultHighlight = 0;
+  }
+  streetcarPanel.highlight = Math.max(0, Math.min(Math.max(0, stops.length - 1), defaultHighlight));
+  streetcarPanel.open = true;
+  buildStreetcarPanel();
+
+  const el = document.getElementById('streetcar-panel');
+  if (el) el.classList.remove('hidden');
+  if (audio && audio.playElevatorDing) audio.playElevatorDing();
+  if (typeof document !== 'undefined' && document.pointerLockElement && document.exitPointerLock) {
+    document.exitPointerLock();
+  }
+  return true;
+}
+
+function closeStreetcarPanel() {
+  if (!streetcarPanel.open) return;
+  streetcarPanel.open = false;
+  const el = document.getElementById('streetcar-panel');
+  if (el) el.classList.add('hidden');
+  if (state.inGame && !state.freeMouseMode && !state.isPaused && !state.isDead && !state.onTaxi && !state.onFerry && !state.inElevator && container && container.requestPointerLock && typeof document !== 'undefined' && !document.pointerLockElement) {
+    try { container.requestPointerLock(); } catch (_) {}
+  }
+}
+
+function cycleStreetcarRouteTab(delta) {
+  const routes = getStreetcarRoutes();
+  const available = (streetcarPanel.atUnionLoop && !state.onStreetcar)
+    ? routes.filter(r => r.id === '509' || r.id === '510')
+    : routes;
+  if (!available.length) return;
+  const idx = available.findIndex(r => r.id === streetcarPanel.routeId);
+  const next = available[(idx + delta + available.length) % available.length];
+  streetcarPanel.routeId = next.id;
+  streetcarPanel.highlight = 0;
+  buildStreetcarPanel();
+}
+
+function moveStreetcarHighlight(delta) {
+  const rt = getActiveStreetcarRouteObj();
+  const n = rt && rt.namedStops ? rt.namedStops.length : 0;
+  if (!n) return;
+  streetcarPanel.highlight = (streetcarPanel.highlight + delta + n) % n;
+  buildStreetcarPanel();
+}
+
+function selectStreetcarStop(idxOrStopId, routeIdOverride) {
+  const routes = getStreetcarRoutes();
+  const rt = routeIdOverride
+    ? (routes.find(r => r.id === routeIdOverride) || getActiveStreetcarRouteObj())
+    : getActiveStreetcarRouteObj();
+  if (!rt || !rt.namedStops || !rt.namedStops.length) return false;
+
+  let stopIdx = -1;
+  if (typeof idxOrStopId === 'number') {
+    stopIdx = idxOrStopId;
+  } else if (typeof idxOrStopId === 'string') {
+    stopIdx = rt.namedStops.findIndex(s => s.id === idxOrStopId);
+  }
+  if (stopIdx < 0 || stopIdx >= rt.namedStops.length) return false;
+
+  const targetStop = rt.namedStops[stopIdx];
+  const wasAtUnionLoop = streetcarPanel.atUnionLoop || isAtUnionStreetcarLoop();
+  const originStop = streetcarPanel.originStop;
+  closeStreetcarPanel();
+
+  let sc = (state.onStreetcar && streetcarController.activeCar) ? streetcarController.activeCar : null;
+  if (!sc || sc.route !== rt) {
+    // Dispatch the nearest streetcar on the chosen route (moving a non-player car onto the boarding stop cleanly)
+    const candidates = (traffic && Array.isArray(traffic.streetcars))
+      ? traffic.streetcars.filter(c => c && c.route === rt)
+      : [];
+    if (!candidates.length) return false;
+
+    let originD = null;
+    if (originStop && originStop.routeId === rt.id) originD = originStop.d;
+    else if (wasAtUnionLoop) {
+      const uStop = rt.namedStops.find(s => s.isUnionLoop);
+      if (uStop) originD = uStop.d;
+    } else {
+      const nearHere = findNearbyStreetcarStop(40.0);
+      if (nearHere && nearHere.route === rt) originD = nearHere.stop.d;
+      else {
+        // Fallback: closest named stop to current player coords
+        let bestS = rt.namedStops[0], bestDist = Infinity;
+        rt.namedStops.forEach(s => {
+          const d = Math.hypot(player.pos.x - s.x, player.pos.z - s.z);
+          if (d < bestDist) { bestDist = d; bestS = s; }
+        });
+        originD = bestS.d;
+      }
+    }
+
+    // If player clicked the exact stop they are already standing on
+    if (originD !== null && Math.abs(targetStop.d - originD) < 8.0) {
+      if (typeof showAnnouncement === 'function') {
+        showAnnouncement(`📍 ALREADY AT ${targetStop.name.toUpperCase()}`, 2200);
+      }
+      return true;
+    }
+
+    candidates.sort((a, b) => Math.abs(a.d - originD) - Math.abs(b.d - originD));
+    sc = candidates[0];
+    if (state.onStreetcar && streetcarController.activeCar && streetcarController.activeCar !== sc) {
+      // Detach cleanly from previous streetcar before transferring lines
+      const prev = streetcarController.activeCar;
+      prev.hasPlayer = false;
+      prev.expressTargetD = null;
+      if (prev.group) prev.group.visible = true;
+      state.onStreetcar = false;
+      streetcarController.activeCar = null;
+    }
+    sc.d = Math.max(rt.endLo, Math.min(rt.endHi, originD));
+    if (traffic && traffic.placeStreetcar) traffic.placeStreetcar(sc);
+  }
+
+  const wantDir = targetStop.d >= sc.d ? 1 : -1;
+  if (traffic && traffic.setStreetcarDirection) traffic.setStreetcarDirection(sc, wantDir);
+  else sc.dir = wantDir;
+  sc.expressTargetD = Math.max(rt.endLo, Math.min(rt.endHi, targetStop.d));
+  sc.servedD = -1e9;
+  sc.mode = 'run';
+  sc.speed = Math.max(sc.speed || 0, 6.0);
+  streetcarController.targetStop = targetStop;
+
+  // Clear underground state cleanly upon boarding Queens Quay / Union Streetcar tunnel car
+  state.isUnderground = false;
+
+  if (!state.onStreetcar || streetcarController.activeCar !== sc) {
+    boardStreetcar(sc);
+  } else {
+    if (traffic && traffic.placeStreetcar) traffic.placeStreetcar(sc);
+    player.yaw = sc.vh + Math.PI;
+    camera.rotation.y = player.yaw;
+    streetcarController.lastHeading = sc.vh;
+    if (city && city.streetcarInterior && city.streetcarInterior.updateRouteSign) {
+      city.streetcarInterior.updateRouteSign(`${sc.sign} • NEXT: ${targetStop.name.toUpperCase()}`);
+    }
+  }
+  if (typeof showAnnouncement === 'function') {
+    showAnnouncement(`🚊 BOUND FOR ${targetStop.name.toUpperCase()} (${rt.name.toUpperCase()})`, 3200);
+  }
+  return true;
+}
+
+function reverseActiveStreetcar() {
+  if (!state.onStreetcar || !streetcarController.activeCar) return false;
+  const sc = streetcarController.activeCar;
+  sc.expressTargetD = null;
+  streetcarController.targetStop = null;
+  const newDir = -sc.dir;
+  if (traffic && traffic.setStreetcarDirection) traffic.setStreetcarDirection(sc, newDir);
+  else sc.dir = newDir;
+  if (traffic && traffic.placeStreetcar) traffic.placeStreetcar(sc);
+  sc.servedD = -1e9;
+  sc.mode = 'run';
+  if (city && city.streetcarInterior && city.streetcarInterior.updateRouteSign) {
+    city.streetcarInterior.updateRouteSign(sc.sign || '504 KING');
+  }
+  player.yaw = sc.vh + Math.PI;
+  camera.rotation.y = player.yaw;
+  streetcarController.lastHeading = sc.vh;
+  if (traffic && traffic.ringGong) traffic.ringGong();
+  if (typeof showAnnouncement === 'function') {
+    showAnnouncement(`🔄 REVERSED DIRECTION: ${sc.sign}`, 2600);
+  }
+  return true;
+}
 
 function findNearbyStreetcar(maxDist) {
   if (!traffic || !Array.isArray(traffic.streetcars)) return null;
@@ -4787,6 +5122,7 @@ function boardStreetcar(sc) {
 
   if (streetcarController.activeCar && streetcarController.activeCar.group) {
     streetcarController.activeCar.hasPlayer = false;
+    streetcarController.activeCar.expressTargetD = null;
     streetcarController.activeCar.group.visible = true;
   }
   streetcarController.activeCar = car;
@@ -4800,12 +5136,16 @@ function boardStreetcar(sc) {
   car.mode = 'run';
   if (car.group) car.group.visible = false;
   if (city && city.streetcarInterior && city.streetcarInterior.group) {
-    city.streetcarInterior.updateRouteSign(car.sign || '504 KING');
+    const headerSign = streetcarController.targetStop
+      ? `${car.sign || '504 KING'} • TO: ${streetcarController.targetStop.name.toUpperCase()}`
+      : (car.sign || '504 KING');
+    city.streetcarInterior.updateRouteSign(headerSign);
     city.streetcarInterior.group.position.set(car.vx, 0.05, car.vz);
     city.streetcarInterior.group.rotation.y = car.vh;
     city.streetcarInterior.group.visible = true;
   }
   state.onStreetcar = true;
+  state.isUnderground = false;
 
   if (traffic && traffic.ringGong) traffic.ringGong();
   // Face forward along the streetcar aisle (camera forward at yaw is (-sin(yaw), -cos(yaw)))
@@ -4824,6 +5164,13 @@ function updateStreetcarRide(dt) {
   const sc = streetcarController.activeCar;
   if (sc.mode === 'hidden') {
     sc.mode = 'run';
+  }
+  // Auto-disembark cleanly when an express stop ride reaches its selected destination stop
+  if (streetcarController.targetStop && sc.expressTargetD === null) {
+    const arrivedStop = streetcarController.targetStop;
+    streetcarController.targetStop = null;
+    disembarkStreetcar(arrivedStop);
+    return;
   }
   // Hide exterior solid box of the active car and show the full panoramic walkable interior cabin
   if (sc.group) sc.group.visible = false;
@@ -4868,11 +5215,13 @@ function updateStreetcarRide(dt) {
   player.velocity.set(0, 0, 0);
 }
 
-function disembarkStreetcar() {
+function disembarkStreetcar(arrivedStop) {
   if (!state.onStreetcar) return false;
   const sc = streetcarController.activeCar;
+  const targetStop = arrivedStop || streetcarController.targetStop;
   state.onStreetcar = false;
   streetcarController.activeCar = null;
+  streetcarController.targetStop = null;
   if (city && city.streetcarInterior && city.streetcarInterior.group) {
     city.streetcarInterior.group.visible = false;
   }
@@ -4881,10 +5230,35 @@ function disembarkStreetcar() {
   if (sc) {
     if (sc.group) sc.group.visible = true;
     sc.hasPlayer = false;
+    sc.expressTargetD = null;
     sc.boardGrace = 3.0;
     sc.mode = 'dwell';
     sc.timer = 3.5;
     sc.speed = 0;
+
+    // Arriving at Union Station Underground Loop transfers player seamlessly onto Union Underground Platform
+    const ub = (city && city.subway && city.subway.unionStreetcarLoop) || (city && city.streetcarNetwork && city.streetcarNetwork.unionLoop);
+    if (arrivedStop && arrivedStop.isUnionLoop && ub) {
+      state.isUnderground = true;
+      player.pos.set(ub.exitX, ub.y + EYE_HEIGHT, ub.exitZ);
+      player.yaw = ub.exitYaw !== undefined ? ub.exitYaw : Math.PI;
+      player.pitch = 0;
+      camera.rotation.order = 'YXZ';
+      camera.rotation.y = player.yaw;
+      camera.rotation.x = 0;
+      if (traffic && traffic.setStreetcarDirection && sc.route) {
+        sc.d = Math.max(sc.route.endLo + 20, sc.route.endHi - 12);
+        traffic.setStreetcarDirection(sc, -1);
+        if (traffic.placeStreetcar) traffic.placeStreetcar(sc);
+      }
+      player.velocity.set(0, 0, 0);
+      player.isGrounded = true;
+      if (typeof showAnnouncement === 'function') {
+        showAnnouncement('🚊 UNION UNDERGROUND STREETCAR LOOP — WALK SOUTH TO LINE 1 SUBWAY!', 3600);
+      }
+      return true;
+    }
+
     // Step out onto the right-hand sidewalk / boarding platform relative to streetcar travel direction
     const rx = -sc.fz, rz = sc.fx;
     let outX = sc.vx + rx * 4.2;
@@ -4892,15 +5266,29 @@ function disembarkStreetcar() {
     if (city && !city.canMoveTo(outX, outZ, 0.5, 0)) {
       outX = sc.vx - rx * 4.2;
       outZ = sc.vz - rz * 4.2;
+      if (!city.canMoveTo(outX, outZ, 0.5, 0)) {
+        outX = sc.vx;
+        outZ = sc.vz;
+      }
     }
+    state.isUnderground = false;
     const floorY = (city && city.floorAt) ? city.floorAt(outX, outZ) : 0;
     player.pos.set(outX, floorY + EYE_HEIGHT, outZ);
+    if (arrivedStop && typeof showAnnouncement === 'function') {
+      showAnnouncement(`🚊 ARRIVED AT ${arrivedStop.name.toUpperCase()}`, 3000);
+    }
   }
   player.velocity.set(0, 0, 0);
   player.isGrounded = true;
   return true;
 }
 
+window.streetcarPanel = streetcarPanel;
+window.findNearbyStreetcarStop = findNearbyStreetcarStop;
+window.openStreetcarPanel = openStreetcarPanel;
+window.closeStreetcarPanel = closeStreetcarPanel;
+window.selectStreetcarStop = selectStreetcarStop;
+window.reverseActiveStreetcar = reverseActiveStreetcar;
 window.boardStreetcar = boardStreetcar;
 window.updateStreetcarRide = updateStreetcarRide;
 window.disembarkStreetcar = disembarkStreetcar;
@@ -5042,6 +5430,7 @@ function teleportToRandomSubwayEntrance() {
   if (elevatorPanel && elevatorPanel.open) closeElevatorPanel();
   if (ferryPanel && ferryPanel.open) closeFerryPanel();
   if (taxiPanel && taxiPanel.open) closeTaxiPanel();
+  if (streetcarPanel && streetcarPanel.open) closeStreetcarPanel();
   if (state.onTaxi) arriveTaxi();
   if (state.onFerry) state.onFerry = false;
   if (state.onPlane) landPorterFlight();
@@ -5438,6 +5827,7 @@ function updateObservationDeck(dt) {
     closeElevatorPanel();
     closeFerryPanel();
     closeTaxiPanel();
+    closeStreetcarPanel();
     return;
   }
 
@@ -5450,14 +5840,15 @@ function updateObservationDeck(dt) {
 
   if (state.onStreetcar) {
     activeDeckAction = 'disembark_streetcar';
-    setDeckPrompt('[E]', 'DISEMBARK STREETCAR');
+    const destHint = streetcarController.targetStop ? ` → ${streetcarController.targetStop.name.toUpperCase()}` : '';
+    setDeckPrompt('[E] DISEMBARK • [G] PICK STOP • [R] REVERSE', `STREETCAR${destHint}`);
     return;
   }
 
   const feet = player.pos.y - EYE_HEIGHT;
 
   // Billy Bishop Airport Porter Dash 8-400 (Q400) Boarding (Terminal Gate / Apron / Runway 08)
-  if (feet < 15) {
+  if (feet < 15 && player.pos.y > -6.0) {
     const dPorterGate = Math.hypot(player.pos.x - (-1060), player.pos.z - 948);
     const dPorterApron = Math.hypot(player.pos.x - (-1094), player.pos.z - 998);
     const dPorterRwy = Math.hypot(player.pos.x - (-1360), player.pos.z - 1030);
@@ -5467,12 +5858,23 @@ function updateObservationDeck(dt) {
       return;
     }
 
-    // Rideable TTC Flexity Outlook Streetcars (504 King, 510 Spadina, 509 Harbourfront)
-    const nearSc = findNearbyStreetcar(10.5);
+    // Rideable TTC Flexity Outlook Streetcars (504 King, 509 Harbourfront-CNE, 510 Spadina)
+    const nearSc = findNearbyStreetcar(8.5);
     if (nearSc) {
       activeDeckAction = { type: 'board_streetcar', sc: nearSc };
-      setDeckPrompt('[E]', `BOARD STREETCAR (${nearSc.sign || '504 KING'})`);
+      setDeckPrompt('[E] BOARD STREETCAR • [G] PICK STOP', nearSc.sign || '504 KING');
       return;
+    }
+
+    // Named TTC Streetcar Stop Pylons & Terminal Loops (clickable stop selector)
+    const nearScStop = findNearbyStreetcarStop(15.5);
+    if (nearScStop && nearScStop.stop) {
+      activeDeckAction = { type: 'open_streetcar_panel', routeId: nearScStop.route.id, stop: nearScStop.stop };
+      setDeckPrompt('[E]', `TTC STOP: ${nearScStop.stop.name.toUpperCase()} • PICK STOP`);
+      return;
+    }
+    if (streetcarPanel.open && !isAtUnionStreetcarLoop() && !findNearbyStreetcar(18.0) && !findNearbyStreetcarStop(22.0)) {
+      closeStreetcarPanel();
     }
 
     // Beck Taxi Pickup Stands (Strictly 5 non-destination hubs -> 5 fixed landmark drop-offs)
@@ -5549,13 +5951,21 @@ function updateObservationDeck(dt) {
     }
   }
 
-  // Underground Subway Platform & Train Interactions (y < -6.0m)
+  // Underground Subway Platform, Streetcar Loop Transfer & Train Interactions (y < -6.0m)
   if (player.pos.y < -6.0 && city && city.subway && city.subway.stations) {
     if (state.onSubway) {
       activeDeckAction = 'disembark_subway_train';
       const curStop = city.subway.stations[city.subway.state.currentStopIdx] || city.subway.stations[0];
       setDeckPrompt('[E]', 'EXIT TRAIN (' + curStop.name.toUpperCase() + ')');
       return;
+    }
+    if (isAtUnionStreetcarLoop()) {
+      activeDeckAction = { type: 'open_streetcar_panel', atUnionLoop: true, routeId: '509' };
+      setDeckPrompt('[E]', 'UNION STREETCAR LOOP • PICK STOP (509 CNE / 510 SPADINA)');
+      return;
+    }
+    if (streetcarPanel.open && !findNearbyStreetcarStop(20.0)) {
+      closeStreetcarPanel();
     }
     const tState = city.subway.state;
     for (const st of city.subway.stations) {
@@ -5756,6 +6166,11 @@ function handleDeckAction() {
   }
   if (activeDeckAction && activeDeckAction.type === 'board_streetcar') {
     boardStreetcar(activeDeckAction.sc);
+    return true;
+  }
+  if (activeDeckAction && activeDeckAction.type === 'open_streetcar_panel') {
+    if (streetcarPanel.open) closeStreetcarPanel();
+    else openStreetcarPanel({ atUnionLoop: !!activeDeckAction.atUnionLoop, routeId: activeDeckAction.routeId });
     return true;
   }
   if (activeDeckAction && activeDeckAction.type === 'hail_beck_taxi') {
@@ -6316,15 +6731,15 @@ document.addEventListener('pointerlockchange', () => {
   }
 
   // When pointer lock is lost in mouse-look mode (e.g. user pressed Esc), pause the game
-  // (unless the elevator, ferry, or taxi panel is intentionally open for destination selection)
-  if (!state.isPointerLocked && state.inGame && !state.freeMouseMode && !state.isDead && !state.isPaused && !elevatorPanel.open && !ferryPanel.open && !taxiPanel.open) {
+  // (unless the elevator, ferry, taxi, or streetcar panel is intentionally open for destination selection)
+  if (!state.isPointerLocked && state.inGame && !state.freeMouseMode && !state.isDead && !state.isPaused && !elevatorPanel.open && !ferryPanel.open && !taxiPanel.open && !streetcarPanel.open) {
     pauseGame();
   }
 });
 
 // Canvas Click & Mousedown: Executes attacks during gameplay with zero dropped inputs
 container.addEventListener('mousedown', (e) => {
-  if (!state.inGame || state.isPaused || state.isDead || elevatorPanel.open || ferryPanel.open || taxiPanel.open) return;
+  if (!state.inGame || state.isPaused || state.isDead || elevatorPanel.open || ferryPanel.open || taxiPanel.open || streetcarPanel.open) return;
   if (e.button === 0) {
     // If near the active mission box, instantly crack it open!
     if (missionState.active && missionState.state === 'active' && missionState.boxObj) {
@@ -6339,7 +6754,7 @@ container.addEventListener('mousedown', (e) => {
 });
 
 container.addEventListener('click', (e) => {
-  if (!state.inGame || state.isPaused || state.isDead || elevatorPanel.open || ferryPanel.open || taxiPanel.open) return;
+  if (!state.inGame || state.isPaused || state.isDead || elevatorPanel.open || ferryPanel.open || taxiPanel.open || streetcarPanel.open) return;
   if (state.telescopeActive) {
     if (!e.target.closest('.telescope-card') && !e.target.closest('.telescope-telemetry-top')) {
       cycleTelescopeZoom(1);
@@ -6361,7 +6776,7 @@ window.addEventListener('wheel', (e) => {
 
 // Mouse Movement: Rotates camera or swivels telescope
 document.addEventListener('mousemove', (e) => {
-  if (state.isDead || state.isPaused || elevatorPanel.open || ferryPanel.open || taxiPanel.open) return;
+  if (state.isDead || state.isPaused || elevatorPanel.open || ferryPanel.open || taxiPanel.open || streetcarPanel.open) return;
   if (state.telescopeActive) {
     const zoomRatio = (camera.fov / 78);
     const sens = mouseSensitivity * zoomRatio * 0.9;
@@ -6392,7 +6807,7 @@ if (deckPromptEl) {
         startSkyShowdown();
       } else {
         handleDeckAction();
-        if (!state.freeMouseMode && !elevatorPanel.open && !ferryPanel.open && !taxiPanel.open && container && container.requestPointerLock && !state.isPointerLocked) {
+        if (!state.freeMouseMode && !elevatorPanel.open && !ferryPanel.open && !taxiPanel.open && !streetcarPanel.open && container && container.requestPointerLock && !state.isPointerLocked) {
           container.requestPointerLock();
         }
       }
@@ -6477,6 +6892,66 @@ window.addEventListener('keydown', (e) => {
       e.preventDefault();
       e.stopPropagation();
       closeTaxiPanel();
+      return;
+    }
+    return;
+  }
+
+  // TTC Streetcar Stop & Route Selector Keyboard Controls
+  if (streetcarPanel.open) {
+    const rt = getActiveStreetcarRouteObj();
+    const stopCount = (rt && rt.namedStops) ? rt.namedStops.length : 0;
+    if (e.code.startsWith('Digit') || e.code.startsWith('Numpad')) {
+      const numStr = e.code.replace(/\D/g, '') || e.key;
+      const keyNum = parseInt(numStr, 10);
+      if (!isNaN(keyNum) && keyNum >= 1 && keyNum <= stopCount) {
+        e.preventDefault();
+        e.stopPropagation();
+        selectStreetcarStop(keyNum - 1);
+        return;
+      }
+    }
+    if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
+      e.preventDefault();
+      e.stopPropagation();
+      cycleStreetcarRouteTab(-1);
+      return;
+    }
+    if (e.code === 'ArrowRight' || e.code === 'KeyD') {
+      e.preventDefault();
+      e.stopPropagation();
+      cycleStreetcarRouteTab(1);
+      return;
+    }
+    if (e.code === 'ArrowUp' || e.code === 'KeyW') {
+      e.preventDefault();
+      e.stopPropagation();
+      moveStreetcarHighlight(-1);
+      return;
+    }
+    if (e.code === 'ArrowDown' || e.code === 'KeyS') {
+      e.preventDefault();
+      e.stopPropagation();
+      moveStreetcarHighlight(1);
+      return;
+    }
+    if (e.code === 'Enter' || e.code === 'Space') {
+      e.preventDefault();
+      e.stopPropagation();
+      selectStreetcarStop(streetcarPanel.highlight);
+      return;
+    }
+    if (e.code === 'KeyR' && state.onStreetcar) {
+      e.preventDefault();
+      e.stopPropagation();
+      closeStreetcarPanel();
+      reverseActiveStreetcar();
+      return;
+    }
+    if (e.code === 'Escape' || e.code === 'KeyE' || e.code === 'KeyG') {
+      e.preventDefault();
+      e.stopPropagation();
+      closeStreetcarPanel();
       return;
     }
     return;
@@ -6687,7 +7162,20 @@ window.addEventListener('keydown', (e) => {
     if (audio) audio.toggleMute();
     return;
   }
+  if (e.code === 'KeyR') {
+    if (state.onStreetcar) {
+      e.preventDefault();
+      reverseActiveStreetcar();
+      return;
+    }
+  }
   if (e.code === 'KeyG') {
+    if (state.onStreetcar || isAtUnionStreetcarLoop() || findNearbyStreetcar(16.0) || findNearbyStreetcarStop(20.0)) {
+      e.preventDefault();
+      if (streetcarPanel.open) closeStreetcarPanel();
+      else openStreetcarPanel();
+      return;
+    }
     if (handleShowdownAction()) {
       e.preventDefault();
       return;
@@ -9331,6 +9819,8 @@ if (startFreeBtn) {
 
 function resetGame() {
   if (taxiPanel && taxiPanel.open) closeTaxiPanel();
+  if (streetcarPanel && streetcarPanel.open) closeStreetcarPanel();
+  if (state.onStreetcar) disembarkStreetcar();
   if (state.onTaxi) {
     taxiController.isMoving = false;
     state.onTaxi = false;
