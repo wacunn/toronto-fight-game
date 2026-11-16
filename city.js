@@ -681,12 +681,12 @@
     const ctx = c.getContext('2d');
     const g = ctx.createLinearGradient(0, 0, 0, 512);
     if (mode === 'day') {
-      g.addColorStop(0.0, '#1d5fa7');   // rich deep Toronto summer zenith azure
-      g.addColorStop(0.28, '#4a90d9');  // crisp cerulean sky
-      g.addColorStop(0.44, '#8cc8f8');  // soft lake-breeze atmosphere
-      g.addColorStop(0.5, '#d6eeff');   // luminous Lake Ontario horizon haze
-      g.addColorStop(0.54, '#a6cce4');  // distant water/land mist blend
-      g.addColorStop(1.0, '#50728f');   // lower hemisphere lake reflection
+      g.addColorStop(0.0, '#144785');   // deep summer azure zenith
+      g.addColorStop(0.28, '#2d6ab0');  // crisp Toronto cerulean
+      g.addColorStop(0.44, '#5e9bd0');  // balanced lake-breeze blue
+      g.addColorStop(0.5, '#96c2e4');   // soft natural horizon (no eye-level glare)
+      g.addColorStop(0.54, '#6285a0');  // distant water/land mist blend
+      g.addColorStop(1.0, '#30495e');   // lower hemisphere lake tone
     } else {
       g.addColorStop(0.0, '#03040a');
       g.addColorStop(0.35, '#0a1020');
@@ -1625,24 +1625,24 @@
     const SUN_DIR = new THREE.Vector3(0.46, 0.78, 0.42).normalize();
     const daySkyExtras = new THREE.Group();
     const sunDisc = new THREE.Mesh(
-      new THREE.CircleGeometry(135, 24),
-      new THREE.MeshBasicMaterial({ color: 0xfff8dc, fog: false, depthWrite: false, toneMapped: false })
+      new THREE.CircleGeometry(105, 24),
+      new THREE.MeshBasicMaterial({ color: 0xffeeb8, fog: false, depthWrite: false, toneMapped: true })
     );
     sunDisc.position.copy(SUN_DIR).multiplyScalar(3600);
     sunDisc.lookAt(0, 0, 0);
     daySkyExtras.add(sunDisc);
     const sunHalo = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: makeGlowTexture('rgba(255,248,215,0.85)', 'rgba(255,220,145,0.18)'),
+      map: makeGlowTexture('rgba(255,240,190,0.45)', 'rgba(255,210,120,0.06)'),
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false
     }));
-    sunHalo.scale.set(950, 950, 1);
+    sunHalo.scale.set(520, 520, 1);
     sunHalo.position.copy(SUN_DIR).multiplyScalar(3550);
     daySkyExtras.add(sunHalo);
 
     const CLOUD_PUFFS = [];
     const cloudInst = new THREE.InstancedMesh(
       new THREE.IcosahedronGeometry(1, 2),
-      new THREE.MeshLambertMaterial({ color: 0xf8fbff, fog: false }),
+      new THREE.MeshLambertMaterial({ color: 0xd4e2f0, fog: false }),
       72
     );
     const cm4 = new THREE.Matrix4(), cQuat = new THREE.Quaternion(), cScale = new THREE.Vector3(), cPos = new THREE.Vector3();
@@ -1795,10 +1795,10 @@
       color: 0xdbeafe, transparent: true, opacity: 0.22, depthWrite: false
     });
     dayNightControllers.push((isDay) => {
-      setColorSafe(scene, 'background', isDay ? 0x8cc7f2 : 0x080c14);
+      setColorSafe(scene, 'background', isDay ? 0x6ba2d0 : 0x080c14);
       if (scene.fog) {
-        setColorSafe(scene.fog, 'color', isDay ? 0xabd7f5 : 0x0c1322);
-        if (typeof scene.fog.density === 'number') scene.fog.density = isDay ? 0.00072 : 0.0018;
+        setColorSafe(scene.fog, 'color', isDay ? 0x8cb7db : 0x0c1322);
+        if (typeof scene.fog.density === 'number') scene.fog.density = isDay ? 0.00048 : 0.0018;
       }
       if (skyMat) {
         skyMat.map = isDay ? daySkyTex : nightSkyTex;
@@ -1807,26 +1807,26 @@
       if (stars) stars.visible = !isDay;
       if (daySkyExtras) daySkyExtras.visible = isDay;
       if (hemiLight) {
-        setColorSafe(hemiLight, 'color', isDay ? 0xcce8ff : 0x7da4d4);
-        setColorSafe(hemiLight, 'groundColor', isDay ? 0x5c6b7a : 0x181a1c);
-        hemiLight.intensity = isDay ? 0.95 : 0.45;
+        setColorSafe(hemiLight, 'color', isDay ? 0x9ec9eb : 0x7da4d4);
+        setColorSafe(hemiLight, 'groundColor', isDay ? 0x3b4450 : 0x181a1c);
+        hemiLight.intensity = isDay ? 0.52 : 0.45;
       }
       if (ambLight) {
-        setColorSafe(ambLight, 'color', isDay ? 0xe5f0fa : 0x242d3c);
-        ambLight.intensity = isDay ? 0.46 : 0.20;
+        setColorSafe(ambLight, 'color', isDay ? 0xb8cde0 : 0x242d3c);
+        ambLight.intensity = isDay ? 0.18 : 0.20;
       }
       if (moon) {
-        setColorSafe(moon, 'color', isDay ? 0xfff6e0 : 0xbcd0f0);
-        moon.intensity = isDay ? 1.35 : 0.70;
+        setColorSafe(moon, 'color', isDay ? 0xfff0d4 : 0xbcd0f0);
+        moon.intensity = isDay ? 0.92 : 0.70;
       }
       if (ACTIVE_LIGHT_DIR && ACTIVE_LIGHT_DIR.copy) {
         ACTIVE_LIGHT_DIR.copy(isDay ? SUN_DIR : MOON_DIR);
       }
-      setColorSafe(lakeMat, 'color', isDay ? 0x1d78a6 : 0x0e3a5c);
-      lakeMat.roughness = isDay ? 0.18 : 0.16;
-      lakeMat.metalness = isDay ? 0.52 : 0.72;
-      lakeMat.envMapIntensity = isDay ? 1.25 : 1.15;
-      foamMat.opacity = isDay ? 0.34 : 0.22;
+      setColorSafe(lakeMat, 'color', isDay ? 0x165e85 : 0x0e3a5c);
+      lakeMat.roughness = isDay ? 0.22 : 0.16;
+      lakeMat.metalness = isDay ? 0.45 : 0.72;
+      lakeMat.envMapIntensity = isDay ? 0.85 : 1.15;
+      foamMat.opacity = isDay ? 0.28 : 0.22;
     });
 
     // Subtle harbour shoreline water-foam trim along granite seawall
@@ -2513,11 +2513,11 @@
         const m = facadeMats[s];
         if (!m) return;
         const glassy = (s === 'glass' || s === 'condo' || s === 'dark');
-        m.emissiveIntensity = isDay ? (glassy ? 0.08 : 0.04) : 1.0;
-        m.envMapIntensity = isDay ? (glassy ? 0.85 : 0.36) : 0.25;
+        m.emissiveIntensity = isDay ? (glassy ? 0.03 : 0.01) : 1.0;
+        m.envMapIntensity = isDay ? (glassy ? 0.42 : 0.16) : 0.25;
       });
-      shopMat.emissiveIntensity = isDay ? 0.16 : 1.25;
-      shopMat.envMapIntensity = isDay ? 0.55 : 0.25;
+      shopMat.emissiveIntensity = isDay ? 0.08 : 1.25;
+      shopMat.envMapIntensity = isDay ? 0.22 : 0.25;
     });
     const shopGB = new GeoBuilder();
     const capGB = new GeoBuilder();   // parapets + cornices

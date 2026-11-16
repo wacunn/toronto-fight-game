@@ -1196,11 +1196,11 @@ function buildCityEnvMap(renderer, isDay) {
   const g = c.getContext('2d');
   const grad = g.createLinearGradient(0, 0, 0, 256);
   if (isDay) {
-    grad.addColorStop(0.0, '#1d6fb8');
-    grad.addColorStop(0.42, '#78beef');
-    grad.addColorStop(0.50, '#d0ebfc');
-    grad.addColorStop(0.56, '#7b8fa3');
-    grad.addColorStop(1.0, '#364454');
+    grad.addColorStop(0.0, '#144478');
+    grad.addColorStop(0.42, '#417ab0');
+    grad.addColorStop(0.50, '#78a5cc');
+    grad.addColorStop(0.56, '#485a6b');
+    grad.addColorStop(1.0, '#222c36');
   } else {
     grad.addColorStop(0.0, '#05070f');
     grad.addColorStop(0.42, '#151f33');
@@ -1213,7 +1213,7 @@ function buildCityEnvMap(renderer, isDay) {
   const skyTex = new THREE.CanvasTexture(c);
   envScene.add(new THREE.Mesh(new THREE.SphereGeometry(50, 32, 16), new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide })));
   const panelGeo = new THREE.PlaneGeometry(5, 9);
-  const cols = isDay ? [0xffffff, 0xe0f2fe, 0xbae6fd, 0xf8fafc, 0xfef9c3, 0x93c5fd] : [0xffd59a, 0xffb36b, 0x9fd2ff, 0xffffff, 0x70a0d0, 0x63f0ff];
+  const cols = isDay ? [0xc8dff2, 0x9ec4e6, 0x80add6, 0xb6d1ea, 0xe8d9b5, 0x709dc7] : [0xffd59a, 0xffb36b, 0x9fd2ff, 0xffffff, 0x70a0d0, 0x63f0ff];
   for (let i = 0; i < 18; i++) {
     const a = (i / 18) * Math.PI * 2;
     const m = new THREE.Mesh(panelGeo, new THREE.MeshBasicMaterial({ color: cols[i % cols.length] }));
@@ -1221,7 +1221,7 @@ function buildCityEnvMap(renderer, isDay) {
     m.lookAt(0, 4, 0);
     envScene.add(m);
   }
-  const top = new THREE.Mesh(new THREE.CircleGeometry(10, 24), new THREE.MeshBasicMaterial({ color: isDay ? 0xbae6fd : 0x8090c0 }));
+  const top = new THREE.Mesh(new THREE.CircleGeometry(10, 24), new THREE.MeshBasicMaterial({ color: isDay ? 0x6c9dc9 : 0x8090c0 }));
   top.position.y = 45; top.rotation.x = Math.PI / 2;
   envScene.add(top);
   const pmrem = new THREE.PMREMGenerator(renderer);
@@ -1231,7 +1231,7 @@ function buildCityEnvMap(renderer, isDay) {
 }
 
 function getMainlandFogDensity() {
-  return (city && city.getTimeOfDay && city.getTimeOfDay() === 'day') ? 0.00072 : 0.0018;
+  return (city && city.getTimeOfDay && city.getTimeOfDay() === 'day') ? 0.00048 : 0.0018;
 }
 
 function getCityTimeOfDay() {
@@ -1253,10 +1253,14 @@ function setCityTimeOfDay(mode, fromNet, byName) {
       scene.environment = nightEnvMap;
     }
   } catch (e) {}
+  if (renderer && typeof renderer.toneMappingExposure === 'number') {
+    renderer.toneMappingExposure = isDay ? 0.86 : 1.0;
+  }
   if (bloomPass) {
-    bloomPass.strength = isDay ? 0.22 : 0.85;
-    bloomPass.radius = isDay ? 0.35 : 0.5;
-    bloomPass.threshold = isDay ? 0.94 : 0.80;
+    bloomPass.enabled = true;
+    bloomPass.strength = isDay ? 0.0 : 0.85;
+    bloomPass.radius = isDay ? 0.2 : 0.5;
+    bloomPass.threshold = isDay ? 1.5 : 0.80;
   }
   if (scene.fog) {
     if (state.onPlane) scene.fog.density = 0.00022;
@@ -1292,7 +1296,13 @@ function setupPostFX() {
   composer.setPixelRatio(renderer.getPixelRatio());
   composer.setSize(window.innerWidth, window.innerHeight);
   composer.addPass(new THREE.RenderPass(scene, camera));
-  bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.85, 0.5, 0.8);
+  const isDayInit = (getCityTimeOfDay() === 'day');
+  bloomPass = new THREE.UnrealBloomPass(
+    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    isDayInit ? 0.0 : 0.85,
+    isDayInit ? 0.2 : 0.5,
+    isDayInit ? 1.5 : 0.8
+  );
   composer.addPass(bloomPass);
 }
 
@@ -8865,7 +8875,7 @@ function animate(now) {
   updateArmsRig(simDt);
   drawFace();
 
-  if (composer) composer.render(dt);
+  if (composer && getCityTimeOfDay() !== 'day') composer.render(dt);
   else renderer.render(scene, camera);
 }
 
