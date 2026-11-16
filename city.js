@@ -12048,7 +12048,7 @@
       [-176.0, 544.5], [-160.4, 543.3],
       [-139.4, 538.1], [-95.2, 527.7], [-62.8, 520.2],
       [-15.1, 508.2], [42.9, 493.6], [59.5, 490.1], [105.6, 479.2],
-      [153.1, 467.9], [190.9, 459.2], [211.8, 455.1]
+      [153.1, 467.9], [190.9, 459.2], [211.8, 455.1], [218.0, 444.0], [221.0, 434.0], [222.0, 415.0]
     ];
 
     function buildRouteStopsAndCum(rt, anchorSpecs) {
@@ -12181,7 +12181,7 @@
       { id: '509_spadina', name: 'Queens Quay & Spadina Ave', sub: '510 Spadina Transfer \u2022 Music Garden', x: -734.1, z: 538.1 },
       { id: '509_harbourfront', name: 'Harbourfront Centre (Rees St)', sub: 'Waterfront Promenade & HTO Park', x: -380.0, z: 558.0 },
       { id: '509_ferry', name: 'Queens Quay / Ferry Docks', sub: 'Jack Layton Ferry Terminal \u2022 Harbour Square', x: 105.6, z: 479.2 },
-      { id: '509_union', name: 'Union Station Underground (Subway)', sub: 'Underground Loop \u2022 Walk North to Line 1 Subway', x: 211.8, z: 455.1, isUnionLoop: true }
+      { id: '509_union', name: 'Queens Quay & Bay / Union Tunnel', sub: '509/510 Streetcar Loop \u2022 Walk In or Ride to Union Subway', x: 213.5, z: 452.5, isUnionLoop: true }
     ]);
 
     const spGeom = buildRouteStopsAndCum(streetcarRoutes[2], [
@@ -12193,7 +12193,7 @@
       { id: '510_queensquay', name: 'Queens Quay & Spadina Ave', sub: '509 CNE Transfer \u2022 Harbourfront', x: -734.1, z: 538.1 },
       { id: '510_harbourfront', name: 'Harbourfront Centre (Rees St)', sub: 'Waterfront Promenade', x: -380.0, z: 558.0 },
       { id: '510_ferry', name: 'Queens Quay / Ferry Docks', sub: 'Jack Layton Ferry Terminal', x: 105.6, z: 479.2 },
-      { id: '510_union', name: 'Union Station Underground (Subway)', sub: 'Underground Loop \u2022 Walk North to Line 1 Subway', x: 211.8, z: 455.1, isUnionLoop: true }
+      { id: '510_union', name: 'Queens Quay & Bay / Union Tunnel', sub: '509/510 Streetcar Loop \u2022 Link to Line 1 Subway', x: 213.5, z: 452.5, isUnionLoop: true }
     ]);
     streetcarRoutes[2].spadinaEnd = spGeom.projectD(-734.1, 538.1);
     const splitXStop = s => (s.id === '504_spadina' || s.id === '510_king')
@@ -12225,38 +12225,57 @@
       if (!rt.portal) return;
       const n = rt.pts.length, e = rt.pts[n - 1];
       let back = n - 2, acc = 0;
-      while (back > 0 && acc + Math.hypot(rt.pts[back + 1][0] - rt.pts[back][0], rt.pts[back + 1][1] - rt.pts[back][1]) < 32) {
+      while (back > 0 && acc + Math.hypot(rt.pts[back + 1][0] - rt.pts[back][0], rt.pts[back + 1][1] - rt.pts[back][1]) < 24) {
         acc += Math.hypot(rt.pts[back + 1][0] - rt.pts[back][0], rt.pts[back + 1][1] - rt.pts[back][1]); back--;
       }
       const b = rt.pts[back];
       const dx = e[0] - b[0], dz = e[1] - b[1], L = Math.hypot(dx, dz) || 1;
       const fx = dx / L, fz = dz / L;
-      const PL = 32, PW = 6.0, PH = 4.6;
+      const PL = 24, PW = 6.0, PH = 4.6;
       const cx = e[0] - fx * PL / 2, cz = e[1] - fz * PL / 2;
       const g = new THREE.Group();
-      const concrete = new THREE.MeshStandardMaterial({ color: 0x8b8f96, roughness: 0.9 });
-      const portalInteriorMat = new THREE.MeshBasicMaterial({ color: 0x05070a });
+      const concrete = new THREE.MeshStandardMaterial({ color: 0x8b8f96, roughness: 0.9, side: THREE.DoubleSide });
+      const portalInteriorMat = new THREE.MeshBasicMaterial({ color: 0x05070a, side: THREE.DoubleSide });
 
-      const portalMesh = new THREE.Mesh(new THREE.BoxGeometry(PW, PH, PL), concrete);
-      portalMesh.position.y = PH / 2;
-      g.add(portalMesh);
+      // Open-mouth concrete portal walls (side walls + roof + dark tunnel interior so players can walk straight inside!)
+      [-PW / 2 + 0.25, PW / 2 - 0.25].forEach(wx => {
+        const w = new THREE.Mesh(new THREE.BoxGeometry(0.5, PH, PL), concrete);
+        w.position.set(wx, PH / 2, 0);
+        g.add(w);
+      });
+      const pRoof = new THREE.Mesh(new THREE.BoxGeometry(PW, 0.45, PL), concrete);
+      pRoof.position.set(0, PH - 0.22, 0);
+      g.add(pRoof);
+      const backCurtain = new THREE.Mesh(new THREE.PlaneGeometry(PW - 0.9, PH - 0.5), portalInteriorMat);
+      backCurtain.position.set(0, PH / 2, PL / 2 - 2.0);
+      g.add(backCurtain);
 
-      const darkInner = new THREE.Mesh(new THREE.BoxGeometry(PW - 0.8, PH - 0.6, PL + 0.1), portalInteriorMat);
-      darkInner.position.y = (PH - 0.6) / 2;
-      g.add(darkInner);
-
-      const portSign = signMesh(['TTC QUEENS QUAY UNDERGROUND PORTAL \u2022 509 CNE & 510 SPADINA'], 5.4, 0.5, { bg: '#0f172a', fg: '#f59e0b', borderColor: '#334155', size: 48 });
-      portSign.position.set(0, PH + 0.35, -PL / 2 + 0.1);
+      const portSign = signMesh(['UNION STREETCAR TUNNEL', '509 CNE • 510 SPADINA • WALK IN OR [E]'], 5.8, 0.72, { bg: '#0f172a', fg: '#facc15', borderColor: '#dc2626', size: 46 });
+      portSign.position.set(0, PH + 0.45, -PL / 2 + 0.1);
+      portSign.rotation.y = Math.PI;
       g.add(portSign);
 
       g.position.set(cx, 0, cz);
       g.rotation.y = Math.atan2(fx, fz);
       scene.add(g);
       const rx = fz, rz = -fx;
-      const portPoly = [[-PW / 2, -PL / 2], [PW / 2, -PL / 2], [PW / 2, PL / 2], [-PW / 2, PL / 2]].map(([u, v]) => [cx + rx * u + fx * v, cz + rz * u + fz * v]);
-      if (polyArea(portPoly) < 0) portPoly.reverse();
-      addSolid({ type: 'poly', pts: portPoly, h: PH, name: 'TTC Portal' });
-      sharedUnionPortal = { x: cx, z: cz, len: PL };
+      // Add solid collision ONLY along the left & right retaining walls (leaving middle tunnel opening 100% walkable!)
+      [[-PW / 2, -PW / 2 + 0.55], [PW / 2 - 0.55, PW / 2]].forEach(([u0, u1]) => {
+        const wPoly = [[u0, -PL / 2], [u1, -PL / 2], [u1, PL / 2], [u0, PL / 2]].map(([u, v]) => [cx + rx * u + fx * v, cz + rz * u + fz * v]);
+        if (polyArea(wPoly) < 0) wPoly.reverse();
+        addSolid({ type: 'poly', pts: wPoly, h: PH, name: 'TTC Portal Wall' });
+      });
+      sharedUnionPortal = {
+        x: cx,
+        z: cz,
+        entranceX: cx - fx * (PL / 2 - 1.5),
+        entranceZ: cz - fz * (PL / 2 - 1.5),
+        deepX: cx + fx * (PL / 2 - 4.0),
+        deepZ: cz + fz * (PL / 2 - 4.0),
+        fx,
+        fz,
+        len: PL
+      };
       rt.portal = sharedUnionPortal;
     });
     if (sharedUnionPortal) {
@@ -18336,10 +18355,16 @@
 
     const PARK_ZONES = [
       { name: 'Nathan Phillips Square', x0: 15, x1: 205, z0: -878, z1: -764 },
+      { name: 'Old City Hall Plaza', x0: 215, x1: 315, z0: -870, z1: -764 },
       { name: 'Yonge-Dundas Square', x0: 315, x1: 412, z0: -1105, z1: -1032 },
       { name: 'Berczy Park', x0: 590, x1: 705, z0: -472, z1: -395 },
       { name: 'St. James Park', x0: 785, x1: 930, z0: -768, z1: -655 },
       { name: 'St. Lawrence Market Plaza', x0: 785, x1: 895, z0: -512, z1: -410 },
+      { name: 'Union Station Plaza', x0: 155, x1: 365, z0: -195, z1: -120 },
+      { name: 'Fairmont Royal York Plaza', x0: 110, x1: 255, z0: -285, z1: -206 },
+      { name: 'Scotiabank Arena Plaza', x0: 265, x1: 395, z0: 0, z1: 115 },
+      { name: 'Rogers Centre Plaza', x0: -600, x1: -370, z0: 120, z1: 340 },
+      { name: "Ripley's Aquarium Plaza", x0: -250, x1: -120, z0: 110, z1: 215 },
       { name: 'Clarence Square Park', x0: -855, x1: -755, z0: -60, z1: 35 },
       { name: 'David Pecaut Square', x0: -362, x1: -232, z0: -315, z1: -205 },
       { name: 'Roundhouse Park', x0: -145, x1: -12, z0: 45, z1: 225 },
@@ -18374,45 +18399,65 @@
         .replace(/\bBoulevard\b/g, 'Blvd');
     }
 
-    function getRoadAt(x, z, pad) {
-      const arr = roadGrid.get(cellKey(Math.floor(x / RCELL), Math.floor(z / RCELL)));
-      if (!arr) return { street: null, trail: null };
-      const extraPad = pad !== undefined ? pad : 2.2;
-      const streets = [];
-      const trails = [];
-      for (let i = 0; i < arr.length; i++) {
-        const sg = arr[i];
-        const r = sg.id === 9980
-          ? { n: (x < 260 ? 'York Street' : 'Bay Street'), t: 'secondary' }
-          : (MAP.roads[sg.id] || {});
-        if (!r || !r.n || r.t === 'service') continue;
-        const lim = sg.hw + extraPad;
-        const dSq = distToSegSq(x, z, sg.ax, sg.az, sg.bx, sg.bz);
-        if (dSq > lim * lim) continue;
-        const isPed = (r.t === 'pedestrian' || r.t === 'footway' || r.t === 'path' || r.t === 'cycleway');
-        const list = isPed ? trails : streets;
-        if (!list.some(it => it.name === r.n)) {
-          list.push({ name: r.n, dSq });
+    function getRoadAt(x, z, maxEdgeDist) {
+      const cx0 = Math.floor(x / RCELL), cz0 = Math.floor(z / RCELL);
+      const seenSeg = new Set();
+      const streetBest = new Map();
+      const trailBest = new Map();
+      const searchEdge = maxEdgeDist !== undefined ? maxEdgeDist : 70.0;
+
+      for (let gx = cx0 - 2; gx <= cx0 + 2; gx++) {
+        for (let gz = cz0 - 2; gz <= cz0 + 2; gz++) {
+          const arr = roadGrid.get(cellKey(gx, gz));
+          if (!arr) continue;
+          for (let i = 0; i < arr.length; i++) {
+            const sg = arr[i];
+            if (seenSeg.has(sg)) continue;
+            seenSeg.add(sg);
+            const r = sg.id === 9980
+              ? { n: (x < 260 ? 'York Street' : 'Bay Street'), t: 'secondary' }
+              : (MAP.roads[sg.id] || {});
+            if (!r || !r.n || r.t === 'service') continue;
+            const dCenter = Math.sqrt(distToSegSq(x, z, sg.ax, sg.az, sg.bx, sg.bz));
+            const dEdge = Math.max(0, dCenter - (sg.hw || 3.5));
+            if (dEdge > searchEdge) continue;
+            const isPed = (r.t === 'pedestrian' || r.t === 'footway' || r.t === 'path' || r.t === 'cycleway');
+            const bucket = isPed ? trailBest : streetBest;
+            const prev = bucket.get(r.n);
+            if (!prev || dEdge < prev.dEdge) {
+              bucket.set(r.n, { name: r.n, dEdge, dCenter });
+            }
+          }
         }
       }
-      streets.sort((a, b) => a.dSq - b.dSq);
-      trails.sort((a, b) => a.dSq - b.dSq);
-      let street = null;
-      if (streets.length >= 2 && streets[0].dSq < 110 && streets[1].dSq < 110) {
-        street = `${shortRoadName(streets[0].name)} & ${shortRoadName(streets[1].name)}`;
-      } else if (streets.length >= 1) {
-        street = streets[0].name;
+
+      const streets = Array.from(streetBest.values()).sort((a, b) => a.dEdge - b.dEdge);
+      const trails = Array.from(trailBest.values()).sort((a, b) => a.dEdge - b.dEdge);
+
+      // On road / adjacent sidewalk (within 7.5m of curb) -> never flicker off road name!
+      let directStreet = null;
+      if (streets.length >= 2 && streets[0].dEdge <= 5.5 && streets[1].dEdge <= 5.5) {
+        directStreet = `${shortRoadName(streets[0].name)} & ${shortRoadName(streets[1].name)}`;
+      } else if (streets.length >= 1 && streets[0].dEdge <= 8.0) {
+        directStreet = streets[0].name;
       }
-      return { street, trail: trails.length ? trails[0].name : null };
+
+      const directTrail = (trails.length && trails[0].dEdge <= 6.0) ? trails[0].name : null;
+      const closestStreet = streets.length ? streets[0] : null;
+      return { directStreet, directTrail, closestStreet };
     }
 
     function getDistrictLabel(x, z) {
-      if (z > getShorelineZ(x) - 28) return 'Harbourfront Boardwalk';
+      if (z > getShorelineZ(x) - 28) return 'Harbourfront Promenade';
       const d = districtOf(x, z);
-      if (d === 'south') return x < -450 ? 'CityPlace' : 'South Core';
-      if (d === 'kingwest') return x < -1450 ? 'Liberty Village' : 'Entertainment District';
-      if (d === 'oldtown') return 'Old Town Toronto';
-      return 'Financial District';
+      if (d === 'south') {
+        if (x < -450) return 'CityPlace & Spadina District';
+        if (x < 60) return 'CN Tower & Rail Corridor';
+        return 'Harbourfront & Union District';
+      }
+      if (d === 'kingwest') return x < -1450 ? 'Liberty Village' : 'Entertainment & Theatre District';
+      if (d === 'oldtown') return 'St. Lawrence & Old Town';
+      return 'Downtown Financial District';
     }
 
     function getLocationStatement(x, z, y, yaw) {
@@ -18424,16 +18469,20 @@
         const deck = y > 345.5 ? 'CN Tower 348m Lookout' : 'CN Tower Glass Floor';
         return { place: deck, heading, text: `${deck} - ${heading}` };
       }
-      const { street, trail } = getRoadAt(x, z, 2.2);
-      if (street) {
-        return { place: street, heading, text: `${street} - ${heading}` };
+      const { directStreet, directTrail, closestStreet } = getRoadAt(x, z, 75.0);
+      if (directStreet) {
+        return { place: directStreet, heading, text: `${directStreet} - ${heading}` };
       }
       const park = getParkAt(x, z);
       if (park) {
         return { place: park, heading, text: `${park} - ${heading}` };
       }
-      if (trail) {
-        return { place: trail, heading, text: `${trail} - ${heading}` };
+      if (directTrail) {
+        return { place: directTrail, heading, text: `${directTrail} - ${heading}` };
+      }
+      if (closestStreet) {
+        const nearName = closestStreet.dEdge <= 18.0 ? closestStreet.name : `By ${closestStreet.name}`;
+        return { place: nearName, heading, text: `${nearName} - ${heading}` };
       }
       const district = getDistrictLabel(x, z);
       return { place: district, heading, text: `${district} - ${heading}` };
@@ -18466,7 +18515,8 @@
       streetcarRoutes,
       streetcarNetwork: {
         routes: streetcarRoutes,
-        unionLoop: UNION_SC_BAY
+        unionLoop: UNION_SC_BAY,
+        portal: sharedUnionPortal
       },
       streetcarTrackOffset: 1.5,
       makeStreetcar,

@@ -5946,14 +5946,31 @@ function updateObservationDeck(dt) {
       return;
     }
 
+    // Queens Quay & Bay Off-Street Union Streetcar Tunnel Portal (walk straight in or press [E]!)
+    const qqPortal = city && city.streetcarNetwork && city.streetcarNetwork.portal;
+    const uBayLoop = (city && city.subway && city.subway.unionStreetcarLoop) || (city && city.streetcarNetwork && city.streetcarNetwork.unionLoop);
+    if (qqPortal && uBayLoop && qqPortal.deepX !== undefined) {
+      const dDeep = Math.hypot(player.pos.x - qqPortal.deepX, player.pos.z - qqPortal.deepZ);
+      const dMouth = Math.hypot(player.pos.x - qqPortal.entranceX, player.pos.z - qqPortal.entranceZ);
+      if (dDeep < 4.2 && dt > 0) {
+        enterUnionPortalTunnel();
+        return;
+      }
+      if (dDeep < 10.5 || dMouth < 5.5) {
+        activeDeckAction = 'enter_union_portal';
+        setDeckPrompt('[E]', 'ENTER UNION STATION STREETCAR TUNNEL (WALK IN)');
+        return;
+      }
+    }
+
     // Named TTC Streetcar Stop Pylons & Terminal Loops (clickable stop selector)
-    const nearScStop = findNearbyStreetcarStop(15.5);
+    const nearScStop = findNearbyStreetcarStop(11.5);
     if (nearScStop && nearScStop.stop) {
       activeDeckAction = { type: 'open_streetcar_panel', routeId: nearScStop.route.id, stop: nearScStop.stop };
-      setDeckPrompt('[E]', `TTC STOP: ${nearScStop.stop.name.toUpperCase()} • PICK STOP`);
+      setDeckPrompt('[E]', `PICK STREETCAR STOP (${nearScStop.route.id} LINE • ${nearScStop.stop.name.toUpperCase()})`);
       return;
     }
-    if (streetcarPanel.open && !isAtUnionStreetcarLoop() && !findNearbyStreetcar(18.0) && !findNearbyStreetcarStop(22.0)) {
+    if (streetcarPanel.open && !isAtUnionStreetcarLoop() && !findNearbyStreetcar(18.0) && !findNearbyStreetcarStop(15.0)) {
       closeStreetcarPanel();
     }
 
@@ -6059,9 +6076,15 @@ function updateObservationDeck(dt) {
         }
       }
     }
+    const ubSouth = (city && city.subway && city.subway.unionStreetcarLoop) || (city && city.streetcarNetwork && city.streetcarNetwork.unionLoop);
+    if (ubSouth && Math.hypot(player.pos.x - ubSouth.x, player.pos.z - ubSouth.minZ) < 4.2) {
+      activeDeckAction = 'exit_union_portal';
+      setDeckPrompt('[E]', 'EXIT TUNNEL TO QUEENS QUAY & BAY');
+      return;
+    }
     if (isAtUnionStreetcarLoop()) {
       activeDeckAction = { type: 'open_streetcar_panel', atUnionLoop: true, routeId: '509' };
-      setDeckPrompt('[E]', 'UNION STREETCAR LOOP • PICK STOP (509 CNE / 510 SPADINA)');
+      setDeckPrompt('[E]', 'UNION STREETCAR LOOP • PICK STREETCAR STOP (509 CNE / 510 SPADINA)');
       return;
     }
     if (streetcarPanel.open && !findNearbyStreetcarStop(20.0)) {
@@ -6239,6 +6262,26 @@ function updateObservationDeck(dt) {
   if (promptEl) promptEl.classList.add('hidden');
 }
 
+function enterUnionPortalTunnel() {
+  const ub = (city && city.subway && city.subway.unionStreetcarLoop) || (city && city.streetcarNetwork && city.streetcarNetwork.unionLoop);
+  if (!ub) return false;
+  if (streetcarPanel.open) closeStreetcarPanel();
+  player.pos.set(ub.x + 1.5, ub.y + EYE_HEIGHT, ub.exitZ + 2.0);
+  player.velocity.set(0, 0, 0);
+  player.yaw = 0; // facing north toward the Line 1 Union Subway corridor!
+  player.pitch = 0;
+  camera.rotation.order = 'YXZ';
+  camera.rotation.y = player.yaw;
+  camera.rotation.x = 0;
+  state.isUnderground = true;
+  if (audio && audio.playPrestoChime) audio.playPrestoChime();
+  else if (audio && audio.playPickup) audio.playPickup();
+  if (typeof showAnnouncement === 'function') {
+    showAnnouncement('🚊 UNION UNDERGROUND STREETCAR LOOP · WALK NORTH FOR LINE 1 SUBWAY', 2600);
+  }
+  return true;
+}
+
 function handleDeckAction() {
   if (!activeDeckAction) return false;
   if (
@@ -6270,6 +6313,24 @@ function handleDeckAction() {
   if (activeDeckAction && activeDeckAction.type === 'board_streetcar') {
     boardStreetcar(activeDeckAction.sc);
     return true;
+  }
+  if (activeDeckAction === 'enter_union_portal') {
+    return enterUnionPortalTunnel();
+  }
+  if (activeDeckAction === 'exit_union_portal') {
+    const qqPortal = city && city.streetcarNetwork && city.streetcarNetwork.portal;
+    if (qqPortal && qqPortal.entranceX !== undefined) {
+      const fx = qqPortal.fx || 0, fz = qqPortal.fz || -1;
+      player.pos.set(qqPortal.entranceX - fx * 3.0, 1.7, qqPortal.entranceZ - fz * 3.0);
+      player.velocity.set(0, 0, 0);
+      player.yaw = Math.atan2(-fx, -fz) + Math.PI;
+      state.isUnderground = false;
+      if (scene.fog) scene.fog.density = getMainlandFogDensity();
+      camera.rotation.order = 'YXZ';
+      camera.rotation.y = player.yaw;
+      camera.rotation.x = 0;
+      return true;
+    }
   }
   if (activeDeckAction && activeDeckAction.type === 'open_streetcar_panel') {
     if (streetcarPanel.open) closeStreetcarPanel();
