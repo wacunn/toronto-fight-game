@@ -2256,6 +2256,119 @@ body.telescope-mode #crosshair-wrapper {
   letter-spacing: 0.8px;
 }
 
+/* ==================== MULTIPLAYER SQUAD RADAR & VIEWPORT TRACKING ==================== */
+#tod-badge.tod-day {
+  background: rgba(14, 165, 233, 0.24);
+  border-color: rgba(125, 211, 252, 0.65);
+  color: #e0f2fe;
+}
+#tod-badge.tod-night {
+  background: rgba(30, 41, 59, 0.72);
+  border-color: rgba(148, 163, 184, 0.45);
+  color: #cbd5e1;
+}
+
+#squad-hud {
+  position: absolute;
+  top: 292px;
+  right: 16px;
+  width: 210px;
+  z-index: 25;
+  background: rgba(8, 12, 22, 0.84);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 10px;
+  padding: 7px 9px;
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+  font-family: 'Chakra Petch', sans-serif;
+}
+#squad-hud.hidden {
+  display: none !important;
+}
+.squad-hud-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  color: #7dd3fc;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  padding-bottom: 4px;
+  margin-bottom: 5px;
+}
+.squad-hud-keys {
+  font-size: 8.5px;
+  color: #cbd5e1;
+  letter-spacing: 0.3px;
+}
+.squad-member-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 3px 4px;
+  border-radius: 5px;
+  background: rgba(15, 23, 42, 0.7);
+  margin-bottom: 3px;
+  font-size: 10.5px;
+}
+.squad-member-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid #ffffff;
+  flex-shrink: 0;
+}
+.squad-member-name {
+  flex: 1;
+  color: #f8fafc;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.squad-member-dist {
+  color: #93c5fd;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+#squad-pins-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 22;
+}
+.squad-hud-pin {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(8, 12, 22, 0.84);
+  border: 2px solid #38bdf8;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  color: #ffffff;
+  white-space: nowrap;
+}
+.squad-hud-pin.offscreen {
+  border-radius: 8px;
+  padding: 4px 9px;
+}
+.squad-pin-arrow {
+  display: inline-block;
+  font-size: 12px;
+  line-height: 1;
+}
+
+
 
 
 </style>
@@ -2285,6 +2398,7 @@ body.telescope-mode #crosshair-wrapper {
           <button id="diff-next-btn" class="diff-step-btn" type="button" title="Increase difficulty [ ] key ]">▶</button>
         </div>
         <span id="mouse-status-tag" class="tag tag-green">MOUSE: UNLOCKED</span>
+        <span id="tod-badge" class="tag tag-dim" title="Click to toggle Daytime / Nighttime in Toronto" style="cursor:pointer;">🌙 NIGHTTIME</span>
         <span id="mp-status-badge" class="tag tag-dim" title="Multiplayer Status">🌐 SOLO / OFFLINE</span>
         <span id="fps-counter" class="tag tag-dim">60 FPS</span>
       </div>
@@ -2336,6 +2450,16 @@ body.telescope-mode #crosshair-wrapper {
         </div>
       </div>
     </div>
+
+    <!-- Multiplayer Squad Roster & Viewport Tracking Layer -->
+    <div id="squad-hud" class="hidden">
+      <div class="squad-hud-header">
+        <span>🛡️ SQUAD RADAR</span>
+        <span class="squad-hud-keys">[Y] RALLY • [T] FLARE</span>
+      </div>
+      <div id="squad-roster-list"></div>
+    </div>
+    <div id="squad-pins-layer"></div>
 
     <!-- Peace Zone Notification Banner -->
     <div id="peace-zone-banner" class="hidden">
@@ -2609,6 +2733,8 @@ body.telescope-mode #crosshair-wrapper {
               <li><kbd>SHIFT</kbd> &mdash; Rush / Sprint</li>
               <li><kbd>SPACE</kbd> + <kbd>ATTACK</kbd> &mdash; <b>💥 METEOR JUMP SLAM</b></li>
               <li><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> &mdash; Switch Attacks</li>
+              <li><kbd>Y</kbd> &mdash; <b>⚡ Squad Rally (Teleport to Teammate in Co-op)</b></li>
+              <li><kbd>T</kbd> &mdash; <b>🔥 Launch Squad Signal Flare</b></li>
               <li><kbd>V</kbd> &mdash; <b>🤖 WATCH TRAINED AI (Toggle AI Copilot)</b></li>
               <li><kbd>N</kbd> &mdash; <b>AI Persona (🥊 Brawler vs 📦 Crate Hunter)</b></li>
               <li><kbd>ESC</kbd> or <kbd>P</kbd> &mdash; <b>Instant Release Mouse / Pause</b></li>
@@ -3386,17 +3512,26 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     return t;
   }
 
-  function makeSkyTexture() {
+  function makeSkyTexture(mode) {
     const c = document.createElement('canvas');
     c.width = 4; c.height = 512;
     const ctx = c.getContext('2d');
     const g = ctx.createLinearGradient(0, 0, 0, 512);
-    g.addColorStop(0.0, '#03040a');
-    g.addColorStop(0.35, '#0a1020');
-    g.addColorStop(0.47, '#142034');
-    g.addColorStop(0.5, '#1e2e44');   // crisp urban night glow on horizon
-    g.addColorStop(0.53, '#101828');
-    g.addColorStop(1.0, '#070910');
+    if (mode === 'day') {
+      g.addColorStop(0.0, '#1d5fa7');   // rich deep Toronto summer zenith azure
+      g.addColorStop(0.28, '#4a90d9');  // crisp cerulean sky
+      g.addColorStop(0.44, '#8cc8f8');  // soft lake-breeze atmosphere
+      g.addColorStop(0.5, '#d6eeff');   // luminous Lake Ontario horizon haze
+      g.addColorStop(0.54, '#a6cce4');  // distant water/land mist blend
+      g.addColorStop(1.0, '#50728f');   // lower hemisphere lake reflection
+    } else {
+      g.addColorStop(0.0, '#03040a');
+      g.addColorStop(0.35, '#0a1020');
+      g.addColorStop(0.47, '#142034');
+      g.addColorStop(0.5, '#1e2e44');   // crisp urban night glow on horizon
+      g.addColorStop(0.53, '#101828');
+      g.addColorStop(1.0, '#070910');
+    }
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, 4, 512);
     return new THREE.CanvasTexture(c);
@@ -3458,6 +3593,31 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
   function buildTorontoCity(scene) {
     const MAP = window.TORONTO_MAP;
     if (!MAP) throw new Error('TORONTO_MAP data missing (toronto_map.js not loaded)');
+
+    // Randomize Daytime or Nighttime at session start (or honor ?time=day|night)
+    let timeOfDay = (Math.random() < 0.5) ? 'day' : 'night';
+    try {
+      const qTime = (typeof window !== 'undefined' && window.location && window.location.search)
+        ? new URLSearchParams(window.location.search).get('time')
+        : null;
+      if (qTime === 'day' || qTime === 'night') timeOfDay = qTime;
+    } catch (e) {}
+    const nphFlags = [];
+    const dayNightControllers = [];
+    const setColorSafe = (obj, prop, hex) => {
+      if (!obj) return;
+      const cur = obj[prop];
+      if (cur && typeof cur.setHex === 'function') cur.setHex(hex);
+      else if (typeof THREE.Color === 'function') obj[prop] = new THREE.Color(hex);
+    };
+    const setTimeOfDay = (mode) => {
+      timeOfDay = (mode === 'day') ? 'day' : 'night';
+      const isDay = (timeOfDay === 'day');
+      for (let i = 0; i < dayNightControllers.length; i++) {
+        try { dayNightControllers[i](isDay); } catch (e) {}
+      }
+      return timeOfDay;
+    };
 
     const [[minX, minZ], [maxX, maxZ]] = MAP.bounds;
     const PLAY = { minX: Math.min(minX, -2350), maxX: Math.max(maxX, 1360), minZ: Math.min(minZ, -1180), maxZ: 1650 };
@@ -4272,18 +4432,21 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       return { x: cx, z: cz };
     }
 
-    // ---------- Sky, fog, lighting ----------
+    // ---------- Sky, fog, lighting (dual Daytime / Nighttime atmosphere) ----------
+    const nightSkyTex = makeSkyTexture('night');
+    const daySkyTex = makeSkyTexture('day');
     scene.background = new THREE.Color(0x080c14);
     scene.fog = new THREE.FogExp2(0x0c1322, 0.0018);
 
+    const skyMat = new THREE.MeshBasicMaterial({ map: nightSkyTex, side: THREE.BackSide, fog: false, depthWrite: false });
     const sky = new THREE.Mesh(
       new THREE.SphereGeometry(4200, 32, 16),
-      new THREE.MeshBasicMaterial({ map: makeSkyTexture(), side: THREE.BackSide, fog: false, depthWrite: false })
+      skyMat
     );
     sky.renderOrder = -10;
     scene.add(sky);
 
-    // Stars
+    // Stars (visible at night)
     const starPos = [];
     for (let i = 0; i < 1400; i++) {
       const th = hash(i * 1.3) * Math.PI * 2;
@@ -4295,10 +4458,60 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xcfd8ff, size: 2.2, sizeAttenuation: false, fog: false, depthWrite: false, transparent: true, opacity: 0.8 }));
     scene.add(stars);
 
-    scene.add(new THREE.HemisphereLight(0x7da4d4, 0x181a1c, 0.45));
-    scene.add(new THREE.AmbientLight(0x242d3c, 0.20));
-    // Moonlight with real shadows. The shadow frustum follows the player (see update()).
+    // Sun & atmospheric drifting cumulus cloud deck (visible during daytime)
+    const SUN_DIR = new THREE.Vector3(0.46, 0.78, 0.42).normalize();
+    const daySkyExtras = new THREE.Group();
+    const sunDisc = new THREE.Mesh(
+      new THREE.CircleGeometry(135, 24),
+      new THREE.MeshBasicMaterial({ color: 0xfff8dc, fog: false, depthWrite: false, toneMapped: false })
+    );
+    sunDisc.position.copy(SUN_DIR).multiplyScalar(3600);
+    sunDisc.lookAt(0, 0, 0);
+    daySkyExtras.add(sunDisc);
+    const sunHalo = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: makeGlowTexture('rgba(255,248,215,0.85)', 'rgba(255,220,145,0.18)'),
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false
+    }));
+    sunHalo.scale.set(950, 950, 1);
+    sunHalo.position.copy(SUN_DIR).multiplyScalar(3550);
+    daySkyExtras.add(sunHalo);
+
+    const CLOUD_PUFFS = [];
+    const cloudInst = new THREE.InstancedMesh(
+      new THREE.IcosahedronGeometry(1, 2),
+      new THREE.MeshLambertMaterial({ color: 0xf8fbff, fog: false }),
+      72
+    );
+    const cm4 = new THREE.Matrix4(), cQuat = new THREE.Quaternion(), cScale = new THREE.Vector3(), cPos = new THREE.Vector3();
+    for (let ci = 0; ci < 18; ci++) {
+      const ang = hash(ci * 3.1) * Math.PI * 2;
+      const dist = 500 + hash(ci * 5.7) * 2300;
+      const cx = Math.cos(ang) * dist, cz = Math.sin(ang) * dist;
+      const cy = 640 + hash(ci * 7.3) * 240;
+      const speed = 4.5 + hash(ci * 2.9) * 4.5;
+      for (let lobe = 0; lobe < 4; lobe++) {
+        const idx = ci * 4 + lobe;
+        const ox = (lobe - 1.5) * 46 + (hash(idx * 1.7) - 0.5) * 24;
+        const oz = (hash(idx * 2.3) - 0.5) * 40;
+        const oy = lobe === 1 || lobe === 2 ? 16 : -4;
+        const sx = 68 + hash(idx * 3.7) * 58;
+        const sy = 22 + hash(idx * 4.1) * 18;
+        const sz = 44 + hash(idx * 5.3) * 40;
+        CLOUD_PUFFS.push({ idx, bx: cx + ox, y: cy + oy, z: cz + oz, sx, sy, sz, speed });
+        cm4.compose(cPos.set(cx + ox, cy + oy, cz + oz), cQuat, cScale.set(sx, sy, sz));
+        cloudInst.setMatrixAt(idx, cm4);
+      }
+    }
+    daySkyExtras.add(cloudInst);
+    scene.add(daySkyExtras);
+
+    const hemiLight = new THREE.HemisphereLight(0x7da4d4, 0x181a1c, 0.45);
+    scene.add(hemiLight);
+    const ambLight = new THREE.AmbientLight(0x242d3c, 0.20);
+    scene.add(ambLight);
+    // Primary directional light (cool moonlight at night, warm crisp sun in daytime) with shadow tracking
     const MOON_DIR = new THREE.Vector3(-0.45, 0.8, -0.38).normalize();
+    const ACTIVE_LIGHT_DIR = MOON_DIR.clone();
     const moon = new THREE.DirectionalLight(0xbcd0f0, 0.70);
     moon.castShadow = true;
     moon.shadow.mapSize.set(2048, 2048);
@@ -4307,7 +4520,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     moon.shadow.camera.near = 10; moon.shadow.camera.far = 1400;
     moon.shadow.bias = -0.0004;
     moon.shadow.normalBias = 0.04;
-    moon.position.copy(MOON_DIR).multiplyScalar(600);
+    moon.position.copy(ACTIVE_LIGHT_DIR).multiplyScalar(600);
     scene.add(moon);
     scene.add(moon.target);
 
@@ -4414,6 +4627,63 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     const lake = new THREE.Mesh(lakeGB.build(), lakeMat);
     lake.receiveShadow = true;
     scene.add(lake);
+
+    const foamMat = new THREE.MeshBasicMaterial({
+      color: 0xdbeafe, transparent: true, opacity: 0.22, depthWrite: false
+    });
+    dayNightControllers.push((isDay) => {
+      setColorSafe(scene, 'background', isDay ? 0x8cc7f2 : 0x080c14);
+      if (scene.fog) {
+        setColorSafe(scene.fog, 'color', isDay ? 0xabd7f5 : 0x0c1322);
+        if (typeof scene.fog.density === 'number') scene.fog.density = isDay ? 0.00072 : 0.0018;
+      }
+      if (skyMat) {
+        skyMat.map = isDay ? daySkyTex : nightSkyTex;
+        skyMat.needsUpdate = true;
+      }
+      if (stars) stars.visible = !isDay;
+      if (daySkyExtras) daySkyExtras.visible = isDay;
+      if (hemiLight) {
+        setColorSafe(hemiLight, 'color', isDay ? 0xcce8ff : 0x7da4d4);
+        setColorSafe(hemiLight, 'groundColor', isDay ? 0x5c6b7a : 0x181a1c);
+        hemiLight.intensity = isDay ? 0.95 : 0.45;
+      }
+      if (ambLight) {
+        setColorSafe(ambLight, 'color', isDay ? 0xe5f0fa : 0x242d3c);
+        ambLight.intensity = isDay ? 0.46 : 0.20;
+      }
+      if (moon) {
+        setColorSafe(moon, 'color', isDay ? 0xfff6e0 : 0xbcd0f0);
+        moon.intensity = isDay ? 1.35 : 0.70;
+      }
+      if (ACTIVE_LIGHT_DIR && ACTIVE_LIGHT_DIR.copy) {
+        ACTIVE_LIGHT_DIR.copy(isDay ? SUN_DIR : MOON_DIR);
+      }
+      setColorSafe(lakeMat, 'color', isDay ? 0x1d78a6 : 0x0e3a5c);
+      lakeMat.roughness = isDay ? 0.18 : 0.16;
+      lakeMat.metalness = isDay ? 0.52 : 0.72;
+      lakeMat.envMapIntensity = isDay ? 1.25 : 1.15;
+      foamMat.opacity = isDay ? 0.34 : 0.22;
+    });
+
+    // Subtle harbour shoreline water-foam trim along granite seawall
+    {
+      const foamGB = new GeoBuilder();
+      for (let i = 0; i < HARBOUR_SHORELINE.length - 1; i++) {
+        const [ax, az] = HARBOUR_SHORELINE[i];
+        const [bx, bz] = HARBOUR_SHORELINE[i + 1];
+        const dx = bx - ax, dz = bz - az, len = Math.hypot(dx, dz);
+        if (len < 0.2) continue;
+        const nx = -dz / len, nz = dx / len;
+        const f0 = foamGB.vert(ax + nx * 0.15, WATER_Y + 0.03, az + nz * 0.15, 0, 1, 0, 0, 0);
+        const f1 = foamGB.vert(bx + nx * 0.15, WATER_Y + 0.03, bz + nz * 0.15, 0, 1, 0, 1, 0);
+        const f2 = foamGB.vert(bx + nx * 1.15, WATER_Y + 0.03, bz + nz * 1.15, 0, 1, 0, 1, 1);
+        const f3 = foamGB.vert(ax + nx * 1.15, WATER_Y + 0.03, az + nz * 1.15, 0, 1, 0, 0, 1);
+        foamGB.quad(f0, f1, f2, f3);
+        foamGB.quad(f0, f3, f2, f1);
+      }
+      scene.add(new THREE.Mesh(foamGB.build(), foamMat));
+    }
 
     // Continuous 3D Granite Harbour Seawall, Waterfront Promenade Coping & Timber Bumper Pilings
     {
@@ -5075,6 +5345,17 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     const facadeGB = {};
     STYLES.forEach((s, i) => { facadeMats[s] = makeFacade(s, i * 17 + 3); facadeGB[s] = new GeoBuilder(); });
     const shopMat = makeStorefront(41);
+    dayNightControllers.push((isDay) => {
+      STYLES.forEach(s => {
+        const m = facadeMats[s];
+        if (!m) return;
+        const glassy = (s === 'glass' || s === 'condo' || s === 'dark');
+        m.emissiveIntensity = isDay ? (glassy ? 0.08 : 0.04) : 1.0;
+        m.envMapIntensity = isDay ? (glassy ? 0.85 : 0.36) : 0.25;
+      });
+      shopMat.emissiveIntensity = isDay ? 0.16 : 1.25;
+      shopMat.envMapIntensity = isDay ? 0.55 : 0.25;
+    });
     const shopGB = new GeoBuilder();
     const capGB = new GeoBuilder();   // parapets + cornices
     const roofBoxes = [];             // penthouses / HVAC units (instanced)
@@ -6878,6 +7159,95 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     warnLights.count = roofLights.length;
     scene.add(warnLights);
 
+    // ---------- Iconic Downtown Skyline Crowns (FCP, Scotia Plaza, L Tower, RBP, CIBC Square) ----------
+    {
+      const crowns = new THREE.Group();
+      const redWhiteMastMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.4, metalness: 0.45 });
+      const mastRedBandMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.45, metalness: 0.25 });
+      const fcpCollarMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, emissive: 0xffffff, emissiveIntensity: 0.42, roughness: 0.35 });
+      const goldGlassMat = new THREE.MeshStandardMaterial({ color: 0xf5c451, emissive: 0x92400e, emissiveIntensity: 0.25, roughness: 0.14, metalness: 0.92, envMapIntensity: 1.35 });
+      const scotiaGraniteMat = new THREE.MeshStandardMaterial({ color: 0x8b2e2e, roughness: 0.52, metalness: 0.15 });
+      const cibcDiamondMat = new THREE.MeshStandardMaterial({ color: 0x7dd3fc, emissive: 0x38bdf8, emissiveIntensity: 0.65, roughness: 0.2, metalness: 0.7 });
+      const crownBeaconMat = new THREE.MeshBasicMaterial({ color: 0xff2222, fog: false });
+      dayNightControllers.push((isDay) => {
+        fcpCollarMat.emissiveIntensity = isDay ? 0.04 : 0.48;
+        goldGlassMat.emissiveIntensity = isDay ? 0.08 : 0.35;
+        cibcDiamondMat.emissiveIntensity = isDay ? 0.12 : 0.75;
+      });
+
+      // 1. First Canadian Place (292m) — marble mechanical penthouse collar + iconic twin red/white broadcast antennas
+      const fcpX = 147.6, fcpZ = -525.1, fcpH = 292.0;
+      const fcpCollar = new THREE.Mesh(new THREE.BoxGeometry(58, 5.5, 56), fcpCollarMat);
+      fcpCollar.position.set(fcpX, fcpH + 2.2, fcpZ);
+      crowns.add(fcpCollar);
+      [-11, 11].forEach((ox) => {
+        const mastH = ox < 0 ? 64 : 58;
+        for (let seg = 0; seg < 6; seg++) {
+          const segH = mastH / 6;
+          const r0 = Math.max(0.22, 1.35 * (1 - seg / 6.8));
+          const r1 = Math.max(0.18, 1.35 * (1 - (seg + 1) / 6.8));
+          const m = new THREE.Mesh(
+            new THREE.CylinderGeometry(r1, r0, segH, 8),
+            (seg % 2 === 0) ? redWhiteMastMat : mastRedBandMat
+          );
+          m.position.set(fcpX + ox, fcpH + 5.0 + seg * segH + segH / 2, fcpZ);
+          crowns.add(m);
+        }
+        const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.95, 8, 6), crownBeaconMat);
+        beacon.position.set(fcpX + ox, fcpH + 5.2 + mastH, fcpZ);
+        crowns.add(beacon);
+      });
+
+      // 2. Scotia Plaza (275m) — Napoleon granite signature stepped chevron / sawtooth crest + slender mast
+      const spX = 315.9, spZ = -612.1, spH = 275.0;
+      for (let tier = 0; tier < 3; tier++) {
+        const tw = 44 - tier * 11, td = 62 - tier * 14, th = 5.5;
+        const step = new THREE.Mesh(new THREE.BoxGeometry(tw, th, td), scotiaGraniteMat);
+        step.position.set(spX + tier * 2.5, spH + tier * 4.5 + th / 2, spZ - tier * 3.5);
+        crowns.add(step);
+      }
+      const spSpire = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.9, 26, 8), redWhiteMastMat);
+      spSpire.position.set(spX + 5, spH + 25, spZ - 7);
+      crowns.add(spSpire);
+
+      // 3. L Tower (198m) — Studio Libeskind curving sculpted crystalline roof crest
+      const ltX = 578.5, ltZ = -247.3, ltH = 198.0;
+      const ltWing = new THREE.Mesh(
+        new THREE.CylinderGeometry(18, 18, 22, 16, 1, false, 0, Math.PI * 0.65),
+        cibcDiamondMat
+      );
+      ltWing.scale.set(0.95, 1, 1.15);
+      ltWing.position.set(ltX, ltH + 6, ltZ + 4);
+      ltWing.rotation.y = Math.PI * 0.2;
+      crowns.add(ltWing);
+
+      // 4. Royal Bank Plaza South (180m) & North (114m) — 24k gold faceted jewel-box crown caps
+      [
+        { x: 300.3, z: -258.3, h: 180.0, w: 48, d: 64 },
+        { x: 253.9, z: -308.2, h: 114.0, w: 46, d: 54 }
+      ].forEach(rbp => {
+        const cap = new THREE.Mesh(new THREE.BoxGeometry(rbp.w, 6.2, rbp.d), goldGlassMat);
+        cap.position.set(rbp.x, rbp.h + 2.8, rbp.z);
+        crowns.add(cap);
+        const crest = new THREE.Mesh(new THREE.ConeGeometry(rbp.w * 0.36, 11, 4), goldGlassMat);
+        crest.rotation.y = Math.PI / 4;
+        crest.position.set(rbp.x, rbp.h + 11.2, rbp.z);
+        crowns.add(crest);
+      });
+
+      // 5. CIBC Square North & South (246m / 224m) — diamond-faceted glowing crown parapets
+      [
+        { x: 470.4, z: -26.0, h: 246.0, w: 50, d: 52 },
+        { x: 477.0, z: 10.0, h: 224.0, w: 48, d: 46 }
+      ].forEach(cibc => {
+        const crown = new THREE.Mesh(new THREE.BoxGeometry(cibc.w, 6.0, cibc.d), cibcDiamondMat);
+        crown.position.set(cibc.x, cibc.h + 2.5, cibc.z);
+        crowns.add(crown);
+      });
+
+      scene.add(crowns);
+    }
+
     // ---------- Rogers Centre Retractable Dome & Blue Jays Stadium Interior ----------
     let rogersCentreDome = null;
     {
@@ -7086,7 +7456,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     const shaft = new THREE.Mesh(new THREE.CylinderGeometry(4.8, 8, 340, 6), towerMat);
     shaft.position.y = 170;
     tower.add(shaft);
-    // Three Y-legs
+    // Three Y-legs + 3 Multi-Band Animated Vertical LED Light Ribs along concrete outer spines
+    const cnRibMats = [];
     for (let i = 0; i < 3; i++) {
       const a = i * Math.PI * 2 / 3;
       const leg = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 6.5, 300, 4), towerMat);
@@ -7096,7 +7467,27 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       leg.rotation.x = Math.sin(a) * 0.018;
       tower.add(leg);
       addCircle(LM.cnTower[0] + Math.cos(a) * 12, LM.cnTower[1] + Math.sin(a) * 12, 4.2);
+
+      // Tapered glowing vertical LED spine cleanly outside concrete rib (avoids elevator track)
+      const bandCount = 6;
+      for (let bi = 0; bi < bandCount; bi++) {
+        const y0 = 22 + bi * 51;
+        const yMid = y0 + 24;
+        const radial = 12.8 - (yMid / 330) * 6.5;
+        const ribMat = new THREE.MeshBasicMaterial({ color: 0xff3366, fog: false, toneMapped: false });
+        const rib = new THREE.Mesh(new THREE.BoxGeometry(0.42, 49, 0.42), ribMat);
+        rib.position.set(Math.cos(a) * radial, yMid, Math.sin(a) * radial);
+        rib.rotation.y = -a;
+        tower.add(rib);
+        cnRibMats.push({ mat: ribMat, band: bi, leg: i });
+      }
     }
+    dayNightControllers.push((isDay) => {
+      towerMat.emissiveIntensity = isDay ? 0.16 : 1.4;
+      for (let i = 0; i < cnRibMats.length; i++) {
+        if (isDay) cnRibMats[i].mat.color.setHex(0xe2e8f0);
+      }
+    });
     addCircle(LM.cnTower[0], LM.cnTower[1], 7.0);
 
     // ======================================================================
@@ -12874,6 +13265,56 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         addSolid({ type: 'poly', pts: [[87, -853], [93, -853], [93, -847], [87, -847]], h: 3.0, name: 'Henry Moore Archer' });
       }
 
+      // Three Ceremonial Waving Flagpoles (Canada, Ontario, Toronto) on Nathan Phillips Square Terrace
+      {
+        const makeFlagTex = (kind) => {
+          const [c, ctx] = canvas2(192, 96);
+          if (kind === 'canada') {
+            ctx.fillStyle = '#d80621'; ctx.fillRect(0, 0, 48, 96); ctx.fillRect(144, 0, 48, 96);
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(48, 0, 96, 96);
+            ctx.fillStyle = '#d80621';
+            ctx.beginPath();
+            ctx.moveTo(96, 16); ctx.lineTo(106, 36); ctx.lineTo(122, 32); ctx.lineTo(112, 48);
+            ctx.lineTo(126, 56); ctx.lineTo(104, 62); ctx.lineTo(98, 78); ctx.lineTo(94, 78);
+            ctx.lineTo(88, 62); ctx.lineTo(66, 56); ctx.lineTo(80, 48); ctx.lineTo(70, 32);
+            ctx.lineTo(86, 36); ctx.closePath(); ctx.fill();
+          } else if (kind === 'ontario') {
+            ctx.fillStyle = '#c8102e'; ctx.fillRect(0, 0, 192, 96);
+            ctx.fillStyle = '#012169'; ctx.fillRect(0, 0, 72, 46);
+            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 8;
+            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(72, 46); ctx.moveTo(72, 0); ctx.lineTo(0, 46); ctx.stroke();
+            ctx.strokeStyle = '#c8102e'; ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.moveTo(36, 0); ctx.lineTo(36, 46); ctx.moveTo(0, 23); ctx.lineTo(72, 23); ctx.stroke();
+            ctx.fillStyle = '#15803d'; ctx.fillRect(118, 28, 36, 42);
+            ctx.fillStyle = '#facc15'; ctx.fillRect(118, 22, 36, 10);
+          } else {
+            ctx.fillStyle = '#0056a3'; ctx.fillRect(0, 0, 192, 96);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(68, 18, 14, 60); ctx.fillRect(110, 18, 14, 60);
+            ctx.fillStyle = '#ef4444';
+            ctx.beginPath(); ctx.arc(96, 62, 11, 0, Math.PI * 2); ctx.fill();
+          }
+          return new THREE.CanvasTexture(c);
+        };
+        const flagPoleMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.85, roughness: 0.25 });
+        [['canada', 38], ['ontario', 48], ['toronto', 58]].forEach(([kind, fx], fi) => {
+          const fz = -860;
+          const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 13, 10), flagPoleMat);
+          pole.position.set(fx, 6.5, fz);
+          expGroup.add(pole);
+          const pivot = new THREE.Group();
+          pivot.position.set(fx, 11.8, fz);
+          const banner = new THREE.Mesh(
+            new THREE.BoxGeometry(3.4, 1.7, 0.06),
+            new THREE.MeshStandardMaterial({ map: makeFlagTex(kind), roughness: 0.6, side: THREE.DoubleSide })
+          );
+          banner.position.set(1.75, 0, 0);
+          pivot.add(banner);
+          expGroup.add(pivot);
+          nphFlags.push({ pivot, phase: fi * 1.4 });
+        });
+      }
+
       // ------------------------------------------------------------------------
       // 3. TORONTO CITY HALL (Viljo Revell's Twin Towers & Saucer Council Chamber)
       // ------------------------------------------------------------------------
@@ -14743,6 +15184,73 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       SUBWAY_STATIONS.some(s => Math.hypot(x - s.streetX, z - s.streetZ) < 6)
     );
 
+    // ---------- TTC Cantilevered Glass Streetcar Shelters at Key Transit Stops ----------
+    const shelterSignEntries = [];
+    {
+      const shelterSteelMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.45, metalness: 0.65 });
+      const shelterGlassMat = new THREE.MeshStandardMaterial({ color: 0xbae6fd, transparent: true, opacity: 0.42, roughness: 0.12, metalness: 0.25, side: THREE.DoubleSide });
+      const shelterBeaconMat = new THREE.MeshBasicMaterial({ color: 0xef4444, toneMapped: false });
+      const shelterBenchMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.78 });
+      const keyStops = [];
+      const seenStop = new Set();
+      streetcarRoutes.forEach(rt => {
+        (rt.namedStops || []).forEach(st => {
+          if (st.isUnionLoop) return;
+          const key = `${Math.round(st.x / 20)},${Math.round(st.z / 20)}`;
+          if (seenStop.has(key)) return;
+          seenStop.add(key);
+          keyStops.push({ rtId: rt.id, name: st.name, x: st.x, z: st.z });
+        });
+      });
+      keyStops.slice(0, 18).forEach((st, idx) => {
+        let sx = null, sz = null, faceYaw = 0;
+        for (let aIdx = 0; aIdx < 8 && sx === null; aIdx++) {
+          const ang = (aIdx * Math.PI) / 4;
+          for (let r = 5.5; r <= 12.5; r += 2.2) {
+            const cx = st.x + Math.cos(ang) * r, cz = st.z + Math.sin(ang) * r;
+            if (canMoveTo(cx, cz, 1.5) && !onRoad(cx, cz, -1.2, -1) && !nearStreetcarTrack(cx, cz, 2.3) && !nearPlannedSubwayKiosk(cx, cz)) {
+              sx = cx; sz = cz;
+              faceYaw = Math.atan2(st.x - cx, st.z - cz);
+              break;
+            }
+          }
+        }
+        if (sx === null) return;
+        const sh = new THREE.Group();
+        sh.position.set(sx, 0, sz);
+        sh.rotation.y = faceYaw;
+        // Twin steel frame columns + cantilevered roof
+        [-1.6, 1.6].forEach(px => {
+          const col = new THREE.Mesh(new THREE.BoxGeometry(0.11, 2.65, 0.11), shelterSteelMat);
+          col.position.set(px, 1.325, -0.68);
+          sh.add(col);
+        });
+        const roof = new THREE.Mesh(new THREE.BoxGeometry(3.85, 0.12, 1.65), shelterSteelMat);
+        roof.position.set(0, 2.68, 0.02);
+        sh.add(roof);
+        const strip = new THREE.Mesh(new THREE.BoxGeometry(3.55, 0.07, 0.08), shelterBeaconMat);
+        strip.position.set(0, 2.65, 0.85);
+        sh.add(strip);
+        const backGlass = new THREE.Mesh(new THREE.BoxGeometry(3.2, 2.25, 0.05), shelterGlassMat);
+        backGlass.position.set(0, 1.35, -0.68);
+        sh.add(backGlass);
+        const sideGlass = new THREE.Mesh(new THREE.BoxGeometry(0.05, 2.25, 1.2), shelterGlassMat);
+        sideGlass.position.set(-1.72, 1.35, -0.08);
+        sh.add(sideGlass);
+        // Red TTC transit totem at right corner
+        const totem = new THREE.Mesh(new THREE.BoxGeometry(0.26, 2.95, 0.16), shelterBeaconMat);
+        totem.position.set(2.05, 1.475, 0.0);
+        sh.add(totem);
+        // Warm cedar slat seat
+        const seat = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.12, 0.45), shelterBenchMat);
+        seat.position.set(-0.2, 0.52, -0.35);
+        sh.add(seat);
+        scene.add(sh);
+        addCircle(sx, sz, 1.1);
+        if (idx % 2 === 0) shelterSignEntries.push({ x: sx, z: sz, name: `TTC Stop: ${st.name}` });
+      });
+    }
+
     // ---------- Street lamps (instanced, strictly outside all roads, tracks & subway kiosks) + pooled real lights ----------
     const lamps = lampSpots.filter(l =>
       canMoveTo(l.x, l.z, 0.5) &&
@@ -14751,12 +15259,14 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       !nearPlannedSubwayKiosk(l.x, l.z) &&
       !onRoad(l.x + Math.sin(l.ang) * 0.6, l.z + Math.cos(l.ang) * 0.6, -0.3, -1)
     ).slice(0, 700);
+    let lampHeadMat = null, lampHalos = null, lampPools = null;
     if (lamps.length) {
       const poleGeo = new THREE.CylinderGeometry(0.09, 0.14, 7, 6);
       poleGeo.translate(0, 3.5, 0);
       const headGeo = new THREE.BoxGeometry(0.5, 0.18, 1.1);
+      lampHeadMat = new THREE.MeshBasicMaterial({ color: 0xffe2b0 });
       const poles = new THREE.InstancedMesh(poleGeo, new THREE.MeshLambertMaterial({ color: 0x2a2d33 }), lamps.length);
-      const heads = new THREE.InstancedMesh(headGeo, new THREE.MeshBasicMaterial({ color: 0xffe2b0 }), lamps.length);
+      const heads = new THREE.InstancedMesh(headGeo, lampHeadMat, lamps.length);
       const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(1, 1, 1), up = new THREE.Vector3(0, 1, 0);
       lamps.forEach((l, i) => {
         m.makeTranslation(l.x, 0, l.z);
@@ -14771,35 +15281,42 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       scene.add(poles);
       scene.add(heads);
 
-      // Glow halos around every lamp head (bloom makes these sing)
+      // Glow halos around every lamp head (bloom makes these sing at night)
       const haloPos = [];
       lamps.forEach(l => haloPos.push(l.x + Math.sin(l.ang) * 0.6, 6.85, l.z + Math.cos(l.ang) * 0.6));
       const haloGeo = new THREE.BufferGeometry();
       haloGeo.setAttribute('position', new THREE.Float32BufferAttribute(haloPos, 3));
-      scene.add(new THREE.Points(haloGeo, new THREE.PointsMaterial({
+      lampHalos = new THREE.Points(haloGeo, new THREE.PointsMaterial({
         map: makeGlowTexture('rgba(255,240,210,1)', 'rgba(255,170,90,0.22)'), size: 3.4, sizeAttenuation: true,
         transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
-      })));
+      }));
+      scene.add(lampHalos);
 
       // Pools of warm light on the ground under EVERY lamp. Only ~8 real lights
       // exist, so these fake the rest of the street at near-zero cost.
       const poolGeo = new THREE.PlaneGeometry(1, 1);
       poolGeo.rotateX(-Math.PI / 2);
-      const pools = new THREE.InstancedMesh(poolGeo, new THREE.MeshBasicMaterial({
+      lampPools = new THREE.InstancedMesh(poolGeo, new THREE.MeshBasicMaterial({
         map: makeGlowTexture('rgba(255,190,120,0.5)', 'rgba(255,140,60,0.16)'), transparent: true, depthWrite: false,
         blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4
       }), lamps.length);
       const pq = new THREE.Quaternion(), ps = new THREE.Vector3(16, 1, 16), pv = new THREE.Vector3();
       lamps.forEach((l, i) => {
         m.compose(pv.set(l.x + Math.sin(l.ang) * 1.6, 0.1, l.z + Math.cos(l.ang) * 1.6), pq, ps);
-        pools.setMatrixAt(i, m);
+        lampPools.setMatrixAt(i, m);
       });
-      scene.add(pools);
+      scene.add(lampPools);
     }
 
     // Pooled real point lights: re-assigned to the nearest lamps, faded in/out
     // instead of teleporting (no more lighting "pops" as you walk)
-    const LAMP_INTENSITY = 1.9;
+    let activeLampIntensity = 1.9;
+    dayNightControllers.push((isDay) => {
+      activeLampIntensity = isDay ? 0.0 : 1.9;
+      if (lampHeadMat) setColorSafe(lampHeadMat, 'color', isDay ? 0xdbeafe : 0xffe2b0);
+      if (lampHalos) lampHalos.visible = !isDay;
+      if (lampPools) lampPools.visible = !isDay;
+    });
     const lightPool = [];
     for (let i = 0; i < 8; i++) {
       const pl = new THREE.PointLight(0xffb066, 0, 28, 1.6);
@@ -14808,7 +15325,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       lightPool.push({ light: pl, lamp: -1, next: -1, level: 0 });
     }
 
-    // ---------- Street trees (instanced, with per-tree colour + size variation) ----------
+    // ---------- Street trees (instanced, rich Toronto urban canopy + sidewalk tree grates) ----------
     const trees = treeSpots.filter(t => canMoveTo(t.x, t.z, 1.4) && !onRoad(t.x, t.z, -1.2, -1) && !nearStreetcarTrack(t.x, t.z, 3.2) && !nearPlannedSubwayKiosk(t.x, t.z)).slice(0, 900);
     {
       if (trees.length) {
@@ -14831,30 +15348,39 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         const canopyGeo = new THREE.BufferGeometry();
         canopyGeo.setAttribute('position', new THREE.Float32BufferAttribute(cPos, 3));
         canopyGeo.setAttribute('normal', new THREE.Float32BufferAttribute(cNrm, 3));
-        const trunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshStandardMaterial({ color: 0x3b2c22, roughness: 0.95, envMapIntensity: 0.2 }), trees.length);
-        const canopies = new THREE.InstancedMesh(canopyGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, envMapIntensity: 0.2 }), trees.length);
-        const m = new THREE.Matrix4();
+        const trunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshStandardMaterial({ color: 0x433226, roughness: 0.94, envMapIntensity: 0.2 }), trees.length);
+        const canopies = new THREE.InstancedMesh(canopyGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, envMapIntensity: 0.25 }), trees.length);
+        const grateGeo = new THREE.BoxGeometry(1.5, 0.04, 1.5);
+        const grates = new THREE.InstancedMesh(grateGeo, new THREE.MeshStandardMaterial({ color: 0x262b33, roughness: 0.72, metalness: 0.55 }), trees.length);
+        const m = new THREE.Matrix4(), gm = new THREE.Matrix4();
         const tq = new THREE.Quaternion(), ts = new THREE.Vector3(), tv = new THREE.Vector3(), up2 = new THREE.Vector3(0, 1, 0), tc = new THREE.Color();
         trees.forEach((t, i) => {
-          const sc = 0.8 + t.s * 0.5;
+          const sc = 0.82 + t.s * 0.52;
           tq.setFromAxisAngle(up2, t.s * 6.28);
           m.compose(tv.set(t.x, 0, t.z), tq, ts.set(sc, sc, sc));
           trunks.setMatrixAt(i, m);
           canopies.setMatrixAt(i, m);
-          tc.setHSL(0.24 + t.s * 0.08, 0.35 + t.s * 0.2, 0.16 + hash(t.x) * 0.08);
+          gm.makeTranslation(t.x, 0.025, t.z);
+          grates.setMatrixAt(i, gm);
+          // Diverse Toronto species tinting: Sugar Maple, Norway Maple, Honey Locust, Deep Red Oak
+          const hue = 0.25 + t.s * 0.095;
+          const sat = 0.42 + hash(t.z) * 0.22;
+          const lit = 0.22 + hash(t.x) * 0.11;
+          tc.setHSL(hue, sat, lit);
           canopies.setColorAt(i, tc);
           addCircle(t.x, t.z, 0.3);
         });
         trunks.castShadow = canopies.castShadow = true;
-        canopies.receiveShadow = true;
+        canopies.receiveShadow = grates.receiveShadow = true;
         scene.add(trunks);
         scene.add(canopies);
+        scene.add(grates);
       }
     }
 
     // ---------- Street signs (strictly outside all roads & intersections) ----------
     const usedNames = {};
-    const signs = [];
+    const signs = [...shelterSignEntries];
     signCandidates.forEach(c => {
       if (signs.length > 36) return;
       const prev = usedNames[c.name] || [];
@@ -18428,6 +18954,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       if (playerPos) {
         sky.position.set(playerPos.x, 0, playerPos.z);
         stars.position.set(playerPos.x, 0, playerPos.z);
+        if (daySkyExtras) daySkyExtras.position.set(playerPos.x, 0, playerPos.z);
         const stairInfo = getSubwayStairInfo(playerPos.x, playerPos.z);
         const inStair = !!stairInfo;
         const nearEntrance = SUBWAY_STATIONS.some(st => {
@@ -18443,9 +18970,34 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       }
       // Blink warning lights
       warnLights.visible = (Math.floor(t * 1.1) % 2) === 0;
-      // CN Tower colour-cycling LED lighting
+      // CN Tower colour-cycling LED lighting + multi-band vertical light ribs
       towerHue.setHSL((t * 0.02) % 1, 0.9, 0.5);
       towerMat.emissive.copy(towerHue);
+      if (cnRibMats.length && timeOfDay === 'night') {
+        for (let i = 0; i < cnRibMats.length; i++) {
+          const item = cnRibMats[i];
+          item.mat.color.setHSL(((t * 0.06) + item.band * 0.13 + item.leg * 0.04) % 1, 0.95, 0.58);
+        }
+      }
+      // Daytime drifting cumulus cloud deck
+      if (timeOfDay === 'day' && CLOUD_PUFFS.length && cloudInst) {
+        for (let i = 0; i < CLOUD_PUFFS.length; i++) {
+          const cp = CLOUD_PUFFS[i];
+          cp.bx += dt * cp.speed;
+          if (cp.bx > 2800) cp.bx -= 5600;
+          cm4.compose(cPos.set(cp.bx, cp.y, cp.z), cQuat, cScale.set(cp.sx, cp.sy, cp.sz));
+          cloudInst.setMatrixAt(cp.idx, cm4);
+        }
+        if (cloudInst.instanceMatrix) cloudInst.instanceMatrix.needsUpdate = true;
+      }
+      // Nathan Phillips Square ceremonial waving flags
+      for (let i = 0; i < nphFlags.length; i++) {
+        const fl = nphFlags[i];
+        if (fl.pivot) {
+          fl.pivot.rotation.y = Math.sin(t * 2.1 + fl.phase) * 0.18;
+          fl.pivot.rotation.z = Math.cos(t * 2.8 + fl.phase) * 0.04;
+        }
+      }
 
       // Gentle harbour water wave shimmer, bobbing boats, cruising Island Ferry & Toronto Islands beacons
       if (waterTex && waterTex.offset) {
@@ -18523,7 +19075,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       const sx = Math.round(playerPos.x / 2) * 2, sz = Math.round(playerPos.z / 2) * 2;
       if (moon && moon.target && moon.target.position) {
         moon.target.position.set(sx, 0, sz);
-        moon.position.set(sx + MOON_DIR.x * 600, MOON_DIR.y * 600, sz + MOON_DIR.z * 600);
+        moon.position.set(sx + ACTIVE_LIGHT_DIR.x * 600, ACTIVE_LIGHT_DIR.y * 600, sz + ACTIVE_LIGHT_DIR.z * 600);
       }
 
       // Re-assign pooled lights to the nearest lamps; lights fade out before moving
@@ -18553,7 +19105,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         } else if (s.lamp >= 0) {
           s.level = Math.min(1, s.level + dt * 3);
         }
-        s.light.intensity = LAMP_INTENSITY * s.level;
+        s.light.intensity = activeLampIntensity * s.level;
       });
     }
 
@@ -18593,9 +19145,15 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       ctx.fillText('☮ PEACE', pzx, pzz + 3);
 
       let missionDot = null;
+      const playerDots = [];
+      const radiusLimit = size / 2 - 10;
       dots.forEach(d => {
         if (d.isMission) {
           missionDot = d;
+          return;
+        }
+        if (d.isPlayer) {
+          playerDots.push(d);
           return;
         }
         const dx = (d.x - player.x) * s, dz = (d.z - player.z) * s;
@@ -18604,10 +19162,53 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         ctx.beginPath(); ctx.arc(dx, dz, d.r || 3, 0, Math.PI * 2); ctx.fill();
       });
 
+      // Unmistakable Squadmate Tracking Pips & Perimeter Edge Pointers (even beyond 110m!)
+      playerDots.forEach(d => {
+        const pdx = (d.x - player.x) * s, pdz = (d.z - player.z) * s;
+        const pdist = Math.hypot(pdx, pdz);
+        const col = d.c || '#38bdf8';
+        const offRadar = pdist > radiusLimit;
+        const px = offRadar ? (pdx / pdist) * radiusLimit : pdx;
+        const pz = offRadar ? (pdz / pdist) * radiusLimit : pdz;
+        const ang = offRadar ? Math.atan2(pdz, pdx) + Math.PI / 2 : (-(d.yaw || 0));
+
+        // Facing directional triangle
+        ctx.save();
+        ctx.translate(px, pz);
+        ctx.rotate(ang);
+        ctx.fillStyle = col;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(0, -10.5);
+        ctx.lineTo(-5.8, -2.0);
+        ctx.lineTo(5.8, -2.0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+
+        // Contrasting squad medallion + initial
+        ctx.save();
+        ctx.translate(px, pz);
+        ctx.rotate(-yaw);
+        ctx.beginPath();
+        ctx.arc(0, 0, 6.4, 0, Math.PI * 2);
+        ctx.fillStyle = col;
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.8;
+        ctx.stroke();
+        ctx.fillStyle = '#0f172a';
+        ctx.font = 'bold 8px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText((d.initial || 'P'), 0, 3);
+        ctx.restore();
+      });
+
       // ======================================================================
       // THE TWO CRITICAL RADAR LANDMARKS: 1) CN TOWER & 2) ACTIVE GOAL
       // ======================================================================
-      const radiusLimit = size / 2 - 10;
 
       // 1. CN TOWER (PEACE SANCTUARY)
       const cnx = (peaceCenter[0] - player.x) * s;
@@ -20546,6 +21147,9 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       createCabMesh: buildBeckTaxiCabMesh
     };
 
+    // Apply randomized starting time-of-day (Daytime or Nighttime)
+    setTimeOfDay(timeOfDay);
+
     return {
       canMoveTo,
       hasLineOfSight,
@@ -20554,6 +21158,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       findOpenSpot,
       update,
       drawMinimap,
+      setTimeOfDay,
+      getTimeOfDay: () => timeOfDay,
       start,
       startYaw,
       spawnLocations,
@@ -25573,6 +26179,47 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
 
       (dots || []).forEach(d => {
         const [a, b] = toM(d.x, d.z);
+        if (d.isPlayer) {
+          const dx = a - size / 2, dy = b - size / 2;
+          const distPx = Math.hypot(dx, dy);
+          const radLim = size / 2 - 12;
+          const off = distPx > radLim;
+          const px = off ? (size / 2 + (dx / distPx) * radLim) : a;
+          const py = off ? (size / 2 + (dy / distPx) * radLim) : b;
+          const col = d.c || '#38bdf8';
+          const ang = off ? (Math.atan2(dy, dx) + Math.PI / 2) : (-(d.yaw || 0));
+
+          ctx.save();
+          ctx.translate(px, py);
+          ctx.rotate(ang);
+          ctx.fillStyle = col;
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1.6;
+          ctx.beginPath();
+          ctx.moveTo(0, -10);
+          ctx.lineTo(-5.5, -2);
+          ctx.lineTo(5.5, -2);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+
+          ctx.save();
+          ctx.translate(px, py);
+          ctx.beginPath();
+          ctx.arc(0, 0, 6.2, 0, Math.PI * 2);
+          ctx.fillStyle = col;
+          ctx.fill();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1.8;
+          ctx.stroke();
+          ctx.fillStyle = '#0f172a';
+          ctx.font = 'bold 8px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText((d.initial || 'P'), 0, 3);
+          ctx.restore();
+          return;
+        }
         if (a < 0 || b < 0 || a > size || b > size) return;
         ctx.fillStyle = d.c || '#ef4444';
         ctx.beginPath();
@@ -25598,6 +26245,17 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       ctx.strokeRect(1, 1, size - 2, size - 2);
     }
 
+    function setTimeOfDay(isDay) {
+      if (waterMat && waterMat.color) {
+        if (typeof waterMat.color.setHex === 'function') waterMat.color.setHex(isDay ? 0x268bbd : 0x145374);
+        waterMat.roughness = isDay ? 0.14 : 0.12;
+        waterMat.envMapIntensity = isDay ? 1.15 : 0.85;
+      }
+      if (lampGlowMat && lampGlowMat.color && typeof lampGlowMat.color.setHex === 'function') {
+        lampGlowMat.color.setHex(isDay ? 0xdbeafe : 0xffd58a);
+      }
+    }
+
     return {
       group: islandsGroup,
       Z_BASE,
@@ -25609,6 +26267,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       nearPath,
       flowerBeds,
       flightPlane,
+      setTimeOfDay,
       lighthouse: {
         x: -480,
         z: Z(320),
@@ -27269,6 +27928,13 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       return streetcars.filter(sc => sc.mode !== 'hidden').map(sc => ({ x: sc.vx, z: sc.vz }));
     }
 
+    function setTimeOfDay(isDay) {
+      if (beams) beams.visible = !isDay;
+      if (paintMat) paintMat.envMapIntensity = isDay ? 1.1 : 0.7;
+      if (glassMat) glassMat.envMapIntensity = isDay ? 1.0 : 0.55;
+      if (trimMat) trimMat.envMapIntensity = isDay ? 1.05 : 0.8;
+    }
+
     return {
       cars,
       streetcars,
@@ -27278,6 +27944,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       clearStreetcarZone,
       sampleRoute: sample,
       setStreetcarDirection,
+      setTimeOfDay,
       update,
       silence,
       ringGong: () => streetcarGong(0),
@@ -27309,14 +27976,14 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
   const LOCAL_DEFAULT_URL = 'ws://localhost:8080/ws';
 
   const PLAYER_COLORS = [
-    0xef4444, // red
+    0xef4444, // crimson
     0x00f0ff, // cyan
     0xf59e0b, // amber
     0x10b981, // emerald
     0xc026d3, // purple
     0xf43f5e, // rose
-    0x38bdf8, // sky
-    0xffffff  // white
+    0x38bdf8, // azure
+    0xfacc15  // gold
   ];
 
   function isCloudServerUrl(url) {
@@ -27461,228 +28128,253 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     return name;
   }
 
-  // --- 3D Hero Avatar Builder for Remote Players ---
+  // --- 3D Hero Avatar Builder for Remote Players (Toronto Defender Exo-Fighter) ---
   function createRemoteHeroRig(name, colorHex) {
     const root = new THREE.Group();
     const color = colorHex || 0xef4444;
-    const glowColor = 0xfef08a; // Warm light-yellow squad glow
+    const hexStr = '#' + (color.toString(16).padStart(6, '0'));
+    const cObj = new THREE.Color(color);
 
-    const skinMat = new THREE.MeshStandardMaterial({ color: 0xdfad7b, roughness: 0.55, metalness: 0.05, emissive: glowColor, emissiveIntensity: 0.28 });
-    const vestMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.4, metalness: 0.25, emissive: glowColor, emissiveIntensity: 0.35 });
-    const pantsMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.5, metalness: 0.1, emissive: glowColor, emissiveIntensity: 0.25 });
-    const wrapMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.35, metalness: 0.5, emissive: glowColor, emissiveIntensity: 0.4 });
-    const bootMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.6, metalness: 0.2, emissive: glowColor, emissiveIntensity: 0.22 });
-    const hairMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.85, metalness: 0.0, emissive: glowColor, emissiveIntensity: 0.18 });
-    const flashableMaterials = [skinMat, vestMat, pantsMat, wrapMat, bootMat];
+    const skinMat = new THREE.MeshStandardMaterial({ color: 0xe2b180, roughness: 0.52, metalness: 0.05 });
+    const armorDarkMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.42, metalness: 0.55 });
+    const vestMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.34, metalness: 0.42, emissive: color, emissiveIntensity: 0.28 });
+    const pantsMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.5, metalness: 0.25 });
+    const wrapMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.25, metalness: 0.55, emissive: color, emissiveIntensity: 0.55 });
+    const bootMat = new THREE.MeshStandardMaterial({ color: 0x090d16, roughness: 0.5, metalness: 0.4 });
+    const visorMat = new THREE.MeshBasicMaterial({ color: color, toneMapped: false });
+    const emblemMat = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
+    const capeMat = new THREE.MeshStandardMaterial({ color: color, emissive: color, emissiveIntensity: 0.22, roughness: 0.6, side: THREE.DoubleSide });
+    const capeTrimMat = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false, side: THREE.DoubleSide });
+    const flashableMaterials = [vestMat, wrapMat, capeMat];
 
-    // --- Large, High-Visibility Light-Yellow Squad Glow (Much Larger Than Player) ---
-    // 1. Large 3D outer light-yellow aura sphere surrounding the player (~4m wide x 5m tall)
-    const auraMat = new THREE.MeshBasicMaterial({
-      color: 0xfef08a,
+    // 1. Crisp Signature Ground Tactical Ring + Facing Arrow Chevron (high contrast day & night)
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: color,
       transparent: true,
-      opacity: 0.38,
-      blending: THREE.AdditiveBlending,
+      opacity: 0.78,
       side: THREE.DoubleSide,
       depthWrite: false
     });
-    const auraShell = new THREE.Mesh(new THREE.SphereGeometry(1.75, 24, 18), auraMat);
-    auraShell.scale.set(1.1, 1.4, 1.1);
-    auraShell.position.set(0, 1.35, 0);
-    root.add(auraShell);
+    const groundRing = new THREE.Mesh(new THREE.RingGeometry(0.92, 1.32, 32), ringMat);
+    groundRing.rotation.x = -Math.PI / 2;
+    groundRing.position.set(0, 0.06, 0);
+    root.add(groundRing);
 
-    // 2. Large radiant light-yellow billboard halo sprite (5.5m across, visible through obstacles)
+    const dirChevron = new THREE.Mesh(
+      new THREE.ConeGeometry(0.42, 0.72, 3),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0.92 })
+    );
+    dirChevron.rotation.x = Math.PI / 2;
+    dirChevron.position.set(0, 0.08, 1.55);
+    root.add(dirChevron);
+
+    // 2. Signature-colored X-Ray Silhouette Sprite (visible behind light poles/trees/crowds)
     const glowCanvas = document.createElement('canvas');
     glowCanvas.width = 256;
     glowCanvas.height = 256;
     const gCtx = glowCanvas.getContext('2d');
-    const grad = gCtx.createRadialGradient(128, 128, 10, 128, 128, 126);
-    grad.addColorStop(0.0, 'rgba(255, 255, 210, 0.95)');
-    grad.addColorStop(0.28, 'rgba(254, 240, 138, 0.75)');
-    grad.addColorStop(0.62, 'rgba(253, 224, 71, 0.38)');
-    grad.addColorStop(1.0, 'rgba(254, 240, 138, 0.0)');
+    const grad = gCtx.createRadialGradient(128, 128, 12, 128, 128, 124);
+    const rC = Math.round((cObj.r !== undefined ? cObj.r : 0.9) * 255);
+    const gC = Math.round((cObj.g !== undefined ? cObj.g : 0.3) * 255);
+    const bC = Math.round((cObj.b !== undefined ? cObj.b : 0.3) * 255);
+    grad.addColorStop(0.0, `rgba(255, 255, 255, 0.75)`);
+    grad.addColorStop(0.26, `rgba(${rC}, ${gC}, ${bC}, 0.58)`);
+    grad.addColorStop(0.62, `rgba(${rC}, ${gC}, ${bC}, 0.22)`);
+    grad.addColorStop(1.0, `rgba(${rC}, ${gC}, ${bC}, 0.0)`);
     gCtx.fillStyle = grad;
     gCtx.fillRect(0, 0, 256, 256);
     const glowTex = new THREE.CanvasTexture(glowCanvas);
     const xrayGlowMat = new THREE.SpriteMaterial({
       map: glowTex,
-      color: 0xfef08a,
+      color: 0xffffff,
       transparent: true,
-      opacity: 0.75,
+      opacity: 0.45,
       blending: THREE.AdditiveBlending,
       depthTest: false,
       depthWrite: false
     });
     const xrayGlow = new THREE.Sprite(xrayGlowMat);
-    xrayGlow.scale.set(5.6, 5.6, 1);
-    xrayGlow.position.set(0, 1.25, 0);
+    xrayGlow.scale.set(3.2, 3.2, 1);
+    xrayGlow.position.set(0, 1.35, 0);
     xrayGlow.renderOrder = 998;
     root.add(xrayGlow);
 
-    // 3. Large light-yellow ground halo ring & disc beneath feet (~4.6m diameter)
-    const ringMat = new THREE.MeshBasicMaterial({
-      color: 0xfde047,
-      transparent: true,
-      opacity: 0.65,
-      blending: THREE.AdditiveBlending,
-      side: THREE.DoubleSide,
-      depthWrite: false
-    });
-    const groundRing = new THREE.Mesh(new THREE.RingGeometry(0.35, 2.3, 36), ringMat);
-    groundRing.rotation.x = -Math.PI / 2;
-    groundRing.position.set(0, 0.05, 0);
-    root.add(groundRing);
-
-    // 4. Wide vertical light-yellow sky beacon pillar rising 35m above the player
+    // 3. Distance-Adaptive High-Altitude Sky Beacon (65m beam + spinning Sky Holo-Diamond)
     const pillarMat = new THREE.MeshBasicMaterial({
-      color: 0xfef08a,
+      color: color,
       transparent: true,
-      opacity: 0.34,
-      blending: THREE.AdditiveBlending,
+      opacity: 0.14,
       side: THREE.DoubleSide,
       depthWrite: false
     });
-    const beaconPillar = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 1.45, 35.0, 20, 1, true), pillarMat);
-    beaconPillar.position.set(0, 17.5, 0);
+    const beaconPillar = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.75, 62.0, 16, 1, true), pillarMat);
+    beaconPillar.position.set(0, 32.5, 0);
     root.add(beaconPillar);
 
-    // 5. Strong warm light-yellow point light illuminating a wide area around the player
-    const glowLight = new THREE.PointLight(0xfef08a, 2.6, 18.0);
-    glowLight.position.set(0, 2.0, 0);
+    const skyDiamondMat = new THREE.MeshBasicMaterial({ color: color, toneMapped: false, wireframe: false });
+    const skyDiamond = new THREE.Mesh(new THREE.IcosahedronGeometry(0.95, 0), skyDiamondMat);
+    skyDiamond.position.set(0, 18.0, 0);
+    root.add(skyDiamond);
+
+    const glowLight = new THREE.PointLight(color, 1.4, 14.0);
+    glowLight.position.set(0, 2.1, 0);
     root.add(glowLight);
 
-    // Pelvis
+    // Pelvis & Utility Belt
     const pelvis = new THREE.Group();
-    pelvis.position.set(0, 0.9, 0);
+    pelvis.position.set(0, 0.92, 0);
     root.add(pelvis);
-    const hips = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.22, 0.3), pantsMat);
+    const hips = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.24, 0.32), pantsMat);
     hips.castShadow = true;
     pelvis.add(hips);
-    const belt = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.07, 0.32), new THREE.MeshStandardMaterial({ color: 0x09090b, metalness: 0.6 }));
-    belt.position.set(0, 0.08, 0);
+    const belt = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.08, 0.35), armorDarkMat);
+    belt.position.set(0, 0.09, 0);
     pelvis.add(belt);
+    const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.09, 0.04), visorMat);
+    buckle.position.set(0, 0.09, 0.175);
+    pelvis.add(buckle);
 
-    // Legs
+    // Armored Legs + Glowing Knee Pads
     const leftLeg = new THREE.Group();
-    leftLeg.position.set(-0.16, 0.82, 0);
+    leftLeg.position.set(-0.17, 0.84, 0);
     root.add(leftLeg);
-    const lThigh = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.42, 0.2), pantsMat);
+    const lThigh = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.42, 0.22), pantsMat);
     lThigh.position.set(0, -0.2, 0); lThigh.castShadow = true; leftLeg.add(lThigh);
     const lCalfPivot = new THREE.Group();
     lCalfPivot.position.set(0, -0.4, 0); leftLeg.add(lCalfPivot);
-    const lCalf = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.4, 0.18), pantsMat);
+    const lCalf = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.4, 0.20), armorDarkMat);
     lCalf.position.set(0, -0.2, 0); lCalf.castShadow = true; lCalfPivot.add(lCalf);
-    const lBoot = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.16, 0.26), bootMat);
+    const lBoot = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.18, 0.28), bootMat);
     lBoot.position.set(0, -0.38, 0.04); lBoot.castShadow = true; lCalfPivot.add(lBoot);
 
     const rightLeg = new THREE.Group();
-    rightLeg.position.set(0.16, 0.82, 0);
+    rightLeg.position.set(0.17, 0.84, 0);
     root.add(rightLeg);
-    const rThigh = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.42, 0.2), pantsMat);
+    const rThigh = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.42, 0.22), pantsMat);
     rThigh.position.set(0, -0.2, 0); rThigh.castShadow = true; rightLeg.add(rThigh);
     const rCalfPivot = new THREE.Group();
     rCalfPivot.position.set(0, -0.4, 0); rightLeg.add(rCalfPivot);
-    const rCalf = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.4, 0.18), pantsMat);
+    const rCalf = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.4, 0.20), armorDarkMat);
     rCalf.position.set(0, -0.2, 0); rCalf.castShadow = true; rCalfPivot.add(rCalf);
-    const rBoot = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.16, 0.26), bootMat);
+    const rBoot = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.18, 0.28), bootMat);
     rBoot.position.set(0, -0.38, 0.04); rBoot.castShadow = true; rCalfPivot.add(rBoot);
 
-    // Torso
+    // Broad Hero Torso + Glowing Chest Core Emblem + Flowing Cape
     const torso = new THREE.Group();
-    torso.position.set(0, 0.98, 0);
+    torso.position.set(0, 1.00, 0);
     root.add(torso);
-    const chest = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.54, 0.32), vestMat);
-    chest.position.set(0, 0.27, 0); chest.castShadow = true; torso.add(chest);
+    const chest = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.56, 0.34), armorDarkMat);
+    chest.position.set(0, 0.28, 0); chest.castShadow = true; torso.add(chest);
+    const chestPlate = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.38, 0.37), vestMat);
+    chestPlate.position.set(0, 0.34, 0.01); torso.add(chestPlate);
+    const chestCore = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.04), emblemMat);
+    chestCore.rotation.z = Math.PI / 4;
+    chestCore.position.set(0, 0.36, 0.195); torso.add(chestCore);
 
-    // Head
+    // Flowing Hero Cape (rotates backwards dynamically during motion!)
+    const capePivot = new THREE.Group();
+    capePivot.position.set(0, 0.54, -0.17);
+    torso.add(capePivot);
+    const capeBody = new THREE.Mesh(new THREE.BoxGeometry(0.66, 1.15, 0.04), capeMat);
+    capeBody.position.set(0, -0.58, -0.02);
+    capeBody.castShadow = true;
+    capePivot.add(capeBody);
+    const capeStripe = new THREE.Mesh(new THREE.BoxGeometry(0.18, 1.12, 0.048), capeTrimMat);
+    capeStripe.position.set(0, -0.58, -0.025);
+    capePivot.add(capeStripe);
+
+    // Aerodynamic Visor Helmet + Wing Fins
     const headPivot = new THREE.Group();
-    headPivot.position.set(0, 0.68, 0);
+    headPivot.position.set(0, 0.66, 0);
     torso.add(headPivot);
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.32, 0.28), skinMat);
-    head.position.set(0, 0.16, 0); head.castShadow = true; headPivot.add(head);
-
-    // Eyes
-    const eyeWhite = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    const eyePupil = new THREE.MeshBasicMaterial({ color: 0x0284c7 });
-    [-0.07, 0.07].forEach(ex => {
-      const ew = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.02), eyeWhite);
-      ew.position.set(ex, 0.18, 0.142); headPivot.add(ew);
-      const ep = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.04, 0.022), eyePupil);
-      ep.position.set(ex, 0.18, 0.144); headPivot.add(ep);
+    const helmet = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.34, 0.33), armorDarkMat);
+    helmet.position.set(0, 0.18, 0); helmet.castShadow = true; headPivot.add(helmet);
+    const crestStripe = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.37, 0.36), wrapMat);
+    crestStripe.position.set(0, 0.20, -0.01); headPivot.add(crestStripe);
+    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.09, 0.05), visorMat);
+    visor.position.set(0, 0.19, 0.16); headPivot.add(visor);
+    const jawPlate = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.10, 0.04), skinMat);
+    jawPlate.position.set(0, 0.08, 0.15); headPivot.add(jawPlate);
+    [-1, 1].forEach(side => {
+      const wing = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.16, 0.20), wrapMat);
+      wing.position.set(side * 0.18, 0.26, -0.06);
+      wing.rotation.x = 0.45;
+      wing.rotation.z = side * -0.22;
+      headPivot.add(wing);
     });
-    // Hair cap
-    const buzz = new THREE.Mesh(new THREE.BoxGeometry(0.29, 0.08, 0.29), hairMat);
-    buzz.position.set(0, 0.32, 0); headPivot.add(buzz);
 
-    // Arms
+    // Armored Shoulder Pauldrons & Oversized Brawler Gauntlets
     const lArmPivot = new THREE.Group();
-    lArmPivot.position.set(-0.35, 0.48, 0); torso.add(lArmPivot);
-    const lBicep = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.3, 0.16), skinMat);
-    lBicep.position.set(0, -0.15, 0); lArmPivot.add(lBicep);
+    lArmPivot.position.set(-0.39, 0.50, 0); torso.add(lArmPivot);
+    const lPauldron = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.18, 0.26), vestMat);
+    lPauldron.position.set(-0.02, -0.02, 0); lArmPivot.add(lPauldron);
+    const lBicep = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.28, 0.17), armorDarkMat);
+    lBicep.position.set(0, -0.16, 0); lArmPivot.add(lBicep);
     const lForearm = new THREE.Group();
-    lForearm.position.set(0, -0.3, 0); lArmPivot.add(lForearm);
-    const lLower = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.28, 0.15), skinMat);
-    lLower.position.set(0, -0.14, 0); lForearm.add(lLower);
-    const lFist = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.2), wrapMat);
-    lFist.position.set(0, -0.3, 0.02); lForearm.add(lFist);
+    lForearm.position.set(0, -0.30, 0); lArmPivot.add(lForearm);
+    const lLower = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.24, 0.18), armorDarkMat);
+    lLower.position.set(0, -0.12, 0); lForearm.add(lLower);
+    const lFist = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.23, 0.26), wrapMat);
+    lFist.position.set(0, -0.28, 0.02); lForearm.add(lFist);
 
     const rArmPivot = new THREE.Group();
-    rArmPivot.position.set(0.35, 0.48, 0); torso.add(rArmPivot);
-    const rBicep = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.3, 0.16), skinMat);
-    rBicep.position.set(0, -0.15, 0); rArmPivot.add(rBicep);
+    rArmPivot.position.set(0.39, 0.50, 0); torso.add(rArmPivot);
+    const rPauldron = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.18, 0.26), vestMat);
+    rPauldron.position.set(0.02, -0.02, 0); rArmPivot.add(rPauldron);
+    const rBicep = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.28, 0.17), armorDarkMat);
+    rBicep.position.set(0, -0.16, 0); rArmPivot.add(rBicep);
     const rForearm = new THREE.Group();
-    rForearm.position.set(0, -0.3, 0); rArmPivot.add(rForearm);
-    const rLower = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.28, 0.15), skinMat);
-    rLower.position.set(0, -0.14, 0); rForearm.add(rLower);
-    const rFist = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.2), wrapMat);
-    rFist.position.set(0, -0.3, 0.02); rForearm.add(rFist);
+    rForearm.position.set(0, -0.30, 0); rArmPivot.add(rForearm);
+    const rLower = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.24, 0.18), armorDarkMat);
+    rLower.position.set(0, -0.12, 0); rForearm.add(rLower);
+    const rFist = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.23, 0.26), wrapMat);
+    rFist.position.set(0, -0.28, 0.02); rForearm.add(rFist);
 
-    // Canadian Hockey Stick for Berserk Mode (hidden by default)
+    // Canadian Hockey Stick for Berserk Mode
     const stickMesh = new THREE.Mesh(
-      new THREE.BoxGeometry(0.04, 0.95, 0.03),
+      new THREE.BoxGeometry(0.04, 1.05, 0.03),
       new THREE.MeshStandardMaterial({ color: 0xd90429, roughness: 0.4 })
     );
-    stickMesh.position.set(0.08, -0.1, 0.15);
+    stickMesh.position.set(0.08, -0.1, 0.16);
     stickMesh.rotation.set(-0.4, 0.2, -0.3);
     stickMesh.visible = false;
     rForearm.add(stickMesh);
 
-    // 3D Billboard Nameplate & Live Health Bar
+    // 3D High-Contrast Billboard Nameplate & Health Bar
     const npCanvas = document.createElement('canvas');
-    npCanvas.width = 256; npCanvas.height = 72;
+    npCanvas.width = 256; npCanvas.height = 76;
     const npCtx = npCanvas.getContext('2d');
     const npTex = new THREE.CanvasTexture(npCanvas);
     npTex.minFilter = THREE.LinearFilter;
     const npMat = new THREE.SpriteMaterial({ map: npTex, depthTest: false, transparent: true });
     const nameplate = new THREE.Sprite(npMat);
-    nameplate.scale.set(1.9, 0.54, 1);
-    nameplate.position.set(0, 2.2, 0);
+    nameplate.scale.set(2.0, 0.60, 1);
+    nameplate.position.set(0, 2.38, 0);
     root.add(nameplate);
 
     function updateNameplate(playerName, hp = 100, isBerserk = false, distMeters = null) {
-      npCtx.clearRect(0, 0, 256, 72);
-      npCtx.fillStyle = 'rgba(10, 15, 24, 0.92)';
+      npCtx.clearRect(0, 0, 256, 76);
+      npCtx.fillStyle = 'rgba(8, 12, 22, 0.94)';
       if (npCtx.roundRect) {
         npCtx.beginPath();
-        npCtx.roundRect(6, 6, 244, 60, 8);
+        npCtx.roundRect(6, 6, 244, 64, 10);
         npCtx.fill();
       } else {
-        npCtx.fillRect(6, 6, 244, 60);
+        npCtx.fillRect(6, 6, 244, 64);
       }
 
-      const hexStr = '#' + (color.toString(16).padStart(6, '0'));
-      npCtx.strokeStyle = isBerserk ? '#ff0033' : '#fef08a';
-      npCtx.lineWidth = 4.0;
+      npCtx.strokeStyle = isBerserk ? '#ff1e42' : hexStr;
+      npCtx.lineWidth = 4.5;
       npCtx.stroke();
 
       npCtx.font = 'bold 19px "Chakra Petch", Arial, sans-serif';
-      npCtx.fillStyle = isBerserk ? '#ff3b4a' : '#fef08a';
+      npCtx.fillStyle = isBerserk ? '#ff4757' : '#ffffff';
       npCtx.textAlign = 'center';
       const distSuffix = (distMeters !== null && distMeters >= 5) ? ` (${distMeters}m)` : '';
-      const label = (isBerserk ? '🍁 ' : '⭐ ') + playerName.toUpperCase() + distSuffix;
-      npCtx.fillText(label, 128, 30);
+      const label = (isBerserk ? '🍁 ' : '◆ ') + String(playerName || 'DEFENDER').toUpperCase() + distSuffix;
+      npCtx.fillText(label, 128, 31);
 
-      // Health bar
-      const barX = 18, barY = 40, barW = 220, barH = 14;
+      const barX = 18, barY = 42, barW = 220, barH = 14;
       npCtx.fillStyle = '#0a0a0c';
       npCtx.fillRect(barX, barY, barW, barH);
       const fillW = Math.max(0, Math.min(1, hp / 100)) * barW;
@@ -27695,14 +28387,15 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
 
     return {
       root,
+      colorHexStr: hexStr,
       leftLeg, lCalfPivot,
       rightLeg, rCalfPivot,
       torso, headPivot,
+      capePivot, skyDiamond,
       lArmPivot, lForearm,
       rArmPivot, rForearm,
       stickMesh,
       nameplate,
-      auraShell, auraMat,
       xrayGlow, xrayGlowMat,
       groundRing, ringMat,
       beaconPillar, pillarMat,
@@ -27744,6 +28437,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       this.reconnectTimer = null;
       this.reconnectAttempts = 0;
       this.friendlyFire = false;     // ROOM setting
+      this.hasSyncedInitialSpawn = false;
+      this.activeFlares = [];
       window.addEventListener('beforeunload', () => {
         if (this.connected && this.cloudMode) {
           this.sendRawCloud({ type: 'player_left', id: this.localId, name: this.localName });
@@ -28002,12 +28697,70 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     }
 
     sendCloudHello(isInitial) {
+      const tod = (this.role !== 'guest' && window.getCityTimeOfDay) ? window.getCityTimeOfDay() : undefined;
       this.sendRawCloud({
         type: isInitial ? 'peer_hello' : 'peer_announce',
         player: this.myPlayerInfo(),
         joinedAt: this.joinedAt,
-        pvp: this.friendlyFire
+        pvp: this.friendlyFire,
+        tod
       });
+    }
+
+    sendTimeOfDay(tod) {
+      if (this.connected) this.send({ type: 'set_tod', tod, by: this.localName });
+    }
+
+    sendFlare() {
+      const p = this.localPlayer;
+      if (!p) return false;
+      this.spawnFlareVisual(p.pos.x, Math.max(0, p.pos.y - 1.7), p.pos.z, this.localColor, this.localName);
+      if (this.connected) {
+        this.send({
+          type: 'flare',
+          x: Number(p.pos.x.toFixed(1)),
+          y: Number(Math.max(0, p.pos.y - 1.7).toFixed(1)),
+          z: Number(p.pos.z.toFixed(1)),
+          color: this.localColor,
+          senderName: this.localName
+        });
+      }
+      return true;
+    }
+
+    spawnFlareVisual(x, y, z, colorHex, who) {
+      if (!this.scene) return;
+      const col = colorHex || 0x38bdf8;
+      const grp = new THREE.Group();
+      grp.position.set(x, y, z);
+
+      const beam = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.18, 0.95, 110, 12, 1, true),
+        new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false, fog: false })
+      );
+      beam.position.set(0, 55, 0);
+      grp.add(beam);
+
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(0.6, 1.4, 28),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false })
+      );
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(0, 0.25, 0);
+      grp.add(ring);
+
+      const orb = new THREE.Mesh(
+        new THREE.SphereGeometry(0.85, 12, 10),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, fog: false })
+      );
+      orb.position.set(0, 2.5, 0);
+      grp.add(orb);
+
+      this.scene.add(grp);
+      this.activeFlares.push({ grp, beam, ring, orb, age: 0, maxAge: 5.5 });
+      if (who && who !== this.localName && window.showAnnouncement) {
+        window.showAnnouncement(`🔥 ${String(who).toUpperCase()} FIRED A SQUAD FLARE!`, 2400);
+      }
     }
 
     onCloudInterval() {
@@ -28079,10 +28832,26 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           }
         }
         this.recomputeCloudHost();
-        if (p.id === this.hostId && msg.pvp !== undefined && isNew) {
-          this.applyMode(!!msg.pvp, null);
+        if (p.id === this.hostId) {
+          if (msg.pvp !== undefined && isNew) this.applyMode(!!msg.pvp, null);
+          if (msg.tod && window.setCityTimeOfDay && window.getCityTimeOfDay && msg.tod !== window.getCityTimeOfDay()) {
+            window.setCityTimeOfDay(msg.tod, true);
+          }
+          this.maybeSyncInitialSpawn();
         }
         this.updateHUDStatus('connected');
+        return;
+      }
+
+      if (msg.type === 'set_tod') {
+        if ((msg.tod === 'day' || msg.tod === 'night') && window.setCityTimeOfDay) {
+          window.setCityTimeOfDay(msg.tod, true, msg.by || msg.senderName);
+        }
+        return;
+      }
+
+      if (msg.type === 'flare') {
+        this.spawnFlareVisual(msg.x || 0, msg.y || 0, msg.z || 0, msg.color, msg.senderName);
         return;
       }
 
@@ -28102,6 +28871,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           this.recomputeCloudHost();
         }
         this.handleMessage(msg);
+        this.maybeSyncInitialSpawn();
         return;
       }
 
@@ -28243,8 +29013,18 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
             const host = this.remotePlayers.get(this.hostId);
             window.showAnnouncement(`🤝 JOINED ${host ? host.name.toUpperCase() : 'THE SQUAD'}'S TORONTO!`, 2500);
           }
+          if (msg.tod && window.setCityTimeOfDay) window.setCityTimeOfDay(msg.tod, true);
+          this.maybeSyncInitialSpawn();
           break;
         }
+        case 'set_tod':
+          if ((msg.tod === 'day' || msg.tod === 'night') && window.setCityTimeOfDay) {
+            window.setCityTimeOfDay(msg.tod, true, msg.by);
+          }
+          break;
+        case 'flare':
+          this.spawnFlareVisual(msg.x || 0, msg.y || 0, msg.z || 0, msg.color, msg.senderName);
+          break;
         case 'host':
           this.hostId = msg.hostId;
           this.refreshRole();
@@ -28335,19 +29115,53 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       this.send({ type: 'score_event', targetId, ev });
     }
 
+    maybeSyncInitialSpawn() {
+      if (this.hasSyncedInitialSpawn || this.role !== 'guest' || !window.syncSpawnNearHost) return;
+      const host = this.remotePlayers.get(this.hostId) || this.remotePlayers.values().next().value;
+      if (!host || (host.currentPos.x === 0 && host.currentPos.z === 0)) return;
+      if (window.syncSpawnNearHost(host)) {
+        this.hasSyncedInitialSpawn = true;
+      }
+    }
+
+    squadSummary() {
+      const out = [];
+      this.remotePlayers.forEach((rp) => {
+        out.push({
+          id: rp.id,
+          name: rp.name,
+          initial: rp.initial || 'P',
+          color: rp.color,
+          colorHex: rp.colorHexStr || ('#' + ((rp.color || 0xef4444).toString(16).padStart(6, '0'))),
+          x: rp.currentPos.x,
+          y: rp.currentPos.y,
+          z: rp.currentPos.z,
+          yaw: rp.currentYaw,
+          health: rp.health,
+          isBerserk: rp.isBerserk,
+          isHost: rp.id === this.hostId
+        });
+      });
+      return out;
+    }
+
     addRemotePlayer(info, joinedAt) {
       if (this.remotePlayers.has(info.id)) return;
       const has = (info.x || info.z);
       const spawnX = has ? info.x : (this.localPlayer ? this.localPlayer.pos.x + 3 : 0);
       const spawnY = has ? (info.y || 0) : 0;
       const spawnZ = has ? info.z : (this.localPlayer ? this.localPlayer.pos.z + 3 : 0);
-      const rig = createRemoteHeroRig(info.name || 'DEFENDER', info.color || 0xef4444);
+      const col = info.color || 0xef4444;
+      const cleanName = String(info.name || 'DEFENDER').trim() || 'DEFENDER';
+      const rig = createRemoteHeroRig(cleanName, col);
       rig.root.position.set(spawnX, spawnY, spawnZ);
       if (this.scene) this.scene.add(rig.root);
       this.remotePlayers.set(info.id, {
         id: info.id,
-        name: info.name || 'DEFENDER',
-        color: info.color || 0xef4444,
+        name: cleanName,
+        initial: cleanName.charAt(0).toUpperCase(),
+        color: col,
+        colorHexStr: rig.colorHexStr,
         joinedAt: joinedAt || Date.now(),
         lastSeen: Date.now(),
         rig,
@@ -28507,41 +29321,52 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         if (!rp.rig) return;
         const before = rp.currentPos.distanceTo(rp.targetPos);
         if (before > 15) rp.currentPos.copy(rp.targetPos);           // teleport / respawn
-        else rp.currentPos.lerp(rp.targetPos, Math.min(1.0, dt * 14.0));
+        else {
+          const blend = Math.min(1.0, dt * 14.0);
+          rp.currentPos.set(
+            rp.currentPos.x + (rp.targetPos.x - rp.currentPos.x) * blend,
+            rp.currentPos.y + (rp.targetPos.y - rp.currentPos.y) * blend,
+            rp.currentPos.z + (rp.targetPos.z - rp.currentPos.z) * blend
+          );
+        }
         rp.eyePos.set(rp.currentPos.x, rp.currentPos.y + 1.7, rp.currentPos.z);
         rp.rig.root.position.copy(rp.currentPos);
         rp.rig.root.visible = rp.health > 0;
 
-        // Animate light-yellow glow aura, beacon pillar & distance readout
+        // Animate Hero Cape, Sky Holo-Diamond, Distance-Adaptive Sky Beam & Tactical Ring
         const pulse = 0.5 + 0.5 * Math.sin(pulseTime + rp.walkPhase);
         let distToMe = 0;
         if (this.localPlayer) {
           distToMe = Math.hypot(rp.currentPos.x - this.localPlayer.pos.x, rp.currentPos.z - this.localPlayer.pos.z);
         }
-        if (rp.rig.auraMat) {
-          rp.rig.auraMat.opacity = 0.34 + 0.16 * pulse;
-          const auraScale = 1.05 + 0.12 * pulse;
-          rp.rig.auraShell.scale.set(1.1 * auraScale, 1.4 * auraScale, 1.1 * auraScale);
-        }
         if (rp.rig.xrayGlowMat) {
-          rp.rig.xrayGlowMat.opacity = 0.65 + 0.25 * pulse;
-          const haloSize = Math.min(14.0, Math.max(5.5, 5.2 + distToMe * 0.12)) * (0.95 + 0.1 * pulse);
+          const farHalo = Math.min(1.0, Math.max(0.25, (distToMe - 6) / 35));
+          rp.rig.xrayGlowMat.opacity = farHalo * (0.45 + 0.25 * pulse);
+          const haloSize = Math.min(12.0, Math.max(3.0, 2.8 + distToMe * 0.09)) * (0.95 + 0.08 * pulse);
           rp.rig.xrayGlow.scale.set(haloSize, haloSize, 1);
         }
         if (rp.rig.ringMat) {
-          rp.rig.ringMat.opacity = 0.55 + 0.30 * pulse;
-          const ringScale = 0.96 + 0.12 * pulse;
+          rp.rig.ringMat.opacity = 0.62 + 0.28 * pulse;
+          const ringScale = 0.96 + 0.10 * pulse;
           rp.rig.groundRing.scale.set(ringScale, ringScale, 1);
         }
         if (rp.rig.pillarMat) {
-          // Bright sky beacon pillar so you can spot your teammate from anywhere in Toronto
-          const farFactor = Math.min(1.0, Math.max(0.35, (distToMe - 3) / 35));
-          rp.rig.pillarMat.opacity = farFactor * (0.30 + 0.18 * pulse);
+          // Subtle up close so hero armor stays sharp; vivid high-altitude beam from afar!
+          const farFactor = distToMe < 12 ? 0.08 : Math.min(1.0, 0.15 + (distToMe - 12) / 55);
+          rp.rig.pillarMat.opacity = farFactor * (0.34 + 0.16 * pulse);
+        }
+        if (rp.rig.skyDiamond) {
+          rp.rig.skyDiamond.rotation.y += dt * 2.2;
+          rp.rig.skyDiamond.position.y = 18.0 + Math.sin(pulseTime + rp.walkPhase) * 0.9;
+        }
+        if (rp.rig.capePivot) {
+          const stride = before > 0.05 ? 1.0 : 0.12;
+          rp.rig.capePivot.rotation.x = 0.08 + stride * (0.38 + Math.sin(pulseTime * 1.8 + rp.walkPhase) * 0.16);
         }
         if (rp.rig.nameplate) {
           // Keep nameplate legible even from a distance
-          const npScale = Math.min(4.2, Math.max(1.0, distToMe * 0.045));
-          rp.rig.nameplate.scale.set(1.9 * npScale, 0.54 * npScale, 1);
+          const npScale = Math.min(4.6, Math.max(1.0, distToMe * 0.048));
+          rp.rig.nameplate.scale.set(2.0 * npScale, 0.60 * npScale, 1);
         }
         const distRounded = Math.round(distToMe);
         if (rp.lastDistRounded !== distRounded) {
@@ -28581,6 +29406,25 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           }
         }
       });
+
+      // 4. Step Squad Signal Flares (skyrocket ascents + expanding rings)
+      for (let i = this.activeFlares.length - 1; i >= 0; i--) {
+        const fl = this.activeFlares[i];
+        fl.age += dt;
+        const k = fl.age / fl.maxAge;
+        if (k >= 1) {
+          if (this.scene && fl.grp) this.scene.remove(fl.grp);
+          this.activeFlares.splice(i, 1);
+          continue;
+        }
+        const fade = Math.max(0, 1 - k);
+        fl.orb.position.y = 2.5 + fl.age * 24.0;
+        const rScale = 1 + fl.age * 7.5;
+        fl.ring.scale.set(rScale, rScale, 1);
+        if (fl.beam.material) fl.beam.material.opacity = 0.82 * fade;
+        if (fl.ring.material) fl.ring.material.opacity = 0.90 * fade;
+        if (fl.orb.material) fl.orb.material.opacity = 0.95 * fade;
+      }
     }
 
     // ---------------------------------------------------------------- UI
@@ -30706,25 +31550,33 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 
 // Image-based lighting for MeshStandardMaterial (hands, boots, fighters, crates).
-// Without an environment map, metal (brass, steel) renders as flat black/grey.
-function buildNightCityEnvMap(renderer) {
+// --- City Environment Map (Daytime sky reflection + Nighttime neon reflection) ---
+let nightEnvMap = null, dayEnvMap = null;
+function buildCityEnvMap(renderer, isDay) {
   const envScene = new THREE.Scene();
   const c = document.createElement('canvas');
   c.width = 8; c.height = 256;
   const g = c.getContext('2d');
   const grad = g.createLinearGradient(0, 0, 0, 256);
-  grad.addColorStop(0.0, '#05070f');
-  grad.addColorStop(0.42, '#151f33');
-  grad.addColorStop(0.5, '#1e2d42');   // crisp urban night glow on the horizon
-  grad.addColorStop(0.56, '#181e28');
-  grad.addColorStop(1.0, '#0a0d14');  // wet asphalt below
+  if (isDay) {
+    grad.addColorStop(0.0, '#1d6fb8');
+    grad.addColorStop(0.42, '#78beef');
+    grad.addColorStop(0.50, '#d0ebfc');
+    grad.addColorStop(0.56, '#7b8fa3');
+    grad.addColorStop(1.0, '#364454');
+  } else {
+    grad.addColorStop(0.0, '#05070f');
+    grad.addColorStop(0.42, '#151f33');
+    grad.addColorStop(0.5, '#1e2d42');
+    grad.addColorStop(0.56, '#181e28');
+    grad.addColorStop(1.0, '#0a0d14');
+  }
   g.fillStyle = grad;
   g.fillRect(0, 0, 8, 256);
   const skyTex = new THREE.CanvasTexture(c);
   envScene.add(new THREE.Mesh(new THREE.SphereGeometry(50, 32, 16), new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide })));
-  // Ring of bright "windows / signs" so glossy surfaces pick up specular glints
   const panelGeo = new THREE.PlaneGeometry(5, 9);
-  const cols = [0xffd59a, 0xffb36b, 0x9fd2ff, 0xffffff, 0x70a0d0, 0x63f0ff];
+  const cols = isDay ? [0xffffff, 0xe0f2fe, 0xbae6fd, 0xf8fafc, 0xfef9c3, 0x93c5fd] : [0xffd59a, 0xffb36b, 0x9fd2ff, 0xffffff, 0x70a0d0, 0x63f0ff];
   for (let i = 0; i < 18; i++) {
     const a = (i / 18) * Math.PI * 2;
     const m = new THREE.Mesh(panelGeo, new THREE.MeshBasicMaterial({ color: cols[i % cols.length] }));
@@ -30732,13 +31584,60 @@ function buildNightCityEnvMap(renderer) {
     m.lookAt(0, 4, 0);
     envScene.add(m);
   }
-  const top = new THREE.Mesh(new THREE.CircleGeometry(10, 24), new THREE.MeshBasicMaterial({ color: 0x8090c0 }));
+  const top = new THREE.Mesh(new THREE.CircleGeometry(10, 24), new THREE.MeshBasicMaterial({ color: isDay ? 0xbae6fd : 0x8090c0 }));
   top.position.y = 45; top.rotation.x = Math.PI / 2;
   envScene.add(top);
   const pmrem = new THREE.PMREMGenerator(renderer);
   const rt = pmrem.fromScene(envScene, 0.035);
   pmrem.dispose();
   return rt.texture;
+}
+
+function getMainlandFogDensity() {
+  return (city && city.getTimeOfDay && city.getTimeOfDay() === 'day') ? 0.00072 : 0.0018;
+}
+
+function getCityTimeOfDay() {
+  return (city && city.getTimeOfDay) ? city.getTimeOfDay() : 'night';
+}
+
+function setCityTimeOfDay(mode, fromNet, byName) {
+  const tod = (mode === 'day') ? 'day' : 'night';
+  const isDay = (tod === 'day');
+  if (city && city.setTimeOfDay) city.setTimeOfDay(tod);
+  if (islands && islands.setTimeOfDay) islands.setTimeOfDay(isDay);
+  if (traffic && traffic.setTimeOfDay) traffic.setTimeOfDay(isDay);
+  try {
+    if (isDay) {
+      if (!dayEnvMap) dayEnvMap = buildCityEnvMap(renderer, true);
+      scene.environment = dayEnvMap;
+    } else {
+      if (!nightEnvMap) nightEnvMap = buildCityEnvMap(renderer, false);
+      scene.environment = nightEnvMap;
+    }
+  } catch (e) {}
+  if (bloomPass) {
+    bloomPass.strength = isDay ? 0.22 : 0.85;
+    bloomPass.radius = isDay ? 0.35 : 0.5;
+    bloomPass.threshold = isDay ? 0.94 : 0.80;
+  }
+  if (scene.fog) {
+    if (state.onPlane) scene.fog.density = 0.00022;
+    else if (state.onIsland || state.onFerry) scene.fog.density = 0.00065;
+    else scene.fog.density = getMainlandFogDensity();
+  }
+  const todBadge = document.getElementById('tod-badge');
+  if (todBadge) {
+    todBadge.innerText = isDay ? '☀️ DAYTIME' : '🌙 NIGHTTIME';
+    todBadge.className = isDay ? 'tag tod-day' : 'tag tod-night';
+  }
+  if (!fromNet && window.multiplayer && window.multiplayer.sendTimeOfDay) {
+    window.multiplayer.sendTimeOfDay(tod);
+  }
+  if (fromNet && byName && typeof showAnnouncement === 'function') {
+    showAnnouncement(`${isDay ? '☀️ DAYTIME' : '🌙 NIGHTTIME'} IN TORONTO (${String(byName).toUpperCase()})`, 2200);
+  }
+  return tod;
 }
 
 // --- Bloom post-processing (lit windows, neon, lamps, CN Tower LEDs glow) ---
@@ -30837,11 +31736,19 @@ function createProceduralTexture(type) {
 const crateTex = createProceduralTexture('crate');
 
 if (city) {
-  // Lighting, fog and sky are owned by city.js (buildTorontoCity). Stacking a
-  // 1.8-intensity ambient on top flattened every surface, so it's removed here.
-  scene.environment = buildNightCityEnvMap(renderer);
+  // Lighting, fog and sky are owned by city.js (buildTorontoCity).
   // Live traffic on the real street network (traffic.js)
   if (typeof window.createTraffic === 'function') traffic = window.createTraffic(scene, city, audio, { count: 30 });
+  setCityTimeOfDay(city.getTimeOfDay ? city.getTimeOfDay() : 'night', true);
+  const todBadgeEl = document.getElementById('tod-badge');
+  if (todBadgeEl) {
+    todBadgeEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const nextTod = getCityTimeOfDay() === 'day' ? 'night' : 'day';
+      setCityTimeOfDay(nextTod, false);
+      showAnnouncement(nextTod === 'day' ? '☀️ SWITCHED TO TORONTO DAYTIME' : '🌙 SWITCHED TO TORONTO NIGHTTIME', 2000);
+    });
+  }
 } else {
   // Fallback Indoor Enclosed Arena if map data failed to load
   scene.fog = new THREE.FogExp2(0x0a0c12, 0.038);
@@ -33974,7 +34881,7 @@ function arriveFerry(dir) {
       populateCentreIslandCitizens();
     } else {
       state.onIsland = false;
-      if (scene.fog) scene.fog.density = 0.0021;
+      if (scene.fog) scene.fog.density = getMainlandFogDensity();
       const mainFloor = (city && city.floorAt) ? city.floorAt(-1060, 702) : 0.55;
       player.pos.set(-1060, mainFloor + EYE_HEIGHT, 702);
       player.yaw = 0; // facing north (-Z) toward Bathurst Quay & downtown
@@ -34012,7 +34919,7 @@ function arriveFerry(dir) {
     populateCentreIslandCitizens();
   } else {
     state.onIsland = false;
-    if (scene.fog) scene.fog.density = 0.0021;
+    if (scene.fog) scene.fog.density = getMainlandFogDensity();
     const mainFloor = (city && city.floorAt) ? city.floorAt(712, 318) : 0.5;
     player.pos.set(712, mainFloor + EYE_HEIGHT, 318);
     player.yaw = 0; // facing north (-Z) towards Queens Quay & downtown
@@ -34989,7 +35896,7 @@ function teleportToRandomSubwayEntrance() {
   camera.rotation.x = -0.18;
   state.onIsland = false;
   state.isUnderground = false;
-  if (scene.fog) scene.fog.density = 0.0021;
+  if (scene.fog) scene.fog.density = getMainlandFogDensity();
 
   // Position the 6-car TTC Rocket train at this station platform with doors open so it's ready when you head downstairs
   if (city.subway.state && stIdx >= 0) {
@@ -35277,7 +36184,8 @@ function updateElevator(dt) {
     }
 
     const fogProg = Math.max(0, Math.min(1, (elevatorController.cabY - 2.0) / 340.0));
-    if (scene.fog) scene.fog.density = 0.0021 + (0.00065 - 0.0021) * fogProg;
+    const baseFog = getMainlandFogDensity();
+    if (scene.fog) scene.fog.density = baseFog + (0.00055 - baseFog) * fogProg;
 
     const altVal = document.getElementById('elev-alt-val');
     if (altVal) altVal.innerText = `${Math.round(elevatorController.cabY)} m`;
@@ -35320,7 +36228,7 @@ function arriveElevator() {
   elevatorController.state = stop.id;
   state.onObservationDeck = idx > 0;
   state.deckFloor = Math.max(1, idx);
-  if (scene.fog && idx === 0) scene.fog.density = 0.0021;
+  if (scene.fog && idx === 0) scene.fog.density = getMainlandFogDensity();
 }
 
 // Kept for older callers: floor under (x, z) given EYE height
@@ -36613,7 +37521,7 @@ window.addEventListener('keydown', (e) => {
       camera.rotation.y = -0.35;
       camera.rotation.x = 0;
       state.onIsland = false;
-      if (scene.fog) scene.fog.density = 0.0021;
+      if (scene.fog) scene.fog.density = getMainlandFogDensity();
       audio.playFerryHorn();
       showAnnouncement("🏙️ CHEAT: TELEPORTED TO MAINLAND FERRY DOCK (JACK LAYTON TERMINAL)!", 3200);
     } else if (dMainDock < 22) {
@@ -36642,7 +37550,7 @@ window.addEventListener('keydown', (e) => {
       camera.rotation.y = -0.35;
       camera.rotation.x = 0;
       state.onIsland = false;
-      if (scene.fog) scene.fog.density = 0.0021;
+      if (scene.fog) scene.fog.density = getMainlandFogDensity();
       audio.playFerryHorn();
       showAnnouncement("🚢 CHEAT: TELEPORTED TO MAINLAND FERRY DOCK (JACK LAYTON TERMINAL)!", 3200);
     }
@@ -36742,6 +37650,17 @@ window.addEventListener('keydown', (e) => {
       e.preventDefault();
       return;
     }
+  }
+
+  if (e.code === 'KeyY') {
+    e.preventDefault();
+    rallyToSquadMate();
+    return;
+  }
+  if (e.code === 'KeyT' && !e.shiftKey) {
+    e.preventDefault();
+    launchSquadFlare();
+    return;
   }
 
   if (e.code.startsWith('Digit') && !e.shiftKey) {
@@ -38172,14 +39091,17 @@ function animate(now) {
         });
       }
     });
-    // Remote Squad Players on Minimap Radar (bright light-yellow beacon dot)
+    // Remote Squad Players on Minimap Radar (distinct directional chevron + colored medallion)
     if (window.multiplayer && window.multiplayer.remotePlayers) {
       window.multiplayer.remotePlayers.forEach(rp => {
         dots.push({
           x: rp.currentPos.x,
           z: rp.currentPos.z,
-          c: '#fef08a',
-          r: 5.2
+          c: rp.colorHexStr || '#38bdf8',
+          r: 5.5,
+          isPlayer: true,
+          initial: rp.initial || (rp.name ? rp.name.charAt(0).toUpperCase() : 'P'),
+          yaw: rp.currentYaw || 0
         });
       });
     }
@@ -38203,6 +39125,7 @@ function animate(now) {
     } catch (e) {
       console.warn('drawMinimap error:', e);
     }
+    updateSquadTrackingHUD();
     updateNeighborhood();
 
     // 1. Distance & status to CN Tower (Peace Sanctuary)
@@ -39417,6 +40340,12 @@ function resetGame() {
   } else {
     player.pos.set(0, 1.7, 0);
   }
+  state.onIsland = false;
+  if (scene.fog) scene.fog.density = getMainlandFogDensity();
+  if (window.multiplayer && window.multiplayer.role === 'guest' && !window.multiplayer.friendlyFire) {
+    const host = window.multiplayer.remotePlayers.get(window.multiplayer.hostId) || window.multiplayer.remotePlayers.values().next().value;
+    if (host) syncSpawnNearHost(host);
+  }
   populateEnemies();
   spawnCrates();
   startNextMission();
@@ -39463,6 +40392,177 @@ document.querySelectorAll('.diff-btn').forEach(btn => {
   });
 });
 
+// ==================== MULTIPLAYER SQUAD COORDINATION & TRACKING ====================
+function findSafeSpotNear(tx, tz, baseY) {
+  const onIsl = !!(islands && islands.isInsideIslands && islands.isInsideIslands(tx, tz));
+  const checkFn = onIsl ? (x, z) => islands.canMoveTo(x, z, 0.5) : canMoveTo;
+  const radii = [4.0, 6.0, 2.5, 8.5, 11.0];
+  for (let ri = 0; ri < radii.length; ri++) {
+    const r = radii[ri];
+    for (let ai = 0; ai < 8; ai++) {
+      const a = ai * (Math.PI / 4) + ri * 0.35;
+      const cx = tx + Math.cos(a) * r;
+      const cz = tz + Math.sin(a) * r;
+      if (checkFn(cx, cz)) {
+        const floor = onIsl
+          ? (islands.floorAt ? islands.floorAt(cx, cz) : 0.55)
+          : ((city && city.floorAt) ? city.floorAt(cx, cz, baseY || 0) : 0);
+        return { x: cx, y: Math.max(floor, baseY || 0) + EYE_HEIGHT, z: cz, onIsland: onIsl };
+      }
+    }
+  }
+  return { x: tx + 3.0, y: (baseY || 0) + EYE_HEIGHT, z: tz + 3.0, onIsland: onIsl };
+}
+
+function syncSpawnNearHost(hostPlayer) {
+  if (!hostPlayer || !hostPlayer.currentPos) return false;
+  if (state.onFerry || state.onPlane || state.inElevator || state.onStreetcar) return false;
+  const spot = findSafeSpotNear(hostPlayer.currentPos.x, hostPlayer.currentPos.z, hostPlayer.currentPos.y || 0);
+  player.pos.set(spot.x, spot.y, spot.z);
+  player.velocity.set(0, 0, 0);
+  player.isGrounded = true;
+  state.onIsland = spot.onIsland;
+  state.isUnderground = spot.y < -4;
+  if (scene.fog) scene.fog.density = spot.onIsland ? 0.00065 : getMainlandFogDensity();
+  const faceYaw = Math.atan2(player.pos.x - hostPlayer.currentPos.x, player.pos.z - hostPlayer.currentPos.z);
+  player.yaw = faceYaw;
+  camera.rotation.order = 'YXZ';
+  camera.rotation.y = faceYaw;
+  if (spot.onIsland) populateCentreIslandCitizens();
+  if (typeof showAnnouncement === 'function') {
+    showAnnouncement(`🤝 SPAWNED BESIDE ${String(hostPlayer.name || 'SQUADMATE').toUpperCase()}!`, 2400);
+  }
+  return true;
+}
+
+function rallyToSquadMate() {
+  const mp = window.multiplayer;
+  if (!mp || !mp.remotePlayers || mp.remotePlayers.size === 0) {
+    showAnnouncement('🌐 NO ONLINE SQUADMATES IN ROOM TO RALLY TO', 1800);
+    return false;
+  }
+  if (mp.friendlyFire) {
+    showAnnouncement('⚔️ RALLY DISABLED DURING ARENA BRAWL (PVP) DUELS!', 2000);
+    return false;
+  }
+  if (state.onFerry || state.onPlane || state.inElevator || state.onStreetcar) {
+    showAnnouncement('🚫 EXIT VEHICLE / ELEVATOR BEFORE USING SQUAD RALLY!', 1800);
+    return false;
+  }
+  let target = null, bestDist = Infinity;
+  mp.remotePlayers.forEach(rp => {
+    if (rp.health <= 0) return;
+    const d = Math.hypot(rp.currentPos.x - player.pos.x, rp.currentPos.z - player.pos.z);
+    if (d < bestDist) { bestDist = d; target = rp; }
+  });
+  if (!target) {
+    showAnnouncement('⌛ SQUADMATE CURRENTLY KO’D — WAIT FOR RESPAWN', 1800);
+    return false;
+  }
+  const spot = findSafeSpotNear(target.currentPos.x, target.currentPos.z, target.currentPos.y || 0);
+  player.pos.set(spot.x, spot.y, spot.z);
+  player.velocity.set(0, 0, 0);
+  player.isGrounded = true;
+  state.onIsland = spot.onIsland;
+  state.isUnderground = spot.y < -4;
+  if (scene.fog) scene.fog.density = spot.onIsland ? 0.00065 : getMainlandFogDensity();
+  const faceYaw = Math.atan2(player.pos.x - target.currentPos.x, player.pos.z - target.currentPos.z);
+  player.yaw = faceYaw;
+  camera.rotation.order = 'YXZ';
+  camera.rotation.y = faceYaw;
+  if (audio && audio.playPickup) audio.playPickup();
+  spawnDebris(player.pos.x, player.pos.y - 0.5, player.pos.z, 0x38bdf8, 16, 6);
+  showAnnouncement(`⚡ RALLIED TO ${String(target.name || 'SQUADMATE').toUpperCase()}!`, 2200);
+  return true;
+}
+
+function launchSquadFlare() {
+  const mp = window.multiplayer;
+  if (mp && mp.sendFlare) {
+    mp.sendFlare();
+    if (audio && audio.playPickup) audio.playPickup();
+    showAnnouncement('🔥 SQUAD SIGNAL FLARE LAUNCHED SKYWARD!', 1800);
+    return true;
+  }
+  return false;
+}
+
+function updateSquadTrackingHUD() {
+  if (typeof document === 'undefined' || !document.getElementById) return;
+  const hud = document.getElementById('squad-hud');
+  const rosterEl = document.getElementById('squad-roster-list');
+  const pinsLayer = document.getElementById('squad-pins-layer');
+  const mp = window.multiplayer;
+  const squad = (mp && mp.squadSummary) ? mp.squadSummary() : [];
+
+  if (!squad.length || !state.inGame) {
+    if (hud && !hud.classList.contains('hidden')) hud.classList.add('hidden');
+    if (pinsLayer && pinsLayer.innerHTML) pinsLayer.innerHTML = '';
+    return;
+  }
+  if (hud && hud.classList.contains('hidden')) hud.classList.remove('hidden');
+
+  const W = window.innerWidth || 1280;
+  const H = window.innerHeight || 720;
+  const cy = Math.cos(player.yaw), sy = Math.sin(player.yaw);
+  const cp = Math.cos(player.pitch), sp = Math.sin(player.pitch);
+  // Camera orthonormal basis (right, up, forward = -Z rotated by yaw/pitch)
+  const rx = cy, ry = 0, rz = -sy;
+  const fx = -sy * cp, fy = sp, fz = -cy * cp;
+  const ux = sy * sp, uy = cp, uz = cy * sp;
+  const tanHalfY = Math.tan(((camera.fov || 70) * Math.PI / 180) * 0.5);
+  const tanHalfX = tanHalfY * (camera.aspect || (W / Math.max(1, H)));
+
+  let rosterHTML = '';
+  let pinsHTML = '';
+  for (let i = 0; i < squad.length; i++) {
+    const m = squad[i];
+    const dist = Math.round(Math.hypot(m.x - player.pos.x, m.z - player.pos.z));
+    const safeName = String(m.name || 'DEFENDER').replace(/[<>&"]/g, '');
+    const col = m.colorHex || '#38bdf8';
+    rosterHTML += `<div class="squad-member-row"><span class="squad-member-dot" style="background:${col}"></span><span class="squad-member-name">${safeName}${m.isHost ? ' 👑' : ''}</span><span class="squad-member-dist">${dist}m</span></div>`;
+
+    if (m.health <= 0 || !pinsLayer) continue;
+    // Project point above squadmate's helmet cleanly using camera basis
+    const dx = m.x - camera.position.x;
+    const dy = (m.y + 2.75) - camera.position.y;
+    const dz = m.z - camera.position.z;
+    const camX = dx * rx + dy * ry + dz * rz;
+    const camY = dx * ux + dy * uy + dz * uz;
+    const camZ = dx * fx + dy * fy + dz * fz;
+
+    let sx, sy2, offScreen = false;
+    if (camZ > 0.35) {
+      const ndcX = (camX / camZ) / tanHalfX;
+      const ndcY = (camY / camZ) / tanHalfY;
+      sx = (0.5 + 0.5 * ndcX) * W;
+      sy2 = (0.5 - 0.5 * ndcY) * H;
+      if (sx < 56 || sx > W - 56 || sy2 < 68 || sy2 > H - 72) offScreen = true;
+    } else {
+      offScreen = true;
+      sx = W * 0.5 + camX * 1000;
+      sy2 = H * 0.5 - camY * 1000;
+    }
+
+    if (offScreen) {
+      const vx = (camZ > 0.35 ? (sx - W * 0.5) : camX);
+      const vy = (camZ > 0.35 ? (sy2 - H * 0.5) : -camY);
+      const vLen = Math.hypot(vx, vy) || 1;
+      const nx = vx / vLen, ny = vy / vLen;
+      const halfW = W * 0.5 - 64, halfH = H * 0.5 - 78;
+      const tScale = Math.min(halfW / Math.max(0.01, Math.abs(nx)), halfH / Math.max(0.01, Math.abs(ny)));
+      const edgeX = Math.round(W * 0.5 + nx * tScale);
+      const edgeY = Math.round(H * 0.5 + ny * tScale);
+      const deg = Math.round(Math.atan2(ny, nx) * 180 / Math.PI) + 90;
+      pinsHTML += `<div class="squad-hud-pin offscreen" style="left:${edgeX}px;top:${edgeY}px;border-color:${col};"><span class="squad-pin-arrow" style="color:${col};transform:rotate(${deg}deg)">▲</span><span>${safeName}</span><span style="color:${col}">${dist}m</span></div>`;
+    } else if (dist >= 12) {
+      pinsHTML += `<div class="squad-hud-pin" style="left:${Math.round(sx)}px;top:${Math.round(sy2)}px;border-color:${col};"><span style="color:${col}">◆</span><span>${safeName}</span><span style="color:#93c5fd">${dist}m</span></div>`;
+    }
+  }
+  if (rosterEl) rosterEl.innerHTML = rosterHTML;
+  if (pinsLayer) pinsLayer.innerHTML = pinsHTML;
+}
+
 // Global exports for multiplayer & UI
 window.showAnnouncement = showAnnouncement;
 window.triggerDamageFlash = triggerDamageFlash;
@@ -39474,6 +40574,11 @@ window.spawnDebris = spawnDebris;
 window.pauseGame = pauseGame;
 window.resumeGame = resumeGame;
 window.resetGame = resetGame;
+window.setCityTimeOfDay = setCityTimeOfDay;
+window.getCityTimeOfDay = getCityTimeOfDay;
+window.syncSpawnNearHost = syncSpawnNearHost;
+window.rallyToSquadMate = rallyToSquadMate;
+window.launchSquadFlare = launchSquadFlare;
 window.gameState = state;
 window.gamePlayer = player;
 window.audio = audio;

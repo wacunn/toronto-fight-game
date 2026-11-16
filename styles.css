@@ -2248,4 +2248,117 @@ body.telescope-mode #crosshair-wrapper {
   letter-spacing: 0.8px;
 }
 
+/* ==================== MULTIPLAYER SQUAD RADAR & VIEWPORT TRACKING ==================== */
+#tod-badge.tod-day {
+  background: rgba(14, 165, 233, 0.24);
+  border-color: rgba(125, 211, 252, 0.65);
+  color: #e0f2fe;
+}
+#tod-badge.tod-night {
+  background: rgba(30, 41, 59, 0.72);
+  border-color: rgba(148, 163, 184, 0.45);
+  color: #cbd5e1;
+}
+
+#squad-hud {
+  position: absolute;
+  top: 292px;
+  right: 16px;
+  width: 210px;
+  z-index: 25;
+  background: rgba(8, 12, 22, 0.84);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 10px;
+  padding: 7px 9px;
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+  font-family: 'Chakra Petch', sans-serif;
+}
+#squad-hud.hidden {
+  display: none !important;
+}
+.squad-hud-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  color: #7dd3fc;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  padding-bottom: 4px;
+  margin-bottom: 5px;
+}
+.squad-hud-keys {
+  font-size: 8.5px;
+  color: #cbd5e1;
+  letter-spacing: 0.3px;
+}
+.squad-member-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 3px 4px;
+  border-radius: 5px;
+  background: rgba(15, 23, 42, 0.7);
+  margin-bottom: 3px;
+  font-size: 10.5px;
+}
+.squad-member-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid #ffffff;
+  flex-shrink: 0;
+}
+.squad-member-name {
+  flex: 1;
+  color: #f8fafc;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.squad-member-dist {
+  color: #93c5fd;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+#squad-pins-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 22;
+}
+.squad-hud-pin {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(8, 12, 22, 0.84);
+  border: 2px solid #38bdf8;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  color: #ffffff;
+  white-space: nowrap;
+}
+.squad-hud-pin.offscreen {
+  border-radius: 8px;
+  padding: 4px 9px;
+}
+.squad-pin-arrow {
+  display: inline-block;
+  font-size: 12px;
+  line-height: 1;
+}
+
+
 

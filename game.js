@@ -1187,25 +1187,33 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 
 // Image-based lighting for MeshStandardMaterial (hands, boots, fighters, crates).
-// Without an environment map, metal (brass, steel) renders as flat black/grey.
-function buildNightCityEnvMap(renderer) {
+// --- City Environment Map (Daytime sky reflection + Nighttime neon reflection) ---
+let nightEnvMap = null, dayEnvMap = null;
+function buildCityEnvMap(renderer, isDay) {
   const envScene = new THREE.Scene();
   const c = document.createElement('canvas');
   c.width = 8; c.height = 256;
   const g = c.getContext('2d');
   const grad = g.createLinearGradient(0, 0, 0, 256);
-  grad.addColorStop(0.0, '#05070f');
-  grad.addColorStop(0.42, '#151f33');
-  grad.addColorStop(0.5, '#1e2d42');   // crisp urban night glow on the horizon
-  grad.addColorStop(0.56, '#181e28');
-  grad.addColorStop(1.0, '#0a0d14');  // wet asphalt below
+  if (isDay) {
+    grad.addColorStop(0.0, '#1d6fb8');
+    grad.addColorStop(0.42, '#78beef');
+    grad.addColorStop(0.50, '#d0ebfc');
+    grad.addColorStop(0.56, '#7b8fa3');
+    grad.addColorStop(1.0, '#364454');
+  } else {
+    grad.addColorStop(0.0, '#05070f');
+    grad.addColorStop(0.42, '#151f33');
+    grad.addColorStop(0.5, '#1e2d42');
+    grad.addColorStop(0.56, '#181e28');
+    grad.addColorStop(1.0, '#0a0d14');
+  }
   g.fillStyle = grad;
   g.fillRect(0, 0, 8, 256);
   const skyTex = new THREE.CanvasTexture(c);
   envScene.add(new THREE.Mesh(new THREE.SphereGeometry(50, 32, 16), new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide })));
-  // Ring of bright "windows / signs" so glossy surfaces pick up specular glints
   const panelGeo = new THREE.PlaneGeometry(5, 9);
-  const cols = [0xffd59a, 0xffb36b, 0x9fd2ff, 0xffffff, 0x70a0d0, 0x63f0ff];
+  const cols = isDay ? [0xffffff, 0xe0f2fe, 0xbae6fd, 0xf8fafc, 0xfef9c3, 0x93c5fd] : [0xffd59a, 0xffb36b, 0x9fd2ff, 0xffffff, 0x70a0d0, 0x63f0ff];
   for (let i = 0; i < 18; i++) {
     const a = (i / 18) * Math.PI * 2;
     const m = new THREE.Mesh(panelGeo, new THREE.MeshBasicMaterial({ color: cols[i % cols.length] }));
@@ -1213,13 +1221,60 @@ function buildNightCityEnvMap(renderer) {
     m.lookAt(0, 4, 0);
     envScene.add(m);
   }
-  const top = new THREE.Mesh(new THREE.CircleGeometry(10, 24), new THREE.MeshBasicMaterial({ color: 0x8090c0 }));
+  const top = new THREE.Mesh(new THREE.CircleGeometry(10, 24), new THREE.MeshBasicMaterial({ color: isDay ? 0xbae6fd : 0x8090c0 }));
   top.position.y = 45; top.rotation.x = Math.PI / 2;
   envScene.add(top);
   const pmrem = new THREE.PMREMGenerator(renderer);
   const rt = pmrem.fromScene(envScene, 0.035);
   pmrem.dispose();
   return rt.texture;
+}
+
+function getMainlandFogDensity() {
+  return (city && city.getTimeOfDay && city.getTimeOfDay() === 'day') ? 0.00072 : 0.0018;
+}
+
+function getCityTimeOfDay() {
+  return (city && city.getTimeOfDay) ? city.getTimeOfDay() : 'night';
+}
+
+function setCityTimeOfDay(mode, fromNet, byName) {
+  const tod = (mode === 'day') ? 'day' : 'night';
+  const isDay = (tod === 'day');
+  if (city && city.setTimeOfDay) city.setTimeOfDay(tod);
+  if (islands && islands.setTimeOfDay) islands.setTimeOfDay(isDay);
+  if (traffic && traffic.setTimeOfDay) traffic.setTimeOfDay(isDay);
+  try {
+    if (isDay) {
+      if (!dayEnvMap) dayEnvMap = buildCityEnvMap(renderer, true);
+      scene.environment = dayEnvMap;
+    } else {
+      if (!nightEnvMap) nightEnvMap = buildCityEnvMap(renderer, false);
+      scene.environment = nightEnvMap;
+    }
+  } catch (e) {}
+  if (bloomPass) {
+    bloomPass.strength = isDay ? 0.22 : 0.85;
+    bloomPass.radius = isDay ? 0.35 : 0.5;
+    bloomPass.threshold = isDay ? 0.94 : 0.80;
+  }
+  if (scene.fog) {
+    if (state.onPlane) scene.fog.density = 0.00022;
+    else if (state.onIsland || state.onFerry) scene.fog.density = 0.00065;
+    else scene.fog.density = getMainlandFogDensity();
+  }
+  const todBadge = document.getElementById('tod-badge');
+  if (todBadge) {
+    todBadge.innerText = isDay ? '☀️ DAYTIME' : '🌙 NIGHTTIME';
+    todBadge.className = isDay ? 'tag tod-day' : 'tag tod-night';
+  }
+  if (!fromNet && window.multiplayer && window.multiplayer.sendTimeOfDay) {
+    window.multiplayer.sendTimeOfDay(tod);
+  }
+  if (fromNet && byName && typeof showAnnouncement === 'function') {
+    showAnnouncement(`${isDay ? '☀️ DAYTIME' : '🌙 NIGHTTIME'} IN TORONTO (${String(byName).toUpperCase()})`, 2200);
+  }
+  return tod;
 }
 
 // --- Bloom post-processing (lit windows, neon, lamps, CN Tower LEDs glow) ---
@@ -1318,11 +1373,19 @@ function createProceduralTexture(type) {
 const crateTex = createProceduralTexture('crate');
 
 if (city) {
-  // Lighting, fog and sky are owned by city.js (buildTorontoCity). Stacking a
-  // 1.8-intensity ambient on top flattened every surface, so it's removed here.
-  scene.environment = buildNightCityEnvMap(renderer);
+  // Lighting, fog and sky are owned by city.js (buildTorontoCity).
   // Live traffic on the real street network (traffic.js)
   if (typeof window.createTraffic === 'function') traffic = window.createTraffic(scene, city, audio, { count: 30 });
+  setCityTimeOfDay(city.getTimeOfDay ? city.getTimeOfDay() : 'night', true);
+  const todBadgeEl = document.getElementById('tod-badge');
+  if (todBadgeEl) {
+    todBadgeEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const nextTod = getCityTimeOfDay() === 'day' ? 'night' : 'day';
+      setCityTimeOfDay(nextTod, false);
+      showAnnouncement(nextTod === 'day' ? '☀️ SWITCHED TO TORONTO DAYTIME' : '🌙 SWITCHED TO TORONTO NIGHTTIME', 2000);
+    });
+  }
 } else {
   // Fallback Indoor Enclosed Arena if map data failed to load
   scene.fog = new THREE.FogExp2(0x0a0c12, 0.038);
@@ -4455,7 +4518,7 @@ function arriveFerry(dir) {
       populateCentreIslandCitizens();
     } else {
       state.onIsland = false;
-      if (scene.fog) scene.fog.density = 0.0021;
+      if (scene.fog) scene.fog.density = getMainlandFogDensity();
       const mainFloor = (city && city.floorAt) ? city.floorAt(-1060, 702) : 0.55;
       player.pos.set(-1060, mainFloor + EYE_HEIGHT, 702);
       player.yaw = 0; // facing north (-Z) toward Bathurst Quay & downtown
@@ -4493,7 +4556,7 @@ function arriveFerry(dir) {
     populateCentreIslandCitizens();
   } else {
     state.onIsland = false;
-    if (scene.fog) scene.fog.density = 0.0021;
+    if (scene.fog) scene.fog.density = getMainlandFogDensity();
     const mainFloor = (city && city.floorAt) ? city.floorAt(712, 318) : 0.5;
     player.pos.set(712, mainFloor + EYE_HEIGHT, 318);
     player.yaw = 0; // facing north (-Z) towards Queens Quay & downtown
@@ -5470,7 +5533,7 @@ function teleportToRandomSubwayEntrance() {
   camera.rotation.x = -0.18;
   state.onIsland = false;
   state.isUnderground = false;
-  if (scene.fog) scene.fog.density = 0.0021;
+  if (scene.fog) scene.fog.density = getMainlandFogDensity();
 
   // Position the 6-car TTC Rocket train at this station platform with doors open so it's ready when you head downstairs
   if (city.subway.state && stIdx >= 0) {
@@ -5758,7 +5821,8 @@ function updateElevator(dt) {
     }
 
     const fogProg = Math.max(0, Math.min(1, (elevatorController.cabY - 2.0) / 340.0));
-    if (scene.fog) scene.fog.density = 0.0021 + (0.00065 - 0.0021) * fogProg;
+    const baseFog = getMainlandFogDensity();
+    if (scene.fog) scene.fog.density = baseFog + (0.00055 - baseFog) * fogProg;
 
     const altVal = document.getElementById('elev-alt-val');
     if (altVal) altVal.innerText = `${Math.round(elevatorController.cabY)} m`;
@@ -5801,7 +5865,7 @@ function arriveElevator() {
   elevatorController.state = stop.id;
   state.onObservationDeck = idx > 0;
   state.deckFloor = Math.max(1, idx);
-  if (scene.fog && idx === 0) scene.fog.density = 0.0021;
+  if (scene.fog && idx === 0) scene.fog.density = getMainlandFogDensity();
 }
 
 // Kept for older callers: floor under (x, z) given EYE height
@@ -7094,7 +7158,7 @@ window.addEventListener('keydown', (e) => {
       camera.rotation.y = -0.35;
       camera.rotation.x = 0;
       state.onIsland = false;
-      if (scene.fog) scene.fog.density = 0.0021;
+      if (scene.fog) scene.fog.density = getMainlandFogDensity();
       audio.playFerryHorn();
       showAnnouncement("🏙️ CHEAT: TELEPORTED TO MAINLAND FERRY DOCK (JACK LAYTON TERMINAL)!", 3200);
     } else if (dMainDock < 22) {
@@ -7123,7 +7187,7 @@ window.addEventListener('keydown', (e) => {
       camera.rotation.y = -0.35;
       camera.rotation.x = 0;
       state.onIsland = false;
-      if (scene.fog) scene.fog.density = 0.0021;
+      if (scene.fog) scene.fog.density = getMainlandFogDensity();
       audio.playFerryHorn();
       showAnnouncement("🚢 CHEAT: TELEPORTED TO MAINLAND FERRY DOCK (JACK LAYTON TERMINAL)!", 3200);
     }
@@ -7223,6 +7287,17 @@ window.addEventListener('keydown', (e) => {
       e.preventDefault();
       return;
     }
+  }
+
+  if (e.code === 'KeyY') {
+    e.preventDefault();
+    rallyToSquadMate();
+    return;
+  }
+  if (e.code === 'KeyT' && !e.shiftKey) {
+    e.preventDefault();
+    launchSquadFlare();
+    return;
   }
 
   if (e.code.startsWith('Digit') && !e.shiftKey) {
@@ -8653,14 +8728,17 @@ function animate(now) {
         });
       }
     });
-    // Remote Squad Players on Minimap Radar (bright light-yellow beacon dot)
+    // Remote Squad Players on Minimap Radar (distinct directional chevron + colored medallion)
     if (window.multiplayer && window.multiplayer.remotePlayers) {
       window.multiplayer.remotePlayers.forEach(rp => {
         dots.push({
           x: rp.currentPos.x,
           z: rp.currentPos.z,
-          c: '#fef08a',
-          r: 5.2
+          c: rp.colorHexStr || '#38bdf8',
+          r: 5.5,
+          isPlayer: true,
+          initial: rp.initial || (rp.name ? rp.name.charAt(0).toUpperCase() : 'P'),
+          yaw: rp.currentYaw || 0
         });
       });
     }
@@ -8684,6 +8762,7 @@ function animate(now) {
     } catch (e) {
       console.warn('drawMinimap error:', e);
     }
+    updateSquadTrackingHUD();
     updateNeighborhood();
 
     // 1. Distance & status to CN Tower (Peace Sanctuary)
@@ -9898,6 +9977,12 @@ function resetGame() {
   } else {
     player.pos.set(0, 1.7, 0);
   }
+  state.onIsland = false;
+  if (scene.fog) scene.fog.density = getMainlandFogDensity();
+  if (window.multiplayer && window.multiplayer.role === 'guest' && !window.multiplayer.friendlyFire) {
+    const host = window.multiplayer.remotePlayers.get(window.multiplayer.hostId) || window.multiplayer.remotePlayers.values().next().value;
+    if (host) syncSpawnNearHost(host);
+  }
   populateEnemies();
   spawnCrates();
   startNextMission();
@@ -9944,6 +10029,177 @@ document.querySelectorAll('.diff-btn').forEach(btn => {
   });
 });
 
+// ==================== MULTIPLAYER SQUAD COORDINATION & TRACKING ====================
+function findSafeSpotNear(tx, tz, baseY) {
+  const onIsl = !!(islands && islands.isInsideIslands && islands.isInsideIslands(tx, tz));
+  const checkFn = onIsl ? (x, z) => islands.canMoveTo(x, z, 0.5) : canMoveTo;
+  const radii = [4.0, 6.0, 2.5, 8.5, 11.0];
+  for (let ri = 0; ri < radii.length; ri++) {
+    const r = radii[ri];
+    for (let ai = 0; ai < 8; ai++) {
+      const a = ai * (Math.PI / 4) + ri * 0.35;
+      const cx = tx + Math.cos(a) * r;
+      const cz = tz + Math.sin(a) * r;
+      if (checkFn(cx, cz)) {
+        const floor = onIsl
+          ? (islands.floorAt ? islands.floorAt(cx, cz) : 0.55)
+          : ((city && city.floorAt) ? city.floorAt(cx, cz, baseY || 0) : 0);
+        return { x: cx, y: Math.max(floor, baseY || 0) + EYE_HEIGHT, z: cz, onIsland: onIsl };
+      }
+    }
+  }
+  return { x: tx + 3.0, y: (baseY || 0) + EYE_HEIGHT, z: tz + 3.0, onIsland: onIsl };
+}
+
+function syncSpawnNearHost(hostPlayer) {
+  if (!hostPlayer || !hostPlayer.currentPos) return false;
+  if (state.onFerry || state.onPlane || state.inElevator || state.onStreetcar) return false;
+  const spot = findSafeSpotNear(hostPlayer.currentPos.x, hostPlayer.currentPos.z, hostPlayer.currentPos.y || 0);
+  player.pos.set(spot.x, spot.y, spot.z);
+  player.velocity.set(0, 0, 0);
+  player.isGrounded = true;
+  state.onIsland = spot.onIsland;
+  state.isUnderground = spot.y < -4;
+  if (scene.fog) scene.fog.density = spot.onIsland ? 0.00065 : getMainlandFogDensity();
+  const faceYaw = Math.atan2(player.pos.x - hostPlayer.currentPos.x, player.pos.z - hostPlayer.currentPos.z);
+  player.yaw = faceYaw;
+  camera.rotation.order = 'YXZ';
+  camera.rotation.y = faceYaw;
+  if (spot.onIsland) populateCentreIslandCitizens();
+  if (typeof showAnnouncement === 'function') {
+    showAnnouncement(`🤝 SPAWNED BESIDE ${String(hostPlayer.name || 'SQUADMATE').toUpperCase()}!`, 2400);
+  }
+  return true;
+}
+
+function rallyToSquadMate() {
+  const mp = window.multiplayer;
+  if (!mp || !mp.remotePlayers || mp.remotePlayers.size === 0) {
+    showAnnouncement('🌐 NO ONLINE SQUADMATES IN ROOM TO RALLY TO', 1800);
+    return false;
+  }
+  if (mp.friendlyFire) {
+    showAnnouncement('⚔️ RALLY DISABLED DURING ARENA BRAWL (PVP) DUELS!', 2000);
+    return false;
+  }
+  if (state.onFerry || state.onPlane || state.inElevator || state.onStreetcar) {
+    showAnnouncement('🚫 EXIT VEHICLE / ELEVATOR BEFORE USING SQUAD RALLY!', 1800);
+    return false;
+  }
+  let target = null, bestDist = Infinity;
+  mp.remotePlayers.forEach(rp => {
+    if (rp.health <= 0) return;
+    const d = Math.hypot(rp.currentPos.x - player.pos.x, rp.currentPos.z - player.pos.z);
+    if (d < bestDist) { bestDist = d; target = rp; }
+  });
+  if (!target) {
+    showAnnouncement('⌛ SQUADMATE CURRENTLY KO’D — WAIT FOR RESPAWN', 1800);
+    return false;
+  }
+  const spot = findSafeSpotNear(target.currentPos.x, target.currentPos.z, target.currentPos.y || 0);
+  player.pos.set(spot.x, spot.y, spot.z);
+  player.velocity.set(0, 0, 0);
+  player.isGrounded = true;
+  state.onIsland = spot.onIsland;
+  state.isUnderground = spot.y < -4;
+  if (scene.fog) scene.fog.density = spot.onIsland ? 0.00065 : getMainlandFogDensity();
+  const faceYaw = Math.atan2(player.pos.x - target.currentPos.x, player.pos.z - target.currentPos.z);
+  player.yaw = faceYaw;
+  camera.rotation.order = 'YXZ';
+  camera.rotation.y = faceYaw;
+  if (audio && audio.playPickup) audio.playPickup();
+  spawnDebris(player.pos.x, player.pos.y - 0.5, player.pos.z, 0x38bdf8, 16, 6);
+  showAnnouncement(`⚡ RALLIED TO ${String(target.name || 'SQUADMATE').toUpperCase()}!`, 2200);
+  return true;
+}
+
+function launchSquadFlare() {
+  const mp = window.multiplayer;
+  if (mp && mp.sendFlare) {
+    mp.sendFlare();
+    if (audio && audio.playPickup) audio.playPickup();
+    showAnnouncement('🔥 SQUAD SIGNAL FLARE LAUNCHED SKYWARD!', 1800);
+    return true;
+  }
+  return false;
+}
+
+function updateSquadTrackingHUD() {
+  if (typeof document === 'undefined' || !document.getElementById) return;
+  const hud = document.getElementById('squad-hud');
+  const rosterEl = document.getElementById('squad-roster-list');
+  const pinsLayer = document.getElementById('squad-pins-layer');
+  const mp = window.multiplayer;
+  const squad = (mp && mp.squadSummary) ? mp.squadSummary() : [];
+
+  if (!squad.length || !state.inGame) {
+    if (hud && !hud.classList.contains('hidden')) hud.classList.add('hidden');
+    if (pinsLayer && pinsLayer.innerHTML) pinsLayer.innerHTML = '';
+    return;
+  }
+  if (hud && hud.classList.contains('hidden')) hud.classList.remove('hidden');
+
+  const W = window.innerWidth || 1280;
+  const H = window.innerHeight || 720;
+  const cy = Math.cos(player.yaw), sy = Math.sin(player.yaw);
+  const cp = Math.cos(player.pitch), sp = Math.sin(player.pitch);
+  // Camera orthonormal basis (right, up, forward = -Z rotated by yaw/pitch)
+  const rx = cy, ry = 0, rz = -sy;
+  const fx = -sy * cp, fy = sp, fz = -cy * cp;
+  const ux = sy * sp, uy = cp, uz = cy * sp;
+  const tanHalfY = Math.tan(((camera.fov || 70) * Math.PI / 180) * 0.5);
+  const tanHalfX = tanHalfY * (camera.aspect || (W / Math.max(1, H)));
+
+  let rosterHTML = '';
+  let pinsHTML = '';
+  for (let i = 0; i < squad.length; i++) {
+    const m = squad[i];
+    const dist = Math.round(Math.hypot(m.x - player.pos.x, m.z - player.pos.z));
+    const safeName = String(m.name || 'DEFENDER').replace(/[<>&"]/g, '');
+    const col = m.colorHex || '#38bdf8';
+    rosterHTML += `<div class="squad-member-row"><span class="squad-member-dot" style="background:${col}"></span><span class="squad-member-name">${safeName}${m.isHost ? ' 👑' : ''}</span><span class="squad-member-dist">${dist}m</span></div>`;
+
+    if (m.health <= 0 || !pinsLayer) continue;
+    // Project point above squadmate's helmet cleanly using camera basis
+    const dx = m.x - camera.position.x;
+    const dy = (m.y + 2.75) - camera.position.y;
+    const dz = m.z - camera.position.z;
+    const camX = dx * rx + dy * ry + dz * rz;
+    const camY = dx * ux + dy * uy + dz * uz;
+    const camZ = dx * fx + dy * fy + dz * fz;
+
+    let sx, sy2, offScreen = false;
+    if (camZ > 0.35) {
+      const ndcX = (camX / camZ) / tanHalfX;
+      const ndcY = (camY / camZ) / tanHalfY;
+      sx = (0.5 + 0.5 * ndcX) * W;
+      sy2 = (0.5 - 0.5 * ndcY) * H;
+      if (sx < 56 || sx > W - 56 || sy2 < 68 || sy2 > H - 72) offScreen = true;
+    } else {
+      offScreen = true;
+      sx = W * 0.5 + camX * 1000;
+      sy2 = H * 0.5 - camY * 1000;
+    }
+
+    if (offScreen) {
+      const vx = (camZ > 0.35 ? (sx - W * 0.5) : camX);
+      const vy = (camZ > 0.35 ? (sy2 - H * 0.5) : -camY);
+      const vLen = Math.hypot(vx, vy) || 1;
+      const nx = vx / vLen, ny = vy / vLen;
+      const halfW = W * 0.5 - 64, halfH = H * 0.5 - 78;
+      const tScale = Math.min(halfW / Math.max(0.01, Math.abs(nx)), halfH / Math.max(0.01, Math.abs(ny)));
+      const edgeX = Math.round(W * 0.5 + nx * tScale);
+      const edgeY = Math.round(H * 0.5 + ny * tScale);
+      const deg = Math.round(Math.atan2(ny, nx) * 180 / Math.PI) + 90;
+      pinsHTML += `<div class="squad-hud-pin offscreen" style="left:${edgeX}px;top:${edgeY}px;border-color:${col};"><span class="squad-pin-arrow" style="color:${col};transform:rotate(${deg}deg)">▲</span><span>${safeName}</span><span style="color:${col}">${dist}m</span></div>`;
+    } else if (dist >= 12) {
+      pinsHTML += `<div class="squad-hud-pin" style="left:${Math.round(sx)}px;top:${Math.round(sy2)}px;border-color:${col};"><span style="color:${col}">◆</span><span>${safeName}</span><span style="color:#93c5fd">${dist}m</span></div>`;
+    }
+  }
+  if (rosterEl) rosterEl.innerHTML = rosterHTML;
+  if (pinsLayer) pinsLayer.innerHTML = pinsHTML;
+}
+
 // Global exports for multiplayer & UI
 window.showAnnouncement = showAnnouncement;
 window.triggerDamageFlash = triggerDamageFlash;
@@ -9955,6 +10211,11 @@ window.spawnDebris = spawnDebris;
 window.pauseGame = pauseGame;
 window.resumeGame = resumeGame;
 window.resetGame = resetGame;
+window.setCityTimeOfDay = setCityTimeOfDay;
+window.getCityTimeOfDay = getCityTimeOfDay;
+window.syncSpawnNearHost = syncSpawnNearHost;
+window.rallyToSquadMate = rallyToSquadMate;
+window.launchSquadFlare = launchSquadFlare;
 window.gameState = state;
 window.gamePlayer = player;
 window.audio = audio;

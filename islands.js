@@ -4825,6 +4825,47 @@
 
       (dots || []).forEach(d => {
         const [a, b] = toM(d.x, d.z);
+        if (d.isPlayer) {
+          const dx = a - size / 2, dy = b - size / 2;
+          const distPx = Math.hypot(dx, dy);
+          const radLim = size / 2 - 12;
+          const off = distPx > radLim;
+          const px = off ? (size / 2 + (dx / distPx) * radLim) : a;
+          const py = off ? (size / 2 + (dy / distPx) * radLim) : b;
+          const col = d.c || '#38bdf8';
+          const ang = off ? (Math.atan2(dy, dx) + Math.PI / 2) : (-(d.yaw || 0));
+
+          ctx.save();
+          ctx.translate(px, py);
+          ctx.rotate(ang);
+          ctx.fillStyle = col;
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1.6;
+          ctx.beginPath();
+          ctx.moveTo(0, -10);
+          ctx.lineTo(-5.5, -2);
+          ctx.lineTo(5.5, -2);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+
+          ctx.save();
+          ctx.translate(px, py);
+          ctx.beginPath();
+          ctx.arc(0, 0, 6.2, 0, Math.PI * 2);
+          ctx.fillStyle = col;
+          ctx.fill();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1.8;
+          ctx.stroke();
+          ctx.fillStyle = '#0f172a';
+          ctx.font = 'bold 8px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText((d.initial || 'P'), 0, 3);
+          ctx.restore();
+          return;
+        }
         if (a < 0 || b < 0 || a > size || b > size) return;
         ctx.fillStyle = d.c || '#ef4444';
         ctx.beginPath();
@@ -4850,6 +4891,17 @@
       ctx.strokeRect(1, 1, size - 2, size - 2);
     }
 
+    function setTimeOfDay(isDay) {
+      if (waterMat && waterMat.color) {
+        if (typeof waterMat.color.setHex === 'function') waterMat.color.setHex(isDay ? 0x268bbd : 0x145374);
+        waterMat.roughness = isDay ? 0.14 : 0.12;
+        waterMat.envMapIntensity = isDay ? 1.15 : 0.85;
+      }
+      if (lampGlowMat && lampGlowMat.color && typeof lampGlowMat.color.setHex === 'function') {
+        lampGlowMat.color.setHex(isDay ? 0xdbeafe : 0xffd58a);
+      }
+    }
+
     return {
       group: islandsGroup,
       Z_BASE,
@@ -4861,6 +4913,7 @@
       nearPath,
       flowerBeds,
       flightPlane,
+      setTimeOfDay,
       lighthouse: {
         x: -480,
         z: Z(320),

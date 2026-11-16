@@ -16,14 +16,14 @@
   const LOCAL_DEFAULT_URL = 'ws://localhost:8080/ws';
 
   const PLAYER_COLORS = [
-    0xef4444, // red
+    0xef4444, // crimson
     0x00f0ff, // cyan
     0xf59e0b, // amber
     0x10b981, // emerald
     0xc026d3, // purple
     0xf43f5e, // rose
-    0x38bdf8, // sky
-    0xffffff  // white
+    0x38bdf8, // azure
+    0xfacc15  // gold
   ];
 
   function isCloudServerUrl(url) {
@@ -168,228 +168,253 @@
     return name;
   }
 
-  // --- 3D Hero Avatar Builder for Remote Players ---
+  // --- 3D Hero Avatar Builder for Remote Players (Toronto Defender Exo-Fighter) ---
   function createRemoteHeroRig(name, colorHex) {
     const root = new THREE.Group();
     const color = colorHex || 0xef4444;
-    const glowColor = 0xfef08a; // Warm light-yellow squad glow
+    const hexStr = '#' + (color.toString(16).padStart(6, '0'));
+    const cObj = new THREE.Color(color);
 
-    const skinMat = new THREE.MeshStandardMaterial({ color: 0xdfad7b, roughness: 0.55, metalness: 0.05, emissive: glowColor, emissiveIntensity: 0.28 });
-    const vestMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.4, metalness: 0.25, emissive: glowColor, emissiveIntensity: 0.35 });
-    const pantsMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.5, metalness: 0.1, emissive: glowColor, emissiveIntensity: 0.25 });
-    const wrapMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.35, metalness: 0.5, emissive: glowColor, emissiveIntensity: 0.4 });
-    const bootMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.6, metalness: 0.2, emissive: glowColor, emissiveIntensity: 0.22 });
-    const hairMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.85, metalness: 0.0, emissive: glowColor, emissiveIntensity: 0.18 });
-    const flashableMaterials = [skinMat, vestMat, pantsMat, wrapMat, bootMat];
+    const skinMat = new THREE.MeshStandardMaterial({ color: 0xe2b180, roughness: 0.52, metalness: 0.05 });
+    const armorDarkMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.42, metalness: 0.55 });
+    const vestMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.34, metalness: 0.42, emissive: color, emissiveIntensity: 0.28 });
+    const pantsMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.5, metalness: 0.25 });
+    const wrapMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.25, metalness: 0.55, emissive: color, emissiveIntensity: 0.55 });
+    const bootMat = new THREE.MeshStandardMaterial({ color: 0x090d16, roughness: 0.5, metalness: 0.4 });
+    const visorMat = new THREE.MeshBasicMaterial({ color: color, toneMapped: false });
+    const emblemMat = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
+    const capeMat = new THREE.MeshStandardMaterial({ color: color, emissive: color, emissiveIntensity: 0.22, roughness: 0.6, side: THREE.DoubleSide });
+    const capeTrimMat = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false, side: THREE.DoubleSide });
+    const flashableMaterials = [vestMat, wrapMat, capeMat];
 
-    // --- Large, High-Visibility Light-Yellow Squad Glow (Much Larger Than Player) ---
-    // 1. Large 3D outer light-yellow aura sphere surrounding the player (~4m wide x 5m tall)
-    const auraMat = new THREE.MeshBasicMaterial({
-      color: 0xfef08a,
+    // 1. Crisp Signature Ground Tactical Ring + Facing Arrow Chevron (high contrast day & night)
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: color,
       transparent: true,
-      opacity: 0.38,
-      blending: THREE.AdditiveBlending,
+      opacity: 0.78,
       side: THREE.DoubleSide,
       depthWrite: false
     });
-    const auraShell = new THREE.Mesh(new THREE.SphereGeometry(1.75, 24, 18), auraMat);
-    auraShell.scale.set(1.1, 1.4, 1.1);
-    auraShell.position.set(0, 1.35, 0);
-    root.add(auraShell);
+    const groundRing = new THREE.Mesh(new THREE.RingGeometry(0.92, 1.32, 32), ringMat);
+    groundRing.rotation.x = -Math.PI / 2;
+    groundRing.position.set(0, 0.06, 0);
+    root.add(groundRing);
 
-    // 2. Large radiant light-yellow billboard halo sprite (5.5m across, visible through obstacles)
+    const dirChevron = new THREE.Mesh(
+      new THREE.ConeGeometry(0.42, 0.72, 3),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0.92 })
+    );
+    dirChevron.rotation.x = Math.PI / 2;
+    dirChevron.position.set(0, 0.08, 1.55);
+    root.add(dirChevron);
+
+    // 2. Signature-colored X-Ray Silhouette Sprite (visible behind light poles/trees/crowds)
     const glowCanvas = document.createElement('canvas');
     glowCanvas.width = 256;
     glowCanvas.height = 256;
     const gCtx = glowCanvas.getContext('2d');
-    const grad = gCtx.createRadialGradient(128, 128, 10, 128, 128, 126);
-    grad.addColorStop(0.0, 'rgba(255, 255, 210, 0.95)');
-    grad.addColorStop(0.28, 'rgba(254, 240, 138, 0.75)');
-    grad.addColorStop(0.62, 'rgba(253, 224, 71, 0.38)');
-    grad.addColorStop(1.0, 'rgba(254, 240, 138, 0.0)');
+    const grad = gCtx.createRadialGradient(128, 128, 12, 128, 128, 124);
+    const rC = Math.round((cObj.r !== undefined ? cObj.r : 0.9) * 255);
+    const gC = Math.round((cObj.g !== undefined ? cObj.g : 0.3) * 255);
+    const bC = Math.round((cObj.b !== undefined ? cObj.b : 0.3) * 255);
+    grad.addColorStop(0.0, `rgba(255, 255, 255, 0.75)`);
+    grad.addColorStop(0.26, `rgba(${rC}, ${gC}, ${bC}, 0.58)`);
+    grad.addColorStop(0.62, `rgba(${rC}, ${gC}, ${bC}, 0.22)`);
+    grad.addColorStop(1.0, `rgba(${rC}, ${gC}, ${bC}, 0.0)`);
     gCtx.fillStyle = grad;
     gCtx.fillRect(0, 0, 256, 256);
     const glowTex = new THREE.CanvasTexture(glowCanvas);
     const xrayGlowMat = new THREE.SpriteMaterial({
       map: glowTex,
-      color: 0xfef08a,
+      color: 0xffffff,
       transparent: true,
-      opacity: 0.75,
+      opacity: 0.45,
       blending: THREE.AdditiveBlending,
       depthTest: false,
       depthWrite: false
     });
     const xrayGlow = new THREE.Sprite(xrayGlowMat);
-    xrayGlow.scale.set(5.6, 5.6, 1);
-    xrayGlow.position.set(0, 1.25, 0);
+    xrayGlow.scale.set(3.2, 3.2, 1);
+    xrayGlow.position.set(0, 1.35, 0);
     xrayGlow.renderOrder = 998;
     root.add(xrayGlow);
 
-    // 3. Large light-yellow ground halo ring & disc beneath feet (~4.6m diameter)
-    const ringMat = new THREE.MeshBasicMaterial({
-      color: 0xfde047,
-      transparent: true,
-      opacity: 0.65,
-      blending: THREE.AdditiveBlending,
-      side: THREE.DoubleSide,
-      depthWrite: false
-    });
-    const groundRing = new THREE.Mesh(new THREE.RingGeometry(0.35, 2.3, 36), ringMat);
-    groundRing.rotation.x = -Math.PI / 2;
-    groundRing.position.set(0, 0.05, 0);
-    root.add(groundRing);
-
-    // 4. Wide vertical light-yellow sky beacon pillar rising 35m above the player
+    // 3. Distance-Adaptive High-Altitude Sky Beacon (65m beam + spinning Sky Holo-Diamond)
     const pillarMat = new THREE.MeshBasicMaterial({
-      color: 0xfef08a,
+      color: color,
       transparent: true,
-      opacity: 0.34,
-      blending: THREE.AdditiveBlending,
+      opacity: 0.14,
       side: THREE.DoubleSide,
       depthWrite: false
     });
-    const beaconPillar = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 1.45, 35.0, 20, 1, true), pillarMat);
-    beaconPillar.position.set(0, 17.5, 0);
+    const beaconPillar = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.75, 62.0, 16, 1, true), pillarMat);
+    beaconPillar.position.set(0, 32.5, 0);
     root.add(beaconPillar);
 
-    // 5. Strong warm light-yellow point light illuminating a wide area around the player
-    const glowLight = new THREE.PointLight(0xfef08a, 2.6, 18.0);
-    glowLight.position.set(0, 2.0, 0);
+    const skyDiamondMat = new THREE.MeshBasicMaterial({ color: color, toneMapped: false, wireframe: false });
+    const skyDiamond = new THREE.Mesh(new THREE.IcosahedronGeometry(0.95, 0), skyDiamondMat);
+    skyDiamond.position.set(0, 18.0, 0);
+    root.add(skyDiamond);
+
+    const glowLight = new THREE.PointLight(color, 1.4, 14.0);
+    glowLight.position.set(0, 2.1, 0);
     root.add(glowLight);
 
-    // Pelvis
+    // Pelvis & Utility Belt
     const pelvis = new THREE.Group();
-    pelvis.position.set(0, 0.9, 0);
+    pelvis.position.set(0, 0.92, 0);
     root.add(pelvis);
-    const hips = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.22, 0.3), pantsMat);
+    const hips = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.24, 0.32), pantsMat);
     hips.castShadow = true;
     pelvis.add(hips);
-    const belt = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.07, 0.32), new THREE.MeshStandardMaterial({ color: 0x09090b, metalness: 0.6 }));
-    belt.position.set(0, 0.08, 0);
+    const belt = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.08, 0.35), armorDarkMat);
+    belt.position.set(0, 0.09, 0);
     pelvis.add(belt);
+    const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.09, 0.04), visorMat);
+    buckle.position.set(0, 0.09, 0.175);
+    pelvis.add(buckle);
 
-    // Legs
+    // Armored Legs + Glowing Knee Pads
     const leftLeg = new THREE.Group();
-    leftLeg.position.set(-0.16, 0.82, 0);
+    leftLeg.position.set(-0.17, 0.84, 0);
     root.add(leftLeg);
-    const lThigh = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.42, 0.2), pantsMat);
+    const lThigh = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.42, 0.22), pantsMat);
     lThigh.position.set(0, -0.2, 0); lThigh.castShadow = true; leftLeg.add(lThigh);
     const lCalfPivot = new THREE.Group();
     lCalfPivot.position.set(0, -0.4, 0); leftLeg.add(lCalfPivot);
-    const lCalf = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.4, 0.18), pantsMat);
+    const lCalf = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.4, 0.20), armorDarkMat);
     lCalf.position.set(0, -0.2, 0); lCalf.castShadow = true; lCalfPivot.add(lCalf);
-    const lBoot = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.16, 0.26), bootMat);
+    const lBoot = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.18, 0.28), bootMat);
     lBoot.position.set(0, -0.38, 0.04); lBoot.castShadow = true; lCalfPivot.add(lBoot);
 
     const rightLeg = new THREE.Group();
-    rightLeg.position.set(0.16, 0.82, 0);
+    rightLeg.position.set(0.17, 0.84, 0);
     root.add(rightLeg);
-    const rThigh = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.42, 0.2), pantsMat);
+    const rThigh = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.42, 0.22), pantsMat);
     rThigh.position.set(0, -0.2, 0); rThigh.castShadow = true; rightLeg.add(rThigh);
     const rCalfPivot = new THREE.Group();
     rCalfPivot.position.set(0, -0.4, 0); rightLeg.add(rCalfPivot);
-    const rCalf = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.4, 0.18), pantsMat);
+    const rCalf = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.4, 0.20), armorDarkMat);
     rCalf.position.set(0, -0.2, 0); rCalf.castShadow = true; rCalfPivot.add(rCalf);
-    const rBoot = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.16, 0.26), bootMat);
+    const rBoot = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.18, 0.28), bootMat);
     rBoot.position.set(0, -0.38, 0.04); rBoot.castShadow = true; rCalfPivot.add(rBoot);
 
-    // Torso
+    // Broad Hero Torso + Glowing Chest Core Emblem + Flowing Cape
     const torso = new THREE.Group();
-    torso.position.set(0, 0.98, 0);
+    torso.position.set(0, 1.00, 0);
     root.add(torso);
-    const chest = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.54, 0.32), vestMat);
-    chest.position.set(0, 0.27, 0); chest.castShadow = true; torso.add(chest);
+    const chest = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.56, 0.34), armorDarkMat);
+    chest.position.set(0, 0.28, 0); chest.castShadow = true; torso.add(chest);
+    const chestPlate = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.38, 0.37), vestMat);
+    chestPlate.position.set(0, 0.34, 0.01); torso.add(chestPlate);
+    const chestCore = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.04), emblemMat);
+    chestCore.rotation.z = Math.PI / 4;
+    chestCore.position.set(0, 0.36, 0.195); torso.add(chestCore);
 
-    // Head
+    // Flowing Hero Cape (rotates backwards dynamically during motion!)
+    const capePivot = new THREE.Group();
+    capePivot.position.set(0, 0.54, -0.17);
+    torso.add(capePivot);
+    const capeBody = new THREE.Mesh(new THREE.BoxGeometry(0.66, 1.15, 0.04), capeMat);
+    capeBody.position.set(0, -0.58, -0.02);
+    capeBody.castShadow = true;
+    capePivot.add(capeBody);
+    const capeStripe = new THREE.Mesh(new THREE.BoxGeometry(0.18, 1.12, 0.048), capeTrimMat);
+    capeStripe.position.set(0, -0.58, -0.025);
+    capePivot.add(capeStripe);
+
+    // Aerodynamic Visor Helmet + Wing Fins
     const headPivot = new THREE.Group();
-    headPivot.position.set(0, 0.68, 0);
+    headPivot.position.set(0, 0.66, 0);
     torso.add(headPivot);
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.32, 0.28), skinMat);
-    head.position.set(0, 0.16, 0); head.castShadow = true; headPivot.add(head);
-
-    // Eyes
-    const eyeWhite = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    const eyePupil = new THREE.MeshBasicMaterial({ color: 0x0284c7 });
-    [-0.07, 0.07].forEach(ex => {
-      const ew = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.02), eyeWhite);
-      ew.position.set(ex, 0.18, 0.142); headPivot.add(ew);
-      const ep = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.04, 0.022), eyePupil);
-      ep.position.set(ex, 0.18, 0.144); headPivot.add(ep);
+    const helmet = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.34, 0.33), armorDarkMat);
+    helmet.position.set(0, 0.18, 0); helmet.castShadow = true; headPivot.add(helmet);
+    const crestStripe = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.37, 0.36), wrapMat);
+    crestStripe.position.set(0, 0.20, -0.01); headPivot.add(crestStripe);
+    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.09, 0.05), visorMat);
+    visor.position.set(0, 0.19, 0.16); headPivot.add(visor);
+    const jawPlate = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.10, 0.04), skinMat);
+    jawPlate.position.set(0, 0.08, 0.15); headPivot.add(jawPlate);
+    [-1, 1].forEach(side => {
+      const wing = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.16, 0.20), wrapMat);
+      wing.position.set(side * 0.18, 0.26, -0.06);
+      wing.rotation.x = 0.45;
+      wing.rotation.z = side * -0.22;
+      headPivot.add(wing);
     });
-    // Hair cap
-    const buzz = new THREE.Mesh(new THREE.BoxGeometry(0.29, 0.08, 0.29), hairMat);
-    buzz.position.set(0, 0.32, 0); headPivot.add(buzz);
 
-    // Arms
+    // Armored Shoulder Pauldrons & Oversized Brawler Gauntlets
     const lArmPivot = new THREE.Group();
-    lArmPivot.position.set(-0.35, 0.48, 0); torso.add(lArmPivot);
-    const lBicep = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.3, 0.16), skinMat);
-    lBicep.position.set(0, -0.15, 0); lArmPivot.add(lBicep);
+    lArmPivot.position.set(-0.39, 0.50, 0); torso.add(lArmPivot);
+    const lPauldron = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.18, 0.26), vestMat);
+    lPauldron.position.set(-0.02, -0.02, 0); lArmPivot.add(lPauldron);
+    const lBicep = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.28, 0.17), armorDarkMat);
+    lBicep.position.set(0, -0.16, 0); lArmPivot.add(lBicep);
     const lForearm = new THREE.Group();
-    lForearm.position.set(0, -0.3, 0); lArmPivot.add(lForearm);
-    const lLower = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.28, 0.15), skinMat);
-    lLower.position.set(0, -0.14, 0); lForearm.add(lLower);
-    const lFist = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.2), wrapMat);
-    lFist.position.set(0, -0.3, 0.02); lForearm.add(lFist);
+    lForearm.position.set(0, -0.30, 0); lArmPivot.add(lForearm);
+    const lLower = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.24, 0.18), armorDarkMat);
+    lLower.position.set(0, -0.12, 0); lForearm.add(lLower);
+    const lFist = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.23, 0.26), wrapMat);
+    lFist.position.set(0, -0.28, 0.02); lForearm.add(lFist);
 
     const rArmPivot = new THREE.Group();
-    rArmPivot.position.set(0.35, 0.48, 0); torso.add(rArmPivot);
-    const rBicep = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.3, 0.16), skinMat);
-    rBicep.position.set(0, -0.15, 0); rArmPivot.add(rBicep);
+    rArmPivot.position.set(0.39, 0.50, 0); torso.add(rArmPivot);
+    const rPauldron = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.18, 0.26), vestMat);
+    rPauldron.position.set(0.02, -0.02, 0); rArmPivot.add(rPauldron);
+    const rBicep = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.28, 0.17), armorDarkMat);
+    rBicep.position.set(0, -0.16, 0); rArmPivot.add(rBicep);
     const rForearm = new THREE.Group();
-    rForearm.position.set(0, -0.3, 0); rArmPivot.add(rForearm);
-    const rLower = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.28, 0.15), skinMat);
-    rLower.position.set(0, -0.14, 0); rForearm.add(rLower);
-    const rFist = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.2), wrapMat);
-    rFist.position.set(0, -0.3, 0.02); rForearm.add(rFist);
+    rForearm.position.set(0, -0.30, 0); rArmPivot.add(rForearm);
+    const rLower = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.24, 0.18), armorDarkMat);
+    rLower.position.set(0, -0.12, 0); rForearm.add(rLower);
+    const rFist = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.23, 0.26), wrapMat);
+    rFist.position.set(0, -0.28, 0.02); rForearm.add(rFist);
 
-    // Canadian Hockey Stick for Berserk Mode (hidden by default)
+    // Canadian Hockey Stick for Berserk Mode
     const stickMesh = new THREE.Mesh(
-      new THREE.BoxGeometry(0.04, 0.95, 0.03),
+      new THREE.BoxGeometry(0.04, 1.05, 0.03),
       new THREE.MeshStandardMaterial({ color: 0xd90429, roughness: 0.4 })
     );
-    stickMesh.position.set(0.08, -0.1, 0.15);
+    stickMesh.position.set(0.08, -0.1, 0.16);
     stickMesh.rotation.set(-0.4, 0.2, -0.3);
     stickMesh.visible = false;
     rForearm.add(stickMesh);
 
-    // 3D Billboard Nameplate & Live Health Bar
+    // 3D High-Contrast Billboard Nameplate & Health Bar
     const npCanvas = document.createElement('canvas');
-    npCanvas.width = 256; npCanvas.height = 72;
+    npCanvas.width = 256; npCanvas.height = 76;
     const npCtx = npCanvas.getContext('2d');
     const npTex = new THREE.CanvasTexture(npCanvas);
     npTex.minFilter = THREE.LinearFilter;
     const npMat = new THREE.SpriteMaterial({ map: npTex, depthTest: false, transparent: true });
     const nameplate = new THREE.Sprite(npMat);
-    nameplate.scale.set(1.9, 0.54, 1);
-    nameplate.position.set(0, 2.2, 0);
+    nameplate.scale.set(2.0, 0.60, 1);
+    nameplate.position.set(0, 2.38, 0);
     root.add(nameplate);
 
     function updateNameplate(playerName, hp = 100, isBerserk = false, distMeters = null) {
-      npCtx.clearRect(0, 0, 256, 72);
-      npCtx.fillStyle = 'rgba(10, 15, 24, 0.92)';
+      npCtx.clearRect(0, 0, 256, 76);
+      npCtx.fillStyle = 'rgba(8, 12, 22, 0.94)';
       if (npCtx.roundRect) {
         npCtx.beginPath();
-        npCtx.roundRect(6, 6, 244, 60, 8);
+        npCtx.roundRect(6, 6, 244, 64, 10);
         npCtx.fill();
       } else {
-        npCtx.fillRect(6, 6, 244, 60);
+        npCtx.fillRect(6, 6, 244, 64);
       }
 
-      const hexStr = '#' + (color.toString(16).padStart(6, '0'));
-      npCtx.strokeStyle = isBerserk ? '#ff0033' : '#fef08a';
-      npCtx.lineWidth = 4.0;
+      npCtx.strokeStyle = isBerserk ? '#ff1e42' : hexStr;
+      npCtx.lineWidth = 4.5;
       npCtx.stroke();
 
       npCtx.font = 'bold 19px "Chakra Petch", Arial, sans-serif';
-      npCtx.fillStyle = isBerserk ? '#ff3b4a' : '#fef08a';
+      npCtx.fillStyle = isBerserk ? '#ff4757' : '#ffffff';
       npCtx.textAlign = 'center';
       const distSuffix = (distMeters !== null && distMeters >= 5) ? ` (${distMeters}m)` : '';
-      const label = (isBerserk ? '🍁 ' : '⭐ ') + playerName.toUpperCase() + distSuffix;
-      npCtx.fillText(label, 128, 30);
+      const label = (isBerserk ? '🍁 ' : '◆ ') + String(playerName || 'DEFENDER').toUpperCase() + distSuffix;
+      npCtx.fillText(label, 128, 31);
 
-      // Health bar
-      const barX = 18, barY = 40, barW = 220, barH = 14;
+      const barX = 18, barY = 42, barW = 220, barH = 14;
       npCtx.fillStyle = '#0a0a0c';
       npCtx.fillRect(barX, barY, barW, barH);
       const fillW = Math.max(0, Math.min(1, hp / 100)) * barW;
@@ -402,14 +427,15 @@
 
     return {
       root,
+      colorHexStr: hexStr,
       leftLeg, lCalfPivot,
       rightLeg, rCalfPivot,
       torso, headPivot,
+      capePivot, skyDiamond,
       lArmPivot, lForearm,
       rArmPivot, rForearm,
       stickMesh,
       nameplate,
-      auraShell, auraMat,
       xrayGlow, xrayGlowMat,
       groundRing, ringMat,
       beaconPillar, pillarMat,
@@ -451,6 +477,8 @@
       this.reconnectTimer = null;
       this.reconnectAttempts = 0;
       this.friendlyFire = false;     // ROOM setting
+      this.hasSyncedInitialSpawn = false;
+      this.activeFlares = [];
       window.addEventListener('beforeunload', () => {
         if (this.connected && this.cloudMode) {
           this.sendRawCloud({ type: 'player_left', id: this.localId, name: this.localName });
@@ -709,12 +737,70 @@
     }
 
     sendCloudHello(isInitial) {
+      const tod = (this.role !== 'guest' && window.getCityTimeOfDay) ? window.getCityTimeOfDay() : undefined;
       this.sendRawCloud({
         type: isInitial ? 'peer_hello' : 'peer_announce',
         player: this.myPlayerInfo(),
         joinedAt: this.joinedAt,
-        pvp: this.friendlyFire
+        pvp: this.friendlyFire,
+        tod
       });
+    }
+
+    sendTimeOfDay(tod) {
+      if (this.connected) this.send({ type: 'set_tod', tod, by: this.localName });
+    }
+
+    sendFlare() {
+      const p = this.localPlayer;
+      if (!p) return false;
+      this.spawnFlareVisual(p.pos.x, Math.max(0, p.pos.y - 1.7), p.pos.z, this.localColor, this.localName);
+      if (this.connected) {
+        this.send({
+          type: 'flare',
+          x: Number(p.pos.x.toFixed(1)),
+          y: Number(Math.max(0, p.pos.y - 1.7).toFixed(1)),
+          z: Number(p.pos.z.toFixed(1)),
+          color: this.localColor,
+          senderName: this.localName
+        });
+      }
+      return true;
+    }
+
+    spawnFlareVisual(x, y, z, colorHex, who) {
+      if (!this.scene) return;
+      const col = colorHex || 0x38bdf8;
+      const grp = new THREE.Group();
+      grp.position.set(x, y, z);
+
+      const beam = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.18, 0.95, 110, 12, 1, true),
+        new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false, fog: false })
+      );
+      beam.position.set(0, 55, 0);
+      grp.add(beam);
+
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(0.6, 1.4, 28),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false })
+      );
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(0, 0.25, 0);
+      grp.add(ring);
+
+      const orb = new THREE.Mesh(
+        new THREE.SphereGeometry(0.85, 12, 10),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, fog: false })
+      );
+      orb.position.set(0, 2.5, 0);
+      grp.add(orb);
+
+      this.scene.add(grp);
+      this.activeFlares.push({ grp, beam, ring, orb, age: 0, maxAge: 5.5 });
+      if (who && who !== this.localName && window.showAnnouncement) {
+        window.showAnnouncement(`🔥 ${String(who).toUpperCase()} FIRED A SQUAD FLARE!`, 2400);
+      }
     }
 
     onCloudInterval() {
@@ -786,10 +872,26 @@
           }
         }
         this.recomputeCloudHost();
-        if (p.id === this.hostId && msg.pvp !== undefined && isNew) {
-          this.applyMode(!!msg.pvp, null);
+        if (p.id === this.hostId) {
+          if (msg.pvp !== undefined && isNew) this.applyMode(!!msg.pvp, null);
+          if (msg.tod && window.setCityTimeOfDay && window.getCityTimeOfDay && msg.tod !== window.getCityTimeOfDay()) {
+            window.setCityTimeOfDay(msg.tod, true);
+          }
+          this.maybeSyncInitialSpawn();
         }
         this.updateHUDStatus('connected');
+        return;
+      }
+
+      if (msg.type === 'set_tod') {
+        if ((msg.tod === 'day' || msg.tod === 'night') && window.setCityTimeOfDay) {
+          window.setCityTimeOfDay(msg.tod, true, msg.by || msg.senderName);
+        }
+        return;
+      }
+
+      if (msg.type === 'flare') {
+        this.spawnFlareVisual(msg.x || 0, msg.y || 0, msg.z || 0, msg.color, msg.senderName);
         return;
       }
 
@@ -809,6 +911,7 @@
           this.recomputeCloudHost();
         }
         this.handleMessage(msg);
+        this.maybeSyncInitialSpawn();
         return;
       }
 
@@ -950,8 +1053,18 @@
             const host = this.remotePlayers.get(this.hostId);
             window.showAnnouncement(`🤝 JOINED ${host ? host.name.toUpperCase() : 'THE SQUAD'}'S TORONTO!`, 2500);
           }
+          if (msg.tod && window.setCityTimeOfDay) window.setCityTimeOfDay(msg.tod, true);
+          this.maybeSyncInitialSpawn();
           break;
         }
+        case 'set_tod':
+          if ((msg.tod === 'day' || msg.tod === 'night') && window.setCityTimeOfDay) {
+            window.setCityTimeOfDay(msg.tod, true, msg.by);
+          }
+          break;
+        case 'flare':
+          this.spawnFlareVisual(msg.x || 0, msg.y || 0, msg.z || 0, msg.color, msg.senderName);
+          break;
         case 'host':
           this.hostId = msg.hostId;
           this.refreshRole();
@@ -1042,19 +1155,53 @@
       this.send({ type: 'score_event', targetId, ev });
     }
 
+    maybeSyncInitialSpawn() {
+      if (this.hasSyncedInitialSpawn || this.role !== 'guest' || !window.syncSpawnNearHost) return;
+      const host = this.remotePlayers.get(this.hostId) || this.remotePlayers.values().next().value;
+      if (!host || (host.currentPos.x === 0 && host.currentPos.z === 0)) return;
+      if (window.syncSpawnNearHost(host)) {
+        this.hasSyncedInitialSpawn = true;
+      }
+    }
+
+    squadSummary() {
+      const out = [];
+      this.remotePlayers.forEach((rp) => {
+        out.push({
+          id: rp.id,
+          name: rp.name,
+          initial: rp.initial || 'P',
+          color: rp.color,
+          colorHex: rp.colorHexStr || ('#' + ((rp.color || 0xef4444).toString(16).padStart(6, '0'))),
+          x: rp.currentPos.x,
+          y: rp.currentPos.y,
+          z: rp.currentPos.z,
+          yaw: rp.currentYaw,
+          health: rp.health,
+          isBerserk: rp.isBerserk,
+          isHost: rp.id === this.hostId
+        });
+      });
+      return out;
+    }
+
     addRemotePlayer(info, joinedAt) {
       if (this.remotePlayers.has(info.id)) return;
       const has = (info.x || info.z);
       const spawnX = has ? info.x : (this.localPlayer ? this.localPlayer.pos.x + 3 : 0);
       const spawnY = has ? (info.y || 0) : 0;
       const spawnZ = has ? info.z : (this.localPlayer ? this.localPlayer.pos.z + 3 : 0);
-      const rig = createRemoteHeroRig(info.name || 'DEFENDER', info.color || 0xef4444);
+      const col = info.color || 0xef4444;
+      const cleanName = String(info.name || 'DEFENDER').trim() || 'DEFENDER';
+      const rig = createRemoteHeroRig(cleanName, col);
       rig.root.position.set(spawnX, spawnY, spawnZ);
       if (this.scene) this.scene.add(rig.root);
       this.remotePlayers.set(info.id, {
         id: info.id,
-        name: info.name || 'DEFENDER',
-        color: info.color || 0xef4444,
+        name: cleanName,
+        initial: cleanName.charAt(0).toUpperCase(),
+        color: col,
+        colorHexStr: rig.colorHexStr,
         joinedAt: joinedAt || Date.now(),
         lastSeen: Date.now(),
         rig,
@@ -1214,41 +1361,52 @@
         if (!rp.rig) return;
         const before = rp.currentPos.distanceTo(rp.targetPos);
         if (before > 15) rp.currentPos.copy(rp.targetPos);           // teleport / respawn
-        else rp.currentPos.lerp(rp.targetPos, Math.min(1.0, dt * 14.0));
+        else {
+          const blend = Math.min(1.0, dt * 14.0);
+          rp.currentPos.set(
+            rp.currentPos.x + (rp.targetPos.x - rp.currentPos.x) * blend,
+            rp.currentPos.y + (rp.targetPos.y - rp.currentPos.y) * blend,
+            rp.currentPos.z + (rp.targetPos.z - rp.currentPos.z) * blend
+          );
+        }
         rp.eyePos.set(rp.currentPos.x, rp.currentPos.y + 1.7, rp.currentPos.z);
         rp.rig.root.position.copy(rp.currentPos);
         rp.rig.root.visible = rp.health > 0;
 
-        // Animate light-yellow glow aura, beacon pillar & distance readout
+        // Animate Hero Cape, Sky Holo-Diamond, Distance-Adaptive Sky Beam & Tactical Ring
         const pulse = 0.5 + 0.5 * Math.sin(pulseTime + rp.walkPhase);
         let distToMe = 0;
         if (this.localPlayer) {
           distToMe = Math.hypot(rp.currentPos.x - this.localPlayer.pos.x, rp.currentPos.z - this.localPlayer.pos.z);
         }
-        if (rp.rig.auraMat) {
-          rp.rig.auraMat.opacity = 0.34 + 0.16 * pulse;
-          const auraScale = 1.05 + 0.12 * pulse;
-          rp.rig.auraShell.scale.set(1.1 * auraScale, 1.4 * auraScale, 1.1 * auraScale);
-        }
         if (rp.rig.xrayGlowMat) {
-          rp.rig.xrayGlowMat.opacity = 0.65 + 0.25 * pulse;
-          const haloSize = Math.min(14.0, Math.max(5.5, 5.2 + distToMe * 0.12)) * (0.95 + 0.1 * pulse);
+          const farHalo = Math.min(1.0, Math.max(0.25, (distToMe - 6) / 35));
+          rp.rig.xrayGlowMat.opacity = farHalo * (0.45 + 0.25 * pulse);
+          const haloSize = Math.min(12.0, Math.max(3.0, 2.8 + distToMe * 0.09)) * (0.95 + 0.08 * pulse);
           rp.rig.xrayGlow.scale.set(haloSize, haloSize, 1);
         }
         if (rp.rig.ringMat) {
-          rp.rig.ringMat.opacity = 0.55 + 0.30 * pulse;
-          const ringScale = 0.96 + 0.12 * pulse;
+          rp.rig.ringMat.opacity = 0.62 + 0.28 * pulse;
+          const ringScale = 0.96 + 0.10 * pulse;
           rp.rig.groundRing.scale.set(ringScale, ringScale, 1);
         }
         if (rp.rig.pillarMat) {
-          // Bright sky beacon pillar so you can spot your teammate from anywhere in Toronto
-          const farFactor = Math.min(1.0, Math.max(0.35, (distToMe - 3) / 35));
-          rp.rig.pillarMat.opacity = farFactor * (0.30 + 0.18 * pulse);
+          // Subtle up close so hero armor stays sharp; vivid high-altitude beam from afar!
+          const farFactor = distToMe < 12 ? 0.08 : Math.min(1.0, 0.15 + (distToMe - 12) / 55);
+          rp.rig.pillarMat.opacity = farFactor * (0.34 + 0.16 * pulse);
+        }
+        if (rp.rig.skyDiamond) {
+          rp.rig.skyDiamond.rotation.y += dt * 2.2;
+          rp.rig.skyDiamond.position.y = 18.0 + Math.sin(pulseTime + rp.walkPhase) * 0.9;
+        }
+        if (rp.rig.capePivot) {
+          const stride = before > 0.05 ? 1.0 : 0.12;
+          rp.rig.capePivot.rotation.x = 0.08 + stride * (0.38 + Math.sin(pulseTime * 1.8 + rp.walkPhase) * 0.16);
         }
         if (rp.rig.nameplate) {
           // Keep nameplate legible even from a distance
-          const npScale = Math.min(4.2, Math.max(1.0, distToMe * 0.045));
-          rp.rig.nameplate.scale.set(1.9 * npScale, 0.54 * npScale, 1);
+          const npScale = Math.min(4.6, Math.max(1.0, distToMe * 0.048));
+          rp.rig.nameplate.scale.set(2.0 * npScale, 0.60 * npScale, 1);
         }
         const distRounded = Math.round(distToMe);
         if (rp.lastDistRounded !== distRounded) {
@@ -1288,6 +1446,25 @@
           }
         }
       });
+
+      // 4. Step Squad Signal Flares (skyrocket ascents + expanding rings)
+      for (let i = this.activeFlares.length - 1; i >= 0; i--) {
+        const fl = this.activeFlares[i];
+        fl.age += dt;
+        const k = fl.age / fl.maxAge;
+        if (k >= 1) {
+          if (this.scene && fl.grp) this.scene.remove(fl.grp);
+          this.activeFlares.splice(i, 1);
+          continue;
+        }
+        const fade = Math.max(0, 1 - k);
+        fl.orb.position.y = 2.5 + fl.age * 24.0;
+        const rScale = 1 + fl.age * 7.5;
+        fl.ring.scale.set(rScale, rScale, 1);
+        if (fl.beam.material) fl.beam.material.opacity = 0.82 * fade;
+        if (fl.ring.material) fl.ring.material.opacity = 0.90 * fade;
+        if (fl.orb.material) fl.orb.material.opacity = 0.95 * fade;
+      }
     }
 
     // ---------------------------------------------------------------- UI

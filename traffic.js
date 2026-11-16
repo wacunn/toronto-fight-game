@@ -1595,6 +1595,13 @@
       return streetcars.filter(sc => sc.mode !== 'hidden').map(sc => ({ x: sc.vx, z: sc.vz }));
     }
 
+    function setTimeOfDay(isDay) {
+      if (beams) beams.visible = !isDay;
+      if (paintMat) paintMat.envMapIntensity = isDay ? 1.1 : 0.7;
+      if (glassMat) glassMat.envMapIntensity = isDay ? 1.0 : 0.55;
+      if (trimMat) trimMat.envMapIntensity = isDay ? 1.05 : 0.8;
+    }
+
     return {
       cars,
       streetcars,
@@ -1604,6 +1611,7 @@
       clearStreetcarZone,
       sampleRoute: sample,
       setStreetcarDirection,
+      setTimeOfDay,
       update,
       silence,
       ringGong: () => streetcarGong(0),

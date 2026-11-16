@@ -675,17 +675,26 @@
     return t;
   }
 
-  function makeSkyTexture() {
+  function makeSkyTexture(mode) {
     const c = document.createElement('canvas');
     c.width = 4; c.height = 512;
     const ctx = c.getContext('2d');
     const g = ctx.createLinearGradient(0, 0, 0, 512);
-    g.addColorStop(0.0, '#03040a');
-    g.addColorStop(0.35, '#0a1020');
-    g.addColorStop(0.47, '#142034');
-    g.addColorStop(0.5, '#1e2e44');   // crisp urban night glow on horizon
-    g.addColorStop(0.53, '#101828');
-    g.addColorStop(1.0, '#070910');
+    if (mode === 'day') {
+      g.addColorStop(0.0, '#1d5fa7');   // rich deep Toronto summer zenith azure
+      g.addColorStop(0.28, '#4a90d9');  // crisp cerulean sky
+      g.addColorStop(0.44, '#8cc8f8');  // soft lake-breeze atmosphere
+      g.addColorStop(0.5, '#d6eeff');   // luminous Lake Ontario horizon haze
+      g.addColorStop(0.54, '#a6cce4');  // distant water/land mist blend
+      g.addColorStop(1.0, '#50728f');   // lower hemisphere lake reflection
+    } else {
+      g.addColorStop(0.0, '#03040a');
+      g.addColorStop(0.35, '#0a1020');
+      g.addColorStop(0.47, '#142034');
+      g.addColorStop(0.5, '#1e2e44');   // crisp urban night glow on horizon
+      g.addColorStop(0.53, '#101828');
+      g.addColorStop(1.0, '#070910');
+    }
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, 4, 512);
     return new THREE.CanvasTexture(c);
@@ -747,6 +756,31 @@
   function buildTorontoCity(scene) {
     const MAP = window.TORONTO_MAP;
     if (!MAP) throw new Error('TORONTO_MAP data missing (toronto_map.js not loaded)');
+
+    // Randomize Daytime or Nighttime at session start (or honor ?time=day|night)
+    let timeOfDay = (Math.random() < 0.5) ? 'day' : 'night';
+    try {
+      const qTime = (typeof window !== 'undefined' && window.location && window.location.search)
+        ? new URLSearchParams(window.location.search).get('time')
+        : null;
+      if (qTime === 'day' || qTime === 'night') timeOfDay = qTime;
+    } catch (e) {}
+    const nphFlags = [];
+    const dayNightControllers = [];
+    const setColorSafe = (obj, prop, hex) => {
+      if (!obj) return;
+      const cur = obj[prop];
+      if (cur && typeof cur.setHex === 'function') cur.setHex(hex);
+      else if (typeof THREE.Color === 'function') obj[prop] = new THREE.Color(hex);
+    };
+    const setTimeOfDay = (mode) => {
+      timeOfDay = (mode === 'day') ? 'day' : 'night';
+      const isDay = (timeOfDay === 'day');
+      for (let i = 0; i < dayNightControllers.length; i++) {
+        try { dayNightControllers[i](isDay); } catch (e) {}
+      }
+      return timeOfDay;
+    };
 
     const [[minX, minZ], [maxX, maxZ]] = MAP.bounds;
     const PLAY = { minX: Math.min(minX, -2350), maxX: Math.max(maxX, 1360), minZ: Math.min(minZ, -1180), maxZ: 1650 };
@@ -1561,18 +1595,21 @@
       return { x: cx, z: cz };
     }
 
-    // ---------- Sky, fog, lighting ----------
+    // ---------- Sky, fog, lighting (dual Daytime / Nighttime atmosphere) ----------
+    const nightSkyTex = makeSkyTexture('night');
+    const daySkyTex = makeSkyTexture('day');
     scene.background = new THREE.Color(0x080c14);
     scene.fog = new THREE.FogExp2(0x0c1322, 0.0018);
 
+    const skyMat = new THREE.MeshBasicMaterial({ map: nightSkyTex, side: THREE.BackSide, fog: false, depthWrite: false });
     const sky = new THREE.Mesh(
       new THREE.SphereGeometry(4200, 32, 16),
-      new THREE.MeshBasicMaterial({ map: makeSkyTexture(), side: THREE.BackSide, fog: false, depthWrite: false })
+      skyMat
     );
     sky.renderOrder = -10;
     scene.add(sky);
 
-    // Stars
+    // Stars (visible at night)
     const starPos = [];
     for (let i = 0; i < 1400; i++) {
       const th = hash(i * 1.3) * Math.PI * 2;
@@ -1584,10 +1621,60 @@
     const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xcfd8ff, size: 2.2, sizeAttenuation: false, fog: false, depthWrite: false, transparent: true, opacity: 0.8 }));
     scene.add(stars);
 
-    scene.add(new THREE.HemisphereLight(0x7da4d4, 0x181a1c, 0.45));
-    scene.add(new THREE.AmbientLight(0x242d3c, 0.20));
-    // Moonlight with real shadows. The shadow frustum follows the player (see update()).
+    // Sun & atmospheric drifting cumulus cloud deck (visible during daytime)
+    const SUN_DIR = new THREE.Vector3(0.46, 0.78, 0.42).normalize();
+    const daySkyExtras = new THREE.Group();
+    const sunDisc = new THREE.Mesh(
+      new THREE.CircleGeometry(135, 24),
+      new THREE.MeshBasicMaterial({ color: 0xfff8dc, fog: false, depthWrite: false, toneMapped: false })
+    );
+    sunDisc.position.copy(SUN_DIR).multiplyScalar(3600);
+    sunDisc.lookAt(0, 0, 0);
+    daySkyExtras.add(sunDisc);
+    const sunHalo = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: makeGlowTexture('rgba(255,248,215,0.85)', 'rgba(255,220,145,0.18)'),
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false
+    }));
+    sunHalo.scale.set(950, 950, 1);
+    sunHalo.position.copy(SUN_DIR).multiplyScalar(3550);
+    daySkyExtras.add(sunHalo);
+
+    const CLOUD_PUFFS = [];
+    const cloudInst = new THREE.InstancedMesh(
+      new THREE.IcosahedronGeometry(1, 2),
+      new THREE.MeshLambertMaterial({ color: 0xf8fbff, fog: false }),
+      72
+    );
+    const cm4 = new THREE.Matrix4(), cQuat = new THREE.Quaternion(), cScale = new THREE.Vector3(), cPos = new THREE.Vector3();
+    for (let ci = 0; ci < 18; ci++) {
+      const ang = hash(ci * 3.1) * Math.PI * 2;
+      const dist = 500 + hash(ci * 5.7) * 2300;
+      const cx = Math.cos(ang) * dist, cz = Math.sin(ang) * dist;
+      const cy = 640 + hash(ci * 7.3) * 240;
+      const speed = 4.5 + hash(ci * 2.9) * 4.5;
+      for (let lobe = 0; lobe < 4; lobe++) {
+        const idx = ci * 4 + lobe;
+        const ox = (lobe - 1.5) * 46 + (hash(idx * 1.7) - 0.5) * 24;
+        const oz = (hash(idx * 2.3) - 0.5) * 40;
+        const oy = lobe === 1 || lobe === 2 ? 16 : -4;
+        const sx = 68 + hash(idx * 3.7) * 58;
+        const sy = 22 + hash(idx * 4.1) * 18;
+        const sz = 44 + hash(idx * 5.3) * 40;
+        CLOUD_PUFFS.push({ idx, bx: cx + ox, y: cy + oy, z: cz + oz, sx, sy, sz, speed });
+        cm4.compose(cPos.set(cx + ox, cy + oy, cz + oz), cQuat, cScale.set(sx, sy, sz));
+        cloudInst.setMatrixAt(idx, cm4);
+      }
+    }
+    daySkyExtras.add(cloudInst);
+    scene.add(daySkyExtras);
+
+    const hemiLight = new THREE.HemisphereLight(0x7da4d4, 0x181a1c, 0.45);
+    scene.add(hemiLight);
+    const ambLight = new THREE.AmbientLight(0x242d3c, 0.20);
+    scene.add(ambLight);
+    // Primary directional light (cool moonlight at night, warm crisp sun in daytime) with shadow tracking
     const MOON_DIR = new THREE.Vector3(-0.45, 0.8, -0.38).normalize();
+    const ACTIVE_LIGHT_DIR = MOON_DIR.clone();
     const moon = new THREE.DirectionalLight(0xbcd0f0, 0.70);
     moon.castShadow = true;
     moon.shadow.mapSize.set(2048, 2048);
@@ -1596,7 +1683,7 @@
     moon.shadow.camera.near = 10; moon.shadow.camera.far = 1400;
     moon.shadow.bias = -0.0004;
     moon.shadow.normalBias = 0.04;
-    moon.position.copy(MOON_DIR).multiplyScalar(600);
+    moon.position.copy(ACTIVE_LIGHT_DIR).multiplyScalar(600);
     scene.add(moon);
     scene.add(moon.target);
 
@@ -1703,6 +1790,63 @@
     const lake = new THREE.Mesh(lakeGB.build(), lakeMat);
     lake.receiveShadow = true;
     scene.add(lake);
+
+    const foamMat = new THREE.MeshBasicMaterial({
+      color: 0xdbeafe, transparent: true, opacity: 0.22, depthWrite: false
+    });
+    dayNightControllers.push((isDay) => {
+      setColorSafe(scene, 'background', isDay ? 0x8cc7f2 : 0x080c14);
+      if (scene.fog) {
+        setColorSafe(scene.fog, 'color', isDay ? 0xabd7f5 : 0x0c1322);
+        if (typeof scene.fog.density === 'number') scene.fog.density = isDay ? 0.00072 : 0.0018;
+      }
+      if (skyMat) {
+        skyMat.map = isDay ? daySkyTex : nightSkyTex;
+        skyMat.needsUpdate = true;
+      }
+      if (stars) stars.visible = !isDay;
+      if (daySkyExtras) daySkyExtras.visible = isDay;
+      if (hemiLight) {
+        setColorSafe(hemiLight, 'color', isDay ? 0xcce8ff : 0x7da4d4);
+        setColorSafe(hemiLight, 'groundColor', isDay ? 0x5c6b7a : 0x181a1c);
+        hemiLight.intensity = isDay ? 0.95 : 0.45;
+      }
+      if (ambLight) {
+        setColorSafe(ambLight, 'color', isDay ? 0xe5f0fa : 0x242d3c);
+        ambLight.intensity = isDay ? 0.46 : 0.20;
+      }
+      if (moon) {
+        setColorSafe(moon, 'color', isDay ? 0xfff6e0 : 0xbcd0f0);
+        moon.intensity = isDay ? 1.35 : 0.70;
+      }
+      if (ACTIVE_LIGHT_DIR && ACTIVE_LIGHT_DIR.copy) {
+        ACTIVE_LIGHT_DIR.copy(isDay ? SUN_DIR : MOON_DIR);
+      }
+      setColorSafe(lakeMat, 'color', isDay ? 0x1d78a6 : 0x0e3a5c);
+      lakeMat.roughness = isDay ? 0.18 : 0.16;
+      lakeMat.metalness = isDay ? 0.52 : 0.72;
+      lakeMat.envMapIntensity = isDay ? 1.25 : 1.15;
+      foamMat.opacity = isDay ? 0.34 : 0.22;
+    });
+
+    // Subtle harbour shoreline water-foam trim along granite seawall
+    {
+      const foamGB = new GeoBuilder();
+      for (let i = 0; i < HARBOUR_SHORELINE.length - 1; i++) {
+        const [ax, az] = HARBOUR_SHORELINE[i];
+        const [bx, bz] = HARBOUR_SHORELINE[i + 1];
+        const dx = bx - ax, dz = bz - az, len = Math.hypot(dx, dz);
+        if (len < 0.2) continue;
+        const nx = -dz / len, nz = dx / len;
+        const f0 = foamGB.vert(ax + nx * 0.15, WATER_Y + 0.03, az + nz * 0.15, 0, 1, 0, 0, 0);
+        const f1 = foamGB.vert(bx + nx * 0.15, WATER_Y + 0.03, bz + nz * 0.15, 0, 1, 0, 1, 0);
+        const f2 = foamGB.vert(bx + nx * 1.15, WATER_Y + 0.03, bz + nz * 1.15, 0, 1, 0, 1, 1);
+        const f3 = foamGB.vert(ax + nx * 1.15, WATER_Y + 0.03, az + nz * 1.15, 0, 1, 0, 0, 1);
+        foamGB.quad(f0, f1, f2, f3);
+        foamGB.quad(f0, f3, f2, f1);
+      }
+      scene.add(new THREE.Mesh(foamGB.build(), foamMat));
+    }
 
     // Continuous 3D Granite Harbour Seawall, Waterfront Promenade Coping & Timber Bumper Pilings
     {
@@ -2364,6 +2508,17 @@
     const facadeGB = {};
     STYLES.forEach((s, i) => { facadeMats[s] = makeFacade(s, i * 17 + 3); facadeGB[s] = new GeoBuilder(); });
     const shopMat = makeStorefront(41);
+    dayNightControllers.push((isDay) => {
+      STYLES.forEach(s => {
+        const m = facadeMats[s];
+        if (!m) return;
+        const glassy = (s === 'glass' || s === 'condo' || s === 'dark');
+        m.emissiveIntensity = isDay ? (glassy ? 0.08 : 0.04) : 1.0;
+        m.envMapIntensity = isDay ? (glassy ? 0.85 : 0.36) : 0.25;
+      });
+      shopMat.emissiveIntensity = isDay ? 0.16 : 1.25;
+      shopMat.envMapIntensity = isDay ? 0.55 : 0.25;
+    });
     const shopGB = new GeoBuilder();
     const capGB = new GeoBuilder();   // parapets + cornices
     const roofBoxes = [];             // penthouses / HVAC units (instanced)
@@ -4167,6 +4322,95 @@
     warnLights.count = roofLights.length;
     scene.add(warnLights);
 
+    // ---------- Iconic Downtown Skyline Crowns (FCP, Scotia Plaza, L Tower, RBP, CIBC Square) ----------
+    {
+      const crowns = new THREE.Group();
+      const redWhiteMastMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.4, metalness: 0.45 });
+      const mastRedBandMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.45, metalness: 0.25 });
+      const fcpCollarMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, emissive: 0xffffff, emissiveIntensity: 0.42, roughness: 0.35 });
+      const goldGlassMat = new THREE.MeshStandardMaterial({ color: 0xf5c451, emissive: 0x92400e, emissiveIntensity: 0.25, roughness: 0.14, metalness: 0.92, envMapIntensity: 1.35 });
+      const scotiaGraniteMat = new THREE.MeshStandardMaterial({ color: 0x8b2e2e, roughness: 0.52, metalness: 0.15 });
+      const cibcDiamondMat = new THREE.MeshStandardMaterial({ color: 0x7dd3fc, emissive: 0x38bdf8, emissiveIntensity: 0.65, roughness: 0.2, metalness: 0.7 });
+      const crownBeaconMat = new THREE.MeshBasicMaterial({ color: 0xff2222, fog: false });
+      dayNightControllers.push((isDay) => {
+        fcpCollarMat.emissiveIntensity = isDay ? 0.04 : 0.48;
+        goldGlassMat.emissiveIntensity = isDay ? 0.08 : 0.35;
+        cibcDiamondMat.emissiveIntensity = isDay ? 0.12 : 0.75;
+      });
+
+      // 1. First Canadian Place (292m) — marble mechanical penthouse collar + iconic twin red/white broadcast antennas
+      const fcpX = 147.6, fcpZ = -525.1, fcpH = 292.0;
+      const fcpCollar = new THREE.Mesh(new THREE.BoxGeometry(58, 5.5, 56), fcpCollarMat);
+      fcpCollar.position.set(fcpX, fcpH + 2.2, fcpZ);
+      crowns.add(fcpCollar);
+      [-11, 11].forEach((ox) => {
+        const mastH = ox < 0 ? 64 : 58;
+        for (let seg = 0; seg < 6; seg++) {
+          const segH = mastH / 6;
+          const r0 = Math.max(0.22, 1.35 * (1 - seg / 6.8));
+          const r1 = Math.max(0.18, 1.35 * (1 - (seg + 1) / 6.8));
+          const m = new THREE.Mesh(
+            new THREE.CylinderGeometry(r1, r0, segH, 8),
+            (seg % 2 === 0) ? redWhiteMastMat : mastRedBandMat
+          );
+          m.position.set(fcpX + ox, fcpH + 5.0 + seg * segH + segH / 2, fcpZ);
+          crowns.add(m);
+        }
+        const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.95, 8, 6), crownBeaconMat);
+        beacon.position.set(fcpX + ox, fcpH + 5.2 + mastH, fcpZ);
+        crowns.add(beacon);
+      });
+
+      // 2. Scotia Plaza (275m) — Napoleon granite signature stepped chevron / sawtooth crest + slender mast
+      const spX = 315.9, spZ = -612.1, spH = 275.0;
+      for (let tier = 0; tier < 3; tier++) {
+        const tw = 44 - tier * 11, td = 62 - tier * 14, th = 5.5;
+        const step = new THREE.Mesh(new THREE.BoxGeometry(tw, th, td), scotiaGraniteMat);
+        step.position.set(spX + tier * 2.5, spH + tier * 4.5 + th / 2, spZ - tier * 3.5);
+        crowns.add(step);
+      }
+      const spSpire = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.9, 26, 8), redWhiteMastMat);
+      spSpire.position.set(spX + 5, spH + 25, spZ - 7);
+      crowns.add(spSpire);
+
+      // 3. L Tower (198m) — Studio Libeskind curving sculpted crystalline roof crest
+      const ltX = 578.5, ltZ = -247.3, ltH = 198.0;
+      const ltWing = new THREE.Mesh(
+        new THREE.CylinderGeometry(18, 18, 22, 16, 1, false, 0, Math.PI * 0.65),
+        cibcDiamondMat
+      );
+      ltWing.scale.set(0.95, 1, 1.15);
+      ltWing.position.set(ltX, ltH + 6, ltZ + 4);
+      ltWing.rotation.y = Math.PI * 0.2;
+      crowns.add(ltWing);
+
+      // 4. Royal Bank Plaza South (180m) & North (114m) — 24k gold faceted jewel-box crown caps
+      [
+        { x: 300.3, z: -258.3, h: 180.0, w: 48, d: 64 },
+        { x: 253.9, z: -308.2, h: 114.0, w: 46, d: 54 }
+      ].forEach(rbp => {
+        const cap = new THREE.Mesh(new THREE.BoxGeometry(rbp.w, 6.2, rbp.d), goldGlassMat);
+        cap.position.set(rbp.x, rbp.h + 2.8, rbp.z);
+        crowns.add(cap);
+        const crest = new THREE.Mesh(new THREE.ConeGeometry(rbp.w * 0.36, 11, 4), goldGlassMat);
+        crest.rotation.y = Math.PI / 4;
+        crest.position.set(rbp.x, rbp.h + 11.2, rbp.z);
+        crowns.add(crest);
+      });
+
+      // 5. CIBC Square North & South (246m / 224m) — diamond-faceted glowing crown parapets
+      [
+        { x: 470.4, z: -26.0, h: 246.0, w: 50, d: 52 },
+        { x: 477.0, z: 10.0, h: 224.0, w: 48, d: 46 }
+      ].forEach(cibc => {
+        const crown = new THREE.Mesh(new THREE.BoxGeometry(cibc.w, 6.0, cibc.d), cibcDiamondMat);
+        crown.position.set(cibc.x, cibc.h + 2.5, cibc.z);
+        crowns.add(crown);
+      });
+
+      scene.add(crowns);
+    }
+
     // ---------- Rogers Centre Retractable Dome & Blue Jays Stadium Interior ----------
     let rogersCentreDome = null;
     {
@@ -4375,7 +4619,8 @@
     const shaft = new THREE.Mesh(new THREE.CylinderGeometry(4.8, 8, 340, 6), towerMat);
     shaft.position.y = 170;
     tower.add(shaft);
-    // Three Y-legs
+    // Three Y-legs + 3 Multi-Band Animated Vertical LED Light Ribs along concrete outer spines
+    const cnRibMats = [];
     for (let i = 0; i < 3; i++) {
       const a = i * Math.PI * 2 / 3;
       const leg = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 6.5, 300, 4), towerMat);
@@ -4385,7 +4630,27 @@
       leg.rotation.x = Math.sin(a) * 0.018;
       tower.add(leg);
       addCircle(LM.cnTower[0] + Math.cos(a) * 12, LM.cnTower[1] + Math.sin(a) * 12, 4.2);
+
+      // Tapered glowing vertical LED spine cleanly outside concrete rib (avoids elevator track)
+      const bandCount = 6;
+      for (let bi = 0; bi < bandCount; bi++) {
+        const y0 = 22 + bi * 51;
+        const yMid = y0 + 24;
+        const radial = 12.8 - (yMid / 330) * 6.5;
+        const ribMat = new THREE.MeshBasicMaterial({ color: 0xff3366, fog: false, toneMapped: false });
+        const rib = new THREE.Mesh(new THREE.BoxGeometry(0.42, 49, 0.42), ribMat);
+        rib.position.set(Math.cos(a) * radial, yMid, Math.sin(a) * radial);
+        rib.rotation.y = -a;
+        tower.add(rib);
+        cnRibMats.push({ mat: ribMat, band: bi, leg: i });
+      }
     }
+    dayNightControllers.push((isDay) => {
+      towerMat.emissiveIntensity = isDay ? 0.16 : 1.4;
+      for (let i = 0; i < cnRibMats.length; i++) {
+        if (isDay) cnRibMats[i].mat.color.setHex(0xe2e8f0);
+      }
+    });
     addCircle(LM.cnTower[0], LM.cnTower[1], 7.0);
 
     // ======================================================================
@@ -10163,6 +10428,56 @@
         addSolid({ type: 'poly', pts: [[87, -853], [93, -853], [93, -847], [87, -847]], h: 3.0, name: 'Henry Moore Archer' });
       }
 
+      // Three Ceremonial Waving Flagpoles (Canada, Ontario, Toronto) on Nathan Phillips Square Terrace
+      {
+        const makeFlagTex = (kind) => {
+          const [c, ctx] = canvas2(192, 96);
+          if (kind === 'canada') {
+            ctx.fillStyle = '#d80621'; ctx.fillRect(0, 0, 48, 96); ctx.fillRect(144, 0, 48, 96);
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(48, 0, 96, 96);
+            ctx.fillStyle = '#d80621';
+            ctx.beginPath();
+            ctx.moveTo(96, 16); ctx.lineTo(106, 36); ctx.lineTo(122, 32); ctx.lineTo(112, 48);
+            ctx.lineTo(126, 56); ctx.lineTo(104, 62); ctx.lineTo(98, 78); ctx.lineTo(94, 78);
+            ctx.lineTo(88, 62); ctx.lineTo(66, 56); ctx.lineTo(80, 48); ctx.lineTo(70, 32);
+            ctx.lineTo(86, 36); ctx.closePath(); ctx.fill();
+          } else if (kind === 'ontario') {
+            ctx.fillStyle = '#c8102e'; ctx.fillRect(0, 0, 192, 96);
+            ctx.fillStyle = '#012169'; ctx.fillRect(0, 0, 72, 46);
+            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 8;
+            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(72, 46); ctx.moveTo(72, 0); ctx.lineTo(0, 46); ctx.stroke();
+            ctx.strokeStyle = '#c8102e'; ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.moveTo(36, 0); ctx.lineTo(36, 46); ctx.moveTo(0, 23); ctx.lineTo(72, 23); ctx.stroke();
+            ctx.fillStyle = '#15803d'; ctx.fillRect(118, 28, 36, 42);
+            ctx.fillStyle = '#facc15'; ctx.fillRect(118, 22, 36, 10);
+          } else {
+            ctx.fillStyle = '#0056a3'; ctx.fillRect(0, 0, 192, 96);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(68, 18, 14, 60); ctx.fillRect(110, 18, 14, 60);
+            ctx.fillStyle = '#ef4444';
+            ctx.beginPath(); ctx.arc(96, 62, 11, 0, Math.PI * 2); ctx.fill();
+          }
+          return new THREE.CanvasTexture(c);
+        };
+        const flagPoleMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.85, roughness: 0.25 });
+        [['canada', 38], ['ontario', 48], ['toronto', 58]].forEach(([kind, fx], fi) => {
+          const fz = -860;
+          const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 13, 10), flagPoleMat);
+          pole.position.set(fx, 6.5, fz);
+          expGroup.add(pole);
+          const pivot = new THREE.Group();
+          pivot.position.set(fx, 11.8, fz);
+          const banner = new THREE.Mesh(
+            new THREE.BoxGeometry(3.4, 1.7, 0.06),
+            new THREE.MeshStandardMaterial({ map: makeFlagTex(kind), roughness: 0.6, side: THREE.DoubleSide })
+          );
+          banner.position.set(1.75, 0, 0);
+          pivot.add(banner);
+          expGroup.add(pivot);
+          nphFlags.push({ pivot, phase: fi * 1.4 });
+        });
+      }
+
       // ------------------------------------------------------------------------
       // 3. TORONTO CITY HALL (Viljo Revell's Twin Towers & Saucer Council Chamber)
       // ------------------------------------------------------------------------
@@ -12032,6 +12347,73 @@
       SUBWAY_STATIONS.some(s => Math.hypot(x - s.streetX, z - s.streetZ) < 6)
     );
 
+    // ---------- TTC Cantilevered Glass Streetcar Shelters at Key Transit Stops ----------
+    const shelterSignEntries = [];
+    {
+      const shelterSteelMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.45, metalness: 0.65 });
+      const shelterGlassMat = new THREE.MeshStandardMaterial({ color: 0xbae6fd, transparent: true, opacity: 0.42, roughness: 0.12, metalness: 0.25, side: THREE.DoubleSide });
+      const shelterBeaconMat = new THREE.MeshBasicMaterial({ color: 0xef4444, toneMapped: false });
+      const shelterBenchMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.78 });
+      const keyStops = [];
+      const seenStop = new Set();
+      streetcarRoutes.forEach(rt => {
+        (rt.namedStops || []).forEach(st => {
+          if (st.isUnionLoop) return;
+          const key = `${Math.round(st.x / 20)},${Math.round(st.z / 20)}`;
+          if (seenStop.has(key)) return;
+          seenStop.add(key);
+          keyStops.push({ rtId: rt.id, name: st.name, x: st.x, z: st.z });
+        });
+      });
+      keyStops.slice(0, 18).forEach((st, idx) => {
+        let sx = null, sz = null, faceYaw = 0;
+        for (let aIdx = 0; aIdx < 8 && sx === null; aIdx++) {
+          const ang = (aIdx * Math.PI) / 4;
+          for (let r = 5.5; r <= 12.5; r += 2.2) {
+            const cx = st.x + Math.cos(ang) * r, cz = st.z + Math.sin(ang) * r;
+            if (canMoveTo(cx, cz, 1.5) && !onRoad(cx, cz, -1.2, -1) && !nearStreetcarTrack(cx, cz, 2.3) && !nearPlannedSubwayKiosk(cx, cz)) {
+              sx = cx; sz = cz;
+              faceYaw = Math.atan2(st.x - cx, st.z - cz);
+              break;
+            }
+          }
+        }
+        if (sx === null) return;
+        const sh = new THREE.Group();
+        sh.position.set(sx, 0, sz);
+        sh.rotation.y = faceYaw;
+        // Twin steel frame columns + cantilevered roof
+        [-1.6, 1.6].forEach(px => {
+          const col = new THREE.Mesh(new THREE.BoxGeometry(0.11, 2.65, 0.11), shelterSteelMat);
+          col.position.set(px, 1.325, -0.68);
+          sh.add(col);
+        });
+        const roof = new THREE.Mesh(new THREE.BoxGeometry(3.85, 0.12, 1.65), shelterSteelMat);
+        roof.position.set(0, 2.68, 0.02);
+        sh.add(roof);
+        const strip = new THREE.Mesh(new THREE.BoxGeometry(3.55, 0.07, 0.08), shelterBeaconMat);
+        strip.position.set(0, 2.65, 0.85);
+        sh.add(strip);
+        const backGlass = new THREE.Mesh(new THREE.BoxGeometry(3.2, 2.25, 0.05), shelterGlassMat);
+        backGlass.position.set(0, 1.35, -0.68);
+        sh.add(backGlass);
+        const sideGlass = new THREE.Mesh(new THREE.BoxGeometry(0.05, 2.25, 1.2), shelterGlassMat);
+        sideGlass.position.set(-1.72, 1.35, -0.08);
+        sh.add(sideGlass);
+        // Red TTC transit totem at right corner
+        const totem = new THREE.Mesh(new THREE.BoxGeometry(0.26, 2.95, 0.16), shelterBeaconMat);
+        totem.position.set(2.05, 1.475, 0.0);
+        sh.add(totem);
+        // Warm cedar slat seat
+        const seat = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.12, 0.45), shelterBenchMat);
+        seat.position.set(-0.2, 0.52, -0.35);
+        sh.add(seat);
+        scene.add(sh);
+        addCircle(sx, sz, 1.1);
+        if (idx % 2 === 0) shelterSignEntries.push({ x: sx, z: sz, name: `TTC Stop: ${st.name}` });
+      });
+    }
+
     // ---------- Street lamps (instanced, strictly outside all roads, tracks & subway kiosks) + pooled real lights ----------
     const lamps = lampSpots.filter(l =>
       canMoveTo(l.x, l.z, 0.5) &&
@@ -12040,12 +12422,14 @@
       !nearPlannedSubwayKiosk(l.x, l.z) &&
       !onRoad(l.x + Math.sin(l.ang) * 0.6, l.z + Math.cos(l.ang) * 0.6, -0.3, -1)
     ).slice(0, 700);
+    let lampHeadMat = null, lampHalos = null, lampPools = null;
     if (lamps.length) {
       const poleGeo = new THREE.CylinderGeometry(0.09, 0.14, 7, 6);
       poleGeo.translate(0, 3.5, 0);
       const headGeo = new THREE.BoxGeometry(0.5, 0.18, 1.1);
+      lampHeadMat = new THREE.MeshBasicMaterial({ color: 0xffe2b0 });
       const poles = new THREE.InstancedMesh(poleGeo, new THREE.MeshLambertMaterial({ color: 0x2a2d33 }), lamps.length);
-      const heads = new THREE.InstancedMesh(headGeo, new THREE.MeshBasicMaterial({ color: 0xffe2b0 }), lamps.length);
+      const heads = new THREE.InstancedMesh(headGeo, lampHeadMat, lamps.length);
       const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(1, 1, 1), up = new THREE.Vector3(0, 1, 0);
       lamps.forEach((l, i) => {
         m.makeTranslation(l.x, 0, l.z);
@@ -12060,35 +12444,42 @@
       scene.add(poles);
       scene.add(heads);
 
-      // Glow halos around every lamp head (bloom makes these sing)
+      // Glow halos around every lamp head (bloom makes these sing at night)
       const haloPos = [];
       lamps.forEach(l => haloPos.push(l.x + Math.sin(l.ang) * 0.6, 6.85, l.z + Math.cos(l.ang) * 0.6));
       const haloGeo = new THREE.BufferGeometry();
       haloGeo.setAttribute('position', new THREE.Float32BufferAttribute(haloPos, 3));
-      scene.add(new THREE.Points(haloGeo, new THREE.PointsMaterial({
+      lampHalos = new THREE.Points(haloGeo, new THREE.PointsMaterial({
         map: makeGlowTexture('rgba(255,240,210,1)', 'rgba(255,170,90,0.22)'), size: 3.4, sizeAttenuation: true,
         transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
-      })));
+      }));
+      scene.add(lampHalos);
 
       // Pools of warm light on the ground under EVERY lamp. Only ~8 real lights
       // exist, so these fake the rest of the street at near-zero cost.
       const poolGeo = new THREE.PlaneGeometry(1, 1);
       poolGeo.rotateX(-Math.PI / 2);
-      const pools = new THREE.InstancedMesh(poolGeo, new THREE.MeshBasicMaterial({
+      lampPools = new THREE.InstancedMesh(poolGeo, new THREE.MeshBasicMaterial({
         map: makeGlowTexture('rgba(255,190,120,0.5)', 'rgba(255,140,60,0.16)'), transparent: true, depthWrite: false,
         blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4
       }), lamps.length);
       const pq = new THREE.Quaternion(), ps = new THREE.Vector3(16, 1, 16), pv = new THREE.Vector3();
       lamps.forEach((l, i) => {
         m.compose(pv.set(l.x + Math.sin(l.ang) * 1.6, 0.1, l.z + Math.cos(l.ang) * 1.6), pq, ps);
-        pools.setMatrixAt(i, m);
+        lampPools.setMatrixAt(i, m);
       });
-      scene.add(pools);
+      scene.add(lampPools);
     }
 
     // Pooled real point lights: re-assigned to the nearest lamps, faded in/out
     // instead of teleporting (no more lighting "pops" as you walk)
-    const LAMP_INTENSITY = 1.9;
+    let activeLampIntensity = 1.9;
+    dayNightControllers.push((isDay) => {
+      activeLampIntensity = isDay ? 0.0 : 1.9;
+      if (lampHeadMat) setColorSafe(lampHeadMat, 'color', isDay ? 0xdbeafe : 0xffe2b0);
+      if (lampHalos) lampHalos.visible = !isDay;
+      if (lampPools) lampPools.visible = !isDay;
+    });
     const lightPool = [];
     for (let i = 0; i < 8; i++) {
       const pl = new THREE.PointLight(0xffb066, 0, 28, 1.6);
@@ -12097,7 +12488,7 @@
       lightPool.push({ light: pl, lamp: -1, next: -1, level: 0 });
     }
 
-    // ---------- Street trees (instanced, with per-tree colour + size variation) ----------
+    // ---------- Street trees (instanced, rich Toronto urban canopy + sidewalk tree grates) ----------
     const trees = treeSpots.filter(t => canMoveTo(t.x, t.z, 1.4) && !onRoad(t.x, t.z, -1.2, -1) && !nearStreetcarTrack(t.x, t.z, 3.2) && !nearPlannedSubwayKiosk(t.x, t.z)).slice(0, 900);
     {
       if (trees.length) {
@@ -12120,30 +12511,39 @@
         const canopyGeo = new THREE.BufferGeometry();
         canopyGeo.setAttribute('position', new THREE.Float32BufferAttribute(cPos, 3));
         canopyGeo.setAttribute('normal', new THREE.Float32BufferAttribute(cNrm, 3));
-        const trunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshStandardMaterial({ color: 0x3b2c22, roughness: 0.95, envMapIntensity: 0.2 }), trees.length);
-        const canopies = new THREE.InstancedMesh(canopyGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, envMapIntensity: 0.2 }), trees.length);
-        const m = new THREE.Matrix4();
+        const trunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshStandardMaterial({ color: 0x433226, roughness: 0.94, envMapIntensity: 0.2 }), trees.length);
+        const canopies = new THREE.InstancedMesh(canopyGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, envMapIntensity: 0.25 }), trees.length);
+        const grateGeo = new THREE.BoxGeometry(1.5, 0.04, 1.5);
+        const grates = new THREE.InstancedMesh(grateGeo, new THREE.MeshStandardMaterial({ color: 0x262b33, roughness: 0.72, metalness: 0.55 }), trees.length);
+        const m = new THREE.Matrix4(), gm = new THREE.Matrix4();
         const tq = new THREE.Quaternion(), ts = new THREE.Vector3(), tv = new THREE.Vector3(), up2 = new THREE.Vector3(0, 1, 0), tc = new THREE.Color();
         trees.forEach((t, i) => {
-          const sc = 0.8 + t.s * 0.5;
+          const sc = 0.82 + t.s * 0.52;
           tq.setFromAxisAngle(up2, t.s * 6.28);
           m.compose(tv.set(t.x, 0, t.z), tq, ts.set(sc, sc, sc));
           trunks.setMatrixAt(i, m);
           canopies.setMatrixAt(i, m);
-          tc.setHSL(0.24 + t.s * 0.08, 0.35 + t.s * 0.2, 0.16 + hash(t.x) * 0.08);
+          gm.makeTranslation(t.x, 0.025, t.z);
+          grates.setMatrixAt(i, gm);
+          // Diverse Toronto species tinting: Sugar Maple, Norway Maple, Honey Locust, Deep Red Oak
+          const hue = 0.25 + t.s * 0.095;
+          const sat = 0.42 + hash(t.z) * 0.22;
+          const lit = 0.22 + hash(t.x) * 0.11;
+          tc.setHSL(hue, sat, lit);
           canopies.setColorAt(i, tc);
           addCircle(t.x, t.z, 0.3);
         });
         trunks.castShadow = canopies.castShadow = true;
-        canopies.receiveShadow = true;
+        canopies.receiveShadow = grates.receiveShadow = true;
         scene.add(trunks);
         scene.add(canopies);
+        scene.add(grates);
       }
     }
 
     // ---------- Street signs (strictly outside all roads & intersections) ----------
     const usedNames = {};
-    const signs = [];
+    const signs = [...shelterSignEntries];
     signCandidates.forEach(c => {
       if (signs.length > 36) return;
       const prev = usedNames[c.name] || [];
@@ -15717,6 +16117,7 @@
       if (playerPos) {
         sky.position.set(playerPos.x, 0, playerPos.z);
         stars.position.set(playerPos.x, 0, playerPos.z);
+        if (daySkyExtras) daySkyExtras.position.set(playerPos.x, 0, playerPos.z);
         const stairInfo = getSubwayStairInfo(playerPos.x, playerPos.z);
         const inStair = !!stairInfo;
         const nearEntrance = SUBWAY_STATIONS.some(st => {
@@ -15732,9 +16133,34 @@
       }
       // Blink warning lights
       warnLights.visible = (Math.floor(t * 1.1) % 2) === 0;
-      // CN Tower colour-cycling LED lighting
+      // CN Tower colour-cycling LED lighting + multi-band vertical light ribs
       towerHue.setHSL((t * 0.02) % 1, 0.9, 0.5);
       towerMat.emissive.copy(towerHue);
+      if (cnRibMats.length && timeOfDay === 'night') {
+        for (let i = 0; i < cnRibMats.length; i++) {
+          const item = cnRibMats[i];
+          item.mat.color.setHSL(((t * 0.06) + item.band * 0.13 + item.leg * 0.04) % 1, 0.95, 0.58);
+        }
+      }
+      // Daytime drifting cumulus cloud deck
+      if (timeOfDay === 'day' && CLOUD_PUFFS.length && cloudInst) {
+        for (let i = 0; i < CLOUD_PUFFS.length; i++) {
+          const cp = CLOUD_PUFFS[i];
+          cp.bx += dt * cp.speed;
+          if (cp.bx > 2800) cp.bx -= 5600;
+          cm4.compose(cPos.set(cp.bx, cp.y, cp.z), cQuat, cScale.set(cp.sx, cp.sy, cp.sz));
+          cloudInst.setMatrixAt(cp.idx, cm4);
+        }
+        if (cloudInst.instanceMatrix) cloudInst.instanceMatrix.needsUpdate = true;
+      }
+      // Nathan Phillips Square ceremonial waving flags
+      for (let i = 0; i < nphFlags.length; i++) {
+        const fl = nphFlags[i];
+        if (fl.pivot) {
+          fl.pivot.rotation.y = Math.sin(t * 2.1 + fl.phase) * 0.18;
+          fl.pivot.rotation.z = Math.cos(t * 2.8 + fl.phase) * 0.04;
+        }
+      }
 
       // Gentle harbour water wave shimmer, bobbing boats, cruising Island Ferry & Toronto Islands beacons
       if (waterTex && waterTex.offset) {
@@ -15812,7 +16238,7 @@
       const sx = Math.round(playerPos.x / 2) * 2, sz = Math.round(playerPos.z / 2) * 2;
       if (moon && moon.target && moon.target.position) {
         moon.target.position.set(sx, 0, sz);
-        moon.position.set(sx + MOON_DIR.x * 600, MOON_DIR.y * 600, sz + MOON_DIR.z * 600);
+        moon.position.set(sx + ACTIVE_LIGHT_DIR.x * 600, ACTIVE_LIGHT_DIR.y * 600, sz + ACTIVE_LIGHT_DIR.z * 600);
       }
 
       // Re-assign pooled lights to the nearest lamps; lights fade out before moving
@@ -15842,7 +16268,7 @@
         } else if (s.lamp >= 0) {
           s.level = Math.min(1, s.level + dt * 3);
         }
-        s.light.intensity = LAMP_INTENSITY * s.level;
+        s.light.intensity = activeLampIntensity * s.level;
       });
     }
 
@@ -15882,9 +16308,15 @@
       ctx.fillText('☮ PEACE', pzx, pzz + 3);
 
       let missionDot = null;
+      const playerDots = [];
+      const radiusLimit = size / 2 - 10;
       dots.forEach(d => {
         if (d.isMission) {
           missionDot = d;
+          return;
+        }
+        if (d.isPlayer) {
+          playerDots.push(d);
           return;
         }
         const dx = (d.x - player.x) * s, dz = (d.z - player.z) * s;
@@ -15893,10 +16325,53 @@
         ctx.beginPath(); ctx.arc(dx, dz, d.r || 3, 0, Math.PI * 2); ctx.fill();
       });
 
+      // Unmistakable Squadmate Tracking Pips & Perimeter Edge Pointers (even beyond 110m!)
+      playerDots.forEach(d => {
+        const pdx = (d.x - player.x) * s, pdz = (d.z - player.z) * s;
+        const pdist = Math.hypot(pdx, pdz);
+        const col = d.c || '#38bdf8';
+        const offRadar = pdist > radiusLimit;
+        const px = offRadar ? (pdx / pdist) * radiusLimit : pdx;
+        const pz = offRadar ? (pdz / pdist) * radiusLimit : pdz;
+        const ang = offRadar ? Math.atan2(pdz, pdx) + Math.PI / 2 : (-(d.yaw || 0));
+
+        // Facing directional triangle
+        ctx.save();
+        ctx.translate(px, pz);
+        ctx.rotate(ang);
+        ctx.fillStyle = col;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(0, -10.5);
+        ctx.lineTo(-5.8, -2.0);
+        ctx.lineTo(5.8, -2.0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+
+        // Contrasting squad medallion + initial
+        ctx.save();
+        ctx.translate(px, pz);
+        ctx.rotate(-yaw);
+        ctx.beginPath();
+        ctx.arc(0, 0, 6.4, 0, Math.PI * 2);
+        ctx.fillStyle = col;
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.8;
+        ctx.stroke();
+        ctx.fillStyle = '#0f172a';
+        ctx.font = 'bold 8px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText((d.initial || 'P'), 0, 3);
+        ctx.restore();
+      });
+
       // ======================================================================
       // THE TWO CRITICAL RADAR LANDMARKS: 1) CN TOWER & 2) ACTIVE GOAL
       // ======================================================================
-      const radiusLimit = size / 2 - 10;
 
       // 1. CN TOWER (PEACE SANCTUARY)
       const cnx = (peaceCenter[0] - player.x) * s;
@@ -17835,6 +18310,9 @@
       createCabMesh: buildBeckTaxiCabMesh
     };
 
+    // Apply randomized starting time-of-day (Daytime or Nighttime)
+    setTimeOfDay(timeOfDay);
+
     return {
       canMoveTo,
       hasLineOfSight,
@@ -17843,6 +18321,8 @@
       findOpenSpot,
       update,
       drawMinimap,
+      setTimeOfDay,
+      getTimeOfDay: () => timeOfDay,
       start,
       startYaw,
       spawnLocations,

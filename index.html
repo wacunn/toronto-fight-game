@@ -32,6 +32,7 @@
           <button id="diff-next-btn" class="diff-step-btn" type="button" title="Increase difficulty [ ] key ]">▶</button>
         </div>
         <span id="mouse-status-tag" class="tag tag-green">MOUSE: UNLOCKED</span>
+        <span id="tod-badge" class="tag tag-dim" title="Click to toggle Daytime / Nighttime in Toronto" style="cursor:pointer;">🌙 NIGHTTIME</span>
         <span id="mp-status-badge" class="tag tag-dim" title="Multiplayer Status">🌐 SOLO / OFFLINE</span>
         <span id="fps-counter" class="tag tag-dim">60 FPS</span>
       </div>
@@ -83,6 +84,16 @@
         </div>
       </div>
     </div>
+
+    <!-- Multiplayer Squad Roster & Viewport Tracking Layer -->
+    <div id="squad-hud" class="hidden">
+      <div class="squad-hud-header">
+        <span>🛡️ SQUAD RADAR</span>
+        <span class="squad-hud-keys">[Y] RALLY • [T] FLARE</span>
+      </div>
+      <div id="squad-roster-list"></div>
+    </div>
+    <div id="squad-pins-layer"></div>
 
     <!-- Peace Zone Notification Banner -->
     <div id="peace-zone-banner" class="hidden">
@@ -356,6 +367,8 @@
               <li><kbd>SHIFT</kbd> &mdash; Rush / Sprint</li>
               <li><kbd>SPACE</kbd> + <kbd>ATTACK</kbd> &mdash; <b>💥 METEOR JUMP SLAM</b></li>
               <li><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> &mdash; Switch Attacks</li>
+              <li><kbd>Y</kbd> &mdash; <b>⚡ Squad Rally (Teleport to Teammate in Co-op)</b></li>
+              <li><kbd>T</kbd> &mdash; <b>🔥 Launch Squad Signal Flare</b></li>
               <li><kbd>V</kbd> &mdash; <b>🤖 WATCH TRAINED AI (Toggle AI Copilot)</b></li>
               <li><kbd>N</kbd> &mdash; <b>AI Persona (🥊 Brawler vs 📦 Crate Hunter)</b></li>
               <li><kbd>ESC</kbd> or <kbd>P</kbd> &mdash; <b>Instant Release Mouse / Pause</b></li>
