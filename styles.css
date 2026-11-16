@@ -2360,5 +2360,26 @@ body.telescope-mode #crosshair-wrapper {
   line-height: 1;
 }
 
+/* Subtle Road / Park & Compass Heading Bar */
+.street-compass-hud {
+  position: absolute;
+  top: 52px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 26;
+  pointer-events: none;
+  user-select: none;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(8, 13, 22, 0.52);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  color: rgba(226, 232, 240, 0.88);
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.45px;
+  white-space: nowrap;
+}
+
 
 

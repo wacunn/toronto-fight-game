@@ -1212,8 +1212,8 @@ function buildCityEnvMap(renderer, isDay) {
   g.fillRect(0, 0, 8, 256);
   const skyTex = new THREE.CanvasTexture(c);
   envScene.add(new THREE.Mesh(new THREE.SphereGeometry(50, 32, 16), new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide })));
-  const panelGeo = new THREE.PlaneGeometry(5, 9);
-  const cols = isDay ? [0xc8dff2, 0x9ec4e6, 0x80add6, 0xb6d1ea, 0xe8d9b5, 0x709dc7] : [0xffd59a, 0xffb36b, 0x9fd2ff, 0xffffff, 0x70a0d0, 0x63f0ff];
+  const panelGeo = isDay ? new THREE.PlaneGeometry(14, 14) : new THREE.PlaneGeometry(5, 9);
+  const cols = isDay ? [0x88b4dc, 0x77a6d1, 0x9ac1e4, 0x6b9ac7, 0xa8cbe8, 0x7caad4] : [0xffd59a, 0xffb36b, 0x9fd2ff, 0xffffff, 0x70a0d0, 0x63f0ff];
   for (let i = 0; i < 18; i++) {
     const a = (i / 18) * Math.PI * 2;
     const m = new THREE.Mesh(panelGeo, new THREE.MeshBasicMaterial({ color: cols[i % cols.length] }));
@@ -8625,6 +8625,37 @@ function updateNeighborhood() {
   if (locEl && locEl.innerText !== name) {
     locEl.innerText = name;
   }
+
+  const compassEl = document.getElementById('street-compass-hud');
+  if (compassEl) {
+    const stmt = getLocationCompassStatement();
+    if (compassEl.innerText !== stmt) compassEl.innerText = stmt;
+  }
+}
+
+function toTitleCaseLabel(str) {
+  return String(str || '').toLowerCase().replace(/\b([a-z])/g, (_, ch) => ch.toUpperCase());
+}
+
+function getLocationCompassStatement() {
+  const p = player.pos;
+  const heading = (city && city.getCompassHeading) ? city.getCompassHeading(player.yaw) : 'North';
+  if (state.onPlane) return `Harbour Skyway Flight - ${heading}`;
+  if (state.onFerry) return `Toronto Harbour Ferry - ${heading}`;
+  if (state.onStreetcar && streetcarController.activeCar && streetcarController.activeCar.route) {
+    return `${streetcarController.activeCar.route.name || 'TTC Streetcar'} - ${heading}`;
+  }
+  if (state.onTaxi && taxiController.toDest) {
+    return `Beck Taxi - ${heading}`;
+  }
+  if (islands && islands.isInsideIslands(p.x, p.z)) {
+    const rawIsl = islands.getNeighborhood(p.x, p.z) || 'Toronto Islands';
+    return `${toTitleCaseLabel(rawIsl)} - ${heading}`;
+  }
+  if (city && city.getLocationStatement) {
+    return city.getLocationStatement(p.x, p.z, p.y, player.yaw).text;
+  }
+  return `Downtown Toronto - ${heading}`;
 }
 
 function animate(now) {
@@ -10226,6 +10257,7 @@ window.getCityTimeOfDay = getCityTimeOfDay;
 window.syncSpawnNearHost = syncSpawnNearHost;
 window.rallyToSquadMate = rallyToSquadMate;
 window.launchSquadFlare = launchSquadFlare;
+window.getLocationCompassStatement = getLocationCompassStatement;
 window.gameState = state;
 window.gamePlayer = player;
 window.audio = audio;

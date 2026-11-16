@@ -246,7 +246,7 @@
               for (let b = y + 3; b < y + bh2; b += 4) k.fillRect(x, b, w, 1);
             }
           });
-          rctx.fillStyle = 'rgb(40,40,40)'; rctx.fillRect(x, y, w, h);
+          rctx.fillStyle = 'rgb(82,82,82)'; rctx.fillRect(x, y, w, h);
         } else {
           // Dark glass reflecting the night sky: brighter top, darker bottom + diagonal glint
           const g = ctx.createLinearGradient(0, y, 0, y + h);
@@ -259,7 +259,7 @@
             ectx.fillStyle = hash(rnd * 7) > 0.5 ? 'rgba(90,140,255,0.5)' : 'rgba(255,170,90,0.45)';
             ectx.fillRect(x + w * 0.3, y + h * 0.5, w * 0.25, h * 0.3);
           }
-          rctx.fillStyle = 'rgb(20,20,20)'; rctx.fillRect(x, y, w, h);
+          rctx.fillStyle = 'rgb(72,72,72)'; rctx.fillRect(x, y, w, h);
         }
         if (S.panes) {
           // multi-pane sash: muntin grid
@@ -315,7 +315,8 @@
       metalness: S.metal,
       envMapIntensity: 0.12,  // keep low: a bright env map washes out a night facade
       vertexColors: true,       // per-building tint (see addBuilding)
-      side: THREE.DoubleSide
+      side: THREE.DoubleSide,
+      shadowSide: THREE.FrontSide !== undefined ? THREE.FrontSide : 0
     });
   }
 
@@ -453,7 +454,8 @@
     [tex, etex].forEach(t => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; });
     return new THREE.MeshStandardMaterial({
       map: tex, emissive: 0xffffff, emissiveMap: etex, emissiveIntensity: 1.25,
-      roughness: 0.35, metalness: 0.0, envMapIntensity: 0.25, side: THREE.DoubleSide
+      roughness: 0.35, metalness: 0.0, envMapIntensity: 0.25, side: THREE.DoubleSide,
+      shadowSide: THREE.FrontSide !== undefined ? THREE.FrontSide : 0
     });
   }
 
@@ -1680,10 +1682,10 @@
     moon.shadow.mapSize.set(2048, 2048);
     moon.shadow.camera.left = -75; moon.shadow.camera.right = 75;
     moon.shadow.camera.top = 75; moon.shadow.camera.bottom = -75;
-    moon.shadow.camera.near = 10; moon.shadow.camera.far = 1400;
-    moon.shadow.bias = -0.0004;
-    moon.shadow.normalBias = 0.04;
-    moon.position.copy(ACTIVE_LIGHT_DIR).multiplyScalar(600);
+    moon.shadow.camera.near = 25; moon.shadow.camera.far = 1350;
+    moon.shadow.bias = -0.00018;
+    moon.shadow.normalBias = 0.25;
+    moon.position.copy(ACTIVE_LIGHT_DIR).multiplyScalar(850);
     scene.add(moon);
     scene.add(moon.target);
 
@@ -1807,17 +1809,17 @@
       if (stars) stars.visible = !isDay;
       if (daySkyExtras) daySkyExtras.visible = isDay;
       if (hemiLight) {
-        setColorSafe(hemiLight, 'color', isDay ? 0x9ec9eb : 0x7da4d4);
-        setColorSafe(hemiLight, 'groundColor', isDay ? 0x3b4450 : 0x181a1c);
-        hemiLight.intensity = isDay ? 0.52 : 0.45;
+        setColorSafe(hemiLight, 'color', isDay ? 0xa3ccf0 : 0x7da4d4);
+        setColorSafe(hemiLight, 'groundColor', isDay ? 0x4b5663 : 0x181a1c);
+        hemiLight.intensity = isDay ? 0.56 : 0.45;
       }
       if (ambLight) {
-        setColorSafe(ambLight, 'color', isDay ? 0xb8cde0 : 0x242d3c);
-        ambLight.intensity = isDay ? 0.18 : 0.20;
+        setColorSafe(ambLight, 'color', isDay ? 0xc2d4e6 : 0x242d3c);
+        ambLight.intensity = isDay ? 0.24 : 0.20;
       }
       if (moon) {
         setColorSafe(moon, 'color', isDay ? 0xfff0d4 : 0xbcd0f0);
-        moon.intensity = isDay ? 0.92 : 0.70;
+        moon.intensity = isDay ? 0.85 : 0.70;
       }
       if (ACTIVE_LIGHT_DIR && ACTIVE_LIGHT_DIR.copy) {
         ACTIVE_LIGHT_DIR.copy(isDay ? SUN_DIR : MOON_DIR);
@@ -4298,7 +4300,7 @@
     }
     {
       const capMesh = new THREE.Mesh(capGB.build(), new THREE.MeshStandardMaterial({ color: 0x8e8b86, roughness: 0.8, vertexColors: true, envMapIntensity: 0.15, side: THREE.DoubleSide }));
-      capMesh.castShadow = true; capMesh.receiveShadow = true;
+      capMesh.castShadow = false; capMesh.receiveShadow = false;
       scene.add(capMesh);
     }
     const roofMesh = new THREE.Mesh(roofGB.build(), new THREE.MeshStandardMaterial({ color: 0x2a2c31, roughness: 0.9, envMapIntensity: 0.15, side: THREE.DoubleSide }));
@@ -16234,11 +16236,24 @@
         barrierMat.opacity = 0.22 + Math.sin(t * 2.2) * 0.08;
       }
 
-      // Shadow frustum follows the player (snapped to 2 m to limit shimmering)
-      const sx = Math.round(playerPos.x / 2) * 2, sz = Math.round(playerPos.z / 2) * 2;
-      if (moon && moon.target && moon.target.position) {
-        moon.target.position.set(sx, 0, sz);
-        moon.position.set(sx + ACTIVE_LIGHT_DIR.x * 600, ACTIVE_LIGHT_DIR.y * 600, sz + ACTIVE_LIGHT_DIR.z * 600);
+      // Shadow frustum follows the player, texel-snapped in exact LIGHT SPACE (150 / 2048 m)
+      // so building walls and window mullions never shimmer or wiggle while running.
+      if (moon && moon.target && moon.target.position && ACTIVE_LIGHT_DIR) {
+        const lx = ACTIVE_LIGHT_DIR.x, ly = ACTIVE_LIGHT_DIR.y, lz = ACTIVE_LIGHT_DIR.z;
+        const rLen = Math.hypot(lz, lx) || 1;
+        const rx = lz / rLen, rz = -lx / rLen;
+        const ux = ly * rz;
+        const uy = lz * rx - lx * rz;
+        const uz = -ly * rx;
+        const texel = 150.0 / 2048.0;
+        const pr = Math.round((playerPos.x * rx + playerPos.z * rz) / texel) * texel;
+        const pu = Math.round((playerPos.x * ux + playerPos.z * uz) / texel) * texel;
+        const pl = playerPos.x * lx + playerPos.z * lz;
+        const tx = pr * rx + pu * ux + pl * lx;
+        const ty = pu * uy + pl * ly;
+        const tz = pr * rz + pu * uz + pl * lz;
+        moon.target.position.set(tx, ty, tz);
+        moon.position.set(tx + lx * 850, ty + ly * 850, tz + lz * 850);
       }
 
       // Re-assign pooled lights to the nearest lamps; lights fade out before moving
@@ -18310,6 +18325,120 @@
       createCabMesh: buildBeckTaxiCabMesh
     };
 
+    // ---------- Subtle Road / Park & Compass Location Query ----------
+    const COMPASS_DIRS_8 = ['North', 'Northeast', 'East', 'Southeast', 'South', 'Southwest', 'West', 'Northwest'];
+    function getCompassHeading(yaw) {
+      const fwdX = -Math.sin(yaw || 0);
+      const fwdZ = -Math.cos(yaw || 0);
+      const deg = ((Math.atan2(fwdX, -fwdZ) * 180 / Math.PI) + 360) % 360;
+      return COMPASS_DIRS_8[Math.round(deg / 45) % 8];
+    }
+
+    const PARK_ZONES = [
+      { name: 'Nathan Phillips Square', x0: 15, x1: 205, z0: -878, z1: -764 },
+      { name: 'Yonge-Dundas Square', x0: 315, x1: 412, z0: -1105, z1: -1032 },
+      { name: 'Berczy Park', x0: 590, x1: 705, z0: -472, z1: -395 },
+      { name: 'St. James Park', x0: 785, x1: 930, z0: -768, z1: -655 },
+      { name: 'St. Lawrence Market Plaza', x0: 785, x1: 895, z0: -512, z1: -410 },
+      { name: 'Clarence Square Park', x0: -855, x1: -755, z0: -60, z1: 35 },
+      { name: 'David Pecaut Square', x0: -362, x1: -232, z0: -315, z1: -205 },
+      { name: 'Roundhouse Park', x0: -145, x1: -12, z0: 45, z1: 225 },
+      { name: 'Harbour Square Park', x0: 420, x1: 655, z0: 435, z1: 565 },
+      { name: 'Jack Layton Ferry Terminal', x0: 655, x1: 762, z0: 255, z1: 360 },
+      { name: 'HTO Park', x0: -255, x1: -65, z0: 530, z1: 625 },
+      { name: 'Harbourfront Centre Plaza', x0: -440, x1: -260, z0: 530, z1: 625 },
+      { name: 'Toronto Music Garden', x0: -645, x1: -435, z0: 558, z1: 635 },
+      { name: 'Little Norway Park', x0: -1255, x1: -1105, z0: 500, z1: 604 },
+      { name: 'Ireland Park', x0: -1235, x1: -1100, z0: 604, z1: 668 },
+      { name: 'Coronation Park', x0: -1430, x1: -1255, z0: 472, z1: 596 },
+      { name: 'Trillium Park', x0: -1545, x1: -1290, z0: 538, z1: 785 },
+      { name: 'Budweiser Stage Lawn', x0: -1835, x1: -1545, z0: 550, z1: 790 },
+      { name: 'Ontario Place Commons', x0: -2325, x1: -1835, z0: 530, z1: 865 },
+      { name: 'Historic Fort York Park', x0: -1515, x1: -1255, z0: 220, z1: 385 },
+      { name: 'Exhibition Place Grounds', x0: -2260, x1: -1520, z0: 120, z1: 420 }
+    ];
+
+    function getParkAt(x, z) {
+      if (isInsidePeaceZone(x, z)) return 'CN Tower Plaza';
+      for (let i = 0; i < PARK_ZONES.length; i++) {
+        const p = PARK_ZONES[i];
+        if (x >= p.x0 && x <= p.x1 && z >= p.z0 && z <= p.z1) return p.name;
+      }
+      return null;
+    }
+
+    function shortRoadName(name) {
+      return String(name || '')
+        .replace(/\bStreet\b/g, 'St')
+        .replace(/\bAvenue\b/g, 'Ave')
+        .replace(/\bBoulevard\b/g, 'Blvd');
+    }
+
+    function getRoadAt(x, z, pad) {
+      const arr = roadGrid.get(cellKey(Math.floor(x / RCELL), Math.floor(z / RCELL)));
+      if (!arr) return { street: null, trail: null };
+      const extraPad = pad !== undefined ? pad : 2.2;
+      const streets = [];
+      const trails = [];
+      for (let i = 0; i < arr.length; i++) {
+        const sg = arr[i];
+        const r = sg.id === 9980
+          ? { n: (x < 260 ? 'York Street' : 'Bay Street'), t: 'secondary' }
+          : (MAP.roads[sg.id] || {});
+        if (!r || !r.n || r.t === 'service') continue;
+        const lim = sg.hw + extraPad;
+        const dSq = distToSegSq(x, z, sg.ax, sg.az, sg.bx, sg.bz);
+        if (dSq > lim * lim) continue;
+        const isPed = (r.t === 'pedestrian' || r.t === 'footway' || r.t === 'path' || r.t === 'cycleway');
+        const list = isPed ? trails : streets;
+        if (!list.some(it => it.name === r.n)) {
+          list.push({ name: r.n, dSq });
+        }
+      }
+      streets.sort((a, b) => a.dSq - b.dSq);
+      trails.sort((a, b) => a.dSq - b.dSq);
+      let street = null;
+      if (streets.length >= 2 && streets[0].dSq < 110 && streets[1].dSq < 110) {
+        street = `${shortRoadName(streets[0].name)} & ${shortRoadName(streets[1].name)}`;
+      } else if (streets.length >= 1) {
+        street = streets[0].name;
+      }
+      return { street, trail: trails.length ? trails[0].name : null };
+    }
+
+    function getDistrictLabel(x, z) {
+      if (z > getShorelineZ(x) - 28) return 'Harbourfront Boardwalk';
+      const d = districtOf(x, z);
+      if (d === 'south') return x < -450 ? 'CityPlace' : 'South Core';
+      if (d === 'kingwest') return x < -1450 ? 'Liberty Village' : 'Entertainment District';
+      if (d === 'oldtown') return 'Old Town Toronto';
+      return 'Financial District';
+    }
+
+    function getLocationStatement(x, z, y, yaw) {
+      const heading = getCompassHeading(yaw);
+      if (y !== undefined && y < -5) {
+        return { place: 'TTC Line 1 Subway', heading, text: `TTC Line 1 Subway - ${heading}` };
+      }
+      if (y !== undefined && y > 50) {
+        const deck = y > 345.5 ? 'CN Tower 348m Lookout' : 'CN Tower Glass Floor';
+        return { place: deck, heading, text: `${deck} - ${heading}` };
+      }
+      const { street, trail } = getRoadAt(x, z, 2.2);
+      if (street) {
+        return { place: street, heading, text: `${street} - ${heading}` };
+      }
+      const park = getParkAt(x, z);
+      if (park) {
+        return { place: park, heading, text: `${park} - ${heading}` };
+      }
+      if (trail) {
+        return { place: trail, heading, text: `${trail} - ${heading}` };
+      }
+      const district = getDistrictLabel(x, z);
+      return { place: district, heading, text: `${district} - ${heading}` };
+    }
+
     // Apply randomized starting time-of-day (Daytime or Nighttime)
     setTimeOfDay(timeOfDay);
 
@@ -18323,6 +18452,9 @@
       drawMinimap,
       setTimeOfDay,
       getTimeOfDay: () => timeOfDay,
+      getCompassHeading,
+      getLocationStatement,
+      shadowLight: moon,
       start,
       startYaw,
       spawnLocations,
