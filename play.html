@@ -3019,10 +3019,10 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     ectx.fillStyle = '#000'; ectx.fillRect(0, 0, SZ, SZ);
 
     const S = {
-      glass: { base: '#152433', frame: '#2c3e50', glass: ['#253d54', '#152433'], lit: ['#cfe6ff', '#ffe9c2', '#b8dcff'], litP: 0.38, full: true, wallRough: 120, metal: 0.4 },
-      office: { base: '#363b44', frame: '#454c56', glass: ['#1c222b', '#10141a'], lit: ['#ffe6b5', '#fff5dc', '#d7ecff'], litP: 0.32, full: false, wallRough: 215, metal: 0.0 },
+      glass: { base: '#152433', frame: '#2c3e50', glass: ['#253d54', '#182838'], lit: ['#cfe6ff', '#ffe9c2', '#b8dcff'], litP: 0.38, full: true, wallRough: 120, metal: 0.4 },
+      office: { base: '#363b44', frame: '#454c56', glass: ['#232b36', '#161c24'], lit: ['#ffe6b5', '#fff5dc', '#d7ecff'], litP: 0.32, full: false, wallRough: 215, metal: 0.0 },
       brick: { base: '#7c2e20', frame: '#98543e', glass: ['#221d19', '#100c0a'], lit: ['#ffc77a', '#ffd9a3', '#ffb35c', '#ff9e5e'], litP: 0.45, full: false, wallRough: 235, metal: 0.0 },
-      dark: { base: '#12151b', frame: '#262c36', glass: ['#1c2836', '#0a0e14'], lit: ['#a6dcff', '#ffffff', '#ffd59a'], litP: 0.22, full: true, wallRough: 110, metal: 0.5 },
+      dark: { base: '#12151b', frame: '#262c36', glass: ['#202c3b', '#141b26'], lit: ['#a6dcff', '#ffffff', '#ffd59a'], litP: 0.22, full: true, wallRough: 110, metal: 0.5 },
       stone: { base: '#9c8e76', frame: '#b8a896', glass: ['#26221c', '#12100d'], lit: ['#ffd38a', '#ffe6bb', '#fff2d6'], litP: 0.52, full: false, wallRough: 230, metal: 0.0 },
       concrete: { base: '#6c6864', frame: '#85817c', glass: ['#2a2e33', '#15181b'], lit: ['#eaf2ff', '#fff1d6', '#ffd9a8'], litP: 0.28, full: false, wallRough: 225, metal: 0.0 },
       // King West converted warehouses: rich deep red/terracotta brick, big multi-pane windows under segmental brick arches
@@ -3036,7 +3036,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         masonry: true, win: { ox: Math.round(CELL * 0.29), oy: 13, w: Math.round(CELL * 0.42), h: CELL - 21 }, lintel: true, panes: [1, 2]
       },
       // South Core / CityPlace / waterfront condos: twilight charcoal-blue window wall with sleek dark frames
-      condo: { base: '#15212b', frame: '#2f3b47', glass: ['#1c2e3d', '#101a24'], lit: ['#cfe6ff', '#ffe9c2', '#ffd9b0'], litP: 0.42, full: true, wallRough: 110, metal: 0.35, balcony: true }
+      condo: { base: '#15212b', frame: '#2f3b47', glass: ['#223647', '#162433'], lit: ['#cfe6ff', '#ffe9c2', '#ffd9b0'], litP: 0.42, full: true, wallRough: 110, metal: 0.35, balcony: true }
     }[style];
 
     ctx.fillStyle = S.base; ctx.fillRect(0, 0, SZ, SZ);
@@ -3077,7 +3077,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         const rnd = hash(seed * 13.7 + fy * 7.1 + fx * 3.3);
 
         // window reveal: shadowed inset on top/left, lit sill below
-        ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(x - 2, y - 2, w + 4, h + 4);
+        ctx.fillStyle = 'rgba(12,16,24,0.34)'; ctx.fillRect(x - 2, y - 2, w + 4, h + 4);
         if (!S.full) { ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(x - 3, y + h + 2, w + 6, 3); }
 
         if (rnd < S.litP) {
@@ -3176,7 +3176,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       metalness: S.metal,
       envMapIntensity: 0.12,  // keep low: a bright env map washes out a night facade
       vertexColors: true,       // per-building tint (see addBuilding)
-      side: THREE.DoubleSide,
+      side: THREE.FrontSide !== undefined ? THREE.FrontSide : 0,
       shadowSide: THREE.FrontSide !== undefined ? THREE.FrontSide : 0
     });
   }
@@ -3315,7 +3315,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     [tex, etex].forEach(t => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; });
     return new THREE.MeshStandardMaterial({
       map: tex, emissive: 0xffffff, emissiveMap: etex, emissiveIntensity: 1.25,
-      roughness: 0.35, metalness: 0.0, envMapIntensity: 0.25, side: THREE.DoubleSide,
+      roughness: 0.35, metalness: 0.0, envMapIntensity: 0.25,
+      side: THREE.FrontSide !== undefined ? THREE.FrontSide : 0,
       shadowSide: THREE.FrontSide !== undefined ? THREE.FrontSide : 0
     });
   }
@@ -5427,14 +5428,144 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       }
     }
 
-    function addBuilding(pts, h, style, minY, opts) {
+    const wallBuckets = new Map();
+    const WALL_CELL = 24;
+    function wallBucketKeys(x0, z0, x1, z1) {
+      const gx0 = Math.floor(Math.min(x0, x1) / WALL_CELL) - 1;
+      const gx1 = Math.floor(Math.max(x0, x1) / WALL_CELL) + 1;
+      const gz0 = Math.floor(Math.min(z0, z1) / WALL_CELL) - 1;
+      const gz1 = Math.floor(Math.max(z0, z1) / WALL_CELL) + 1;
+      const keys = [];
+      for (let gx = gx0; gx <= gx1; gx++) {
+        for (let gz = gz0; gz <= gz1; gz++) keys.push(gx + ',' + gz);
+      }
+      return keys;
+    }
+    function analyzeCoplanarConflicts(candPts, yLo, yHi) {
+      let maxSpan = 0, score = 0;
+      for (let i = 0; i < candPts.length; i++) {
+        const [ax, az] = candPts[i], [bx, bz] = candPts[(i + 1) % candPts.length];
+        const dx = bx - ax, dz = bz - az, len = Math.hypot(dx, dz);
+        if (len < 0.2) continue;
+        const nx = dz / len, nz = -dx / len, tx = dx / len, tz = dz / len;
+        const seen = new Set();
+        const keys = wallBucketKeys(ax, az, bx, bz);
+        for (let ki = 0; ki < keys.length; ki++) {
+          const arr = wallBuckets.get(keys[ki]);
+          if (!arr) continue;
+          for (let wi = 0; wi < arr.length; wi++) {
+            const w = arr[wi];
+            if (seen.has(w)) continue;
+            seen.add(w);
+            const hOv = Math.min(yHi, w.y1) - Math.max(yLo, w.y0);
+            if (hOv <= 0.05) continue;
+            if (nx * w.nx + nz * w.nz < 0.992) continue;
+            const t0 = (w.ax - ax) * tx + (w.az - az) * tz;
+            const t1 = (w.bx - ax) * tx + (w.bz - az) * tz;
+            const sMin = Math.max(0, Math.min(t0, t1)), sMax = Math.min(len, Math.max(t0, t1));
+            const tOv = sMax - sMin;
+            if (tOv <= 0.2) continue;
+            const d0 = (w.ax - ax) * nx + (w.az - az) * nz;
+            const d1 = (w.bx - ax) * nx + (w.bz - az) * nz;
+            const dt = t1 - t0;
+            const o0 = Math.abs(dt) > 1e-4 ? d0 + (d1 - d0) * ((sMin - t0) / dt) : d0;
+            const o1 = Math.abs(dt) > 1e-4 ? d0 + (d1 - d0) * ((sMax - t0) / dt) : d1;
+            const minOverlapDist = (o0 * o1 <= 0) ? 0 : Math.min(Math.abs(o0), Math.abs(o1));
+            if (minOverlapDist > 0.22) continue;
+            score += tOv * hOv;
+            if ((w.y1 - w.y0) > maxSpan) maxSpan = w.y1 - w.y0;
+          }
+        }
+      }
+      return { maxSpan, score };
+    }
+    function isEdgeCovered(ax, az, bx, bz, yLo, yHi) {
+      const dx = bx - ax, dz = bz - az, len = Math.hypot(dx, dz);
+      if (len < 0.2) return false;
+      const nx = dz / len, nz = -dx / len, tx = dx / len, tz = dz / len;
+      const seen = new Set();
+      const keys = wallBucketKeys(ax, az, bx, bz);
+      let coveredLen = 0;
+      for (let ki = 0; ki < keys.length; ki++) {
+        const arr = wallBuckets.get(keys[ki]);
+        if (!arr) continue;
+        for (let wi = 0; wi < arr.length; wi++) {
+          const w = arr[wi];
+          if (seen.has(w)) continue;
+          seen.add(w);
+          if (w.y0 > yLo + 0.15 || w.y1 < yHi - 0.15) continue;
+          if (nx * w.nx + nz * w.nz < 0.992) continue;
+          const t0 = (w.ax - ax) * tx + (w.az - az) * tz;
+          const t1 = (w.bx - ax) * tx + (w.bz - az) * tz;
+          const sMin = Math.max(0, Math.min(t0, t1)), sMax = Math.min(len, Math.max(t0, t1));
+          const tOv = sMax - sMin;
+          if (tOv <= 0.2) continue;
+          const d0 = (w.ax - ax) * nx + (w.az - az) * nz;
+          const d1 = (w.bx - ax) * nx + (w.bz - az) * nz;
+          const dt = t1 - t0;
+          const o0 = Math.abs(dt) > 1e-4 ? d0 + (d1 - d0) * ((sMin - t0) / dt) : d0;
+          const o1 = Math.abs(dt) > 1e-4 ? d0 + (d1 - d0) * ((sMax - t0) / dt) : d1;
+          const minOverlapDist = (o0 * o1 <= 0) ? 0 : Math.min(Math.abs(o0), Math.abs(o1));
+          if (minOverlapDist <= 0.14) coveredLen += tOv;
+        }
+      }
+      return coveredLen >= len * 0.88;
+    }
+    function registerWallFootprint(candPts, yLo, yHi) {
+      for (let i = 0; i < candPts.length; i++) {
+        const [ax, az] = candPts[i], [bx, bz] = candPts[(i + 1) % candPts.length];
+        const dx = bx - ax, dz = bz - az, len = Math.hypot(dx, dz);
+        if (len < 0.2) continue;
+        const rec = { ax, az, bx, bz, nx: dz / len, nz: -dx / len, y0: yLo, y1: yHi };
+        const keys = wallBucketKeys(ax, az, bx, bz);
+        for (let ki = 0; ki < keys.length; ki++) {
+          let arr = wallBuckets.get(keys[ki]);
+          if (!arr) { arr = []; wallBuckets.set(keys[ki], arr); }
+          arr.push(rec);
+        }
+      }
+    }
+
+    function addBuilding(rawPts, h, style, minY, opts) {
       opts = opts || {};
+      let pts = polyArea(rawPts) < 0 ? rawPts.slice().reverse() : rawPts;
+      const origArea = Math.abs(polyArea(pts));
       const y0 = minY || 0;
+      const baseH = h;
+      let vh = h;
+      const shops = opts.shops !== false && y0 === 0 && baseH >= 9;
+      const hasPodium = !!opts.podiumStyle && y0 === 0 && baseH > 24;
+      const podiumH = hasPodium ? Math.min(16.5, baseH * 0.42) : 0;
+      const initConf = analyzeCoplanarConflicts(pts, y0, vh);
+      if (initConf.score > 0 && origArea > 4) {
+        const span = vh - y0;
+        const tryOffs = span > initConf.maxSpan + 0.2
+          ? [-0.26, 0.26, -0.41, 0.41, -0.57, 0.57, -0.73, 0.73, 1.04]
+          : [0.26, 0.41, 0.57, -0.26, 0.73, 0.91, -0.41, 1.15, -0.57];
+        let bestPts = pts, bestScore = initConf.score, bestOff = 0;
+        for (let oi = 0; oi < tryOffs.length; oi++) {
+          const off = tryOffs[oi];
+          const cand = offsetPoly(pts, off);
+          if (off < 0 && polyArea(cand) < origArea * 0.65) continue;
+          const res = analyzeCoplanarConflicts(cand, y0, vh);
+          if (res.score < bestScore) {
+            bestScore = res.score;
+            bestPts = cand;
+            bestOff = off;
+            if (res.score === 0) break;
+          }
+        }
+        if (bestOff !== 0) {
+          pts = bestPts;
+          const nextH = vh + (bestOff > 0 ? 0.06 : -0.06);
+          const minVH = hasPodium ? podiumH + 0.5 : (shops ? STOREFRONT_H + 0.5 : y0 + 0.5);
+          if (nextH > minVH) vh = nextH;
+        }
+      }
+      h = vh;
+
       const gb = facadeGB[style];
       const tint = opts.tint || [1, 1, 1];
-      const shops = opts.shops !== false && y0 === 0 && h >= 9;
-      const hasPodium = !!opts.podiumStyle && y0 === 0 && h > 24;
-      const podiumH = hasPodium ? Math.min(16.5, h * 0.42) : 0;
       const fy0 = hasPodium ? podiumH : (shops ? STOREFRONT_H : y0);
       const podGB = hasPodium ? facadeGB[opts.podiumStyle] : null;
       if (podGB) podGB.color = opts.podiumTint || [1.0, 1.0, 1.0];
@@ -5445,6 +5576,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         const dx = bx - ax, dz = bz - az;
         const len = Math.hypot(dx, dz);
         if (len < 0.01) continue;
+        if (isEdgeCovered(ax, az, bx, bz, y0, h)) { u += len; continue; }
         const nx = dz / len, nz = -dx / len; // outward for CCW (positive area)
         const u0 = u / TILE_W, u1 = (u + len) / TILE_W;
         const v0 = fy0 / TILE_H, v1 = h / TILE_H;
@@ -5470,6 +5602,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         }
         u += len;
       }
+      registerWallFootprint(pts, y0, h);
       gb.color = [1, 1, 1];
       if (podGB) {
         podGB.color = [1, 1, 1];
@@ -5834,6 +5967,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
                         : (name === '65 King Street East' || Math.hypot(cx - 664.5, cz - (-594.7)) < 16) ? 'googleKing' : null;
       if (lmKey) {
         landmarkFeet[lmKey] = pts;
+        registerWallFootprint(pts, 0, b.h || 25);
         if (lmKey !== 'unionStation' && lmKey !== 'royalYork' && lmKey !== 'royThomson' && lmKey !== 'hhof' && lmKey !== 'dominionPublic' && lmKey !== 'googleKing' && lmKey !== 'stAndrews') {
           addSolid({ type: 'poly', pts, h: b.h || 20, name });
         }
@@ -7151,12 +7285,12 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     STYLES.forEach(s => {
       if (!facadeGB[s].pos.length) return;
       const m = new THREE.Mesh(facadeGB[s].build(), facadeMats[s]);
-      m.castShadow = true; m.receiveShadow = true;
+      m.castShadow = true; m.receiveShadow = false;
       scene.add(m);
     });
     if (shopGB.pos.length) {
       const shopsMesh = new THREE.Mesh(shopGB.build(), shopMat);
-      shopsMesh.receiveShadow = true;
+      shopsMesh.receiveShadow = false;
       scene.add(shopsMesh);
     }
     {
@@ -8594,7 +8728,9 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       }
       roofGeo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
       const roof = new THREE.Mesh(roofGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.32, metalness: 0.55, envMapIntensity: 0.5, side: THREE.DoubleSide }));
-      [walls, roof].forEach(m => { m.castShadow = true; m.receiveShadow = true; scene.add(m); });
+      walls.castShadow = true; walls.receiveShadow = false;
+      roof.castShadow = true; roof.receiveShadow = true;
+      scene.add(walls, roof);
       signOnEdge(landmarkFeet.ripleys, LM.cnTower, signMesh(["RIPLEY'S AQUARIUM"], 12, 1.55, { bg: '#032a3d', fg: '#7dd3fc', borderColor: '#0ea5e9', size: 58 }), 5.0, 14);
     }
 
@@ -8761,7 +8897,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       }
       [[doorGB, doorMat], [winGB, winMat]].forEach(([gb, mat]) => {
         if (!gb.pos.length) return;
-        const m = new THREE.Mesh(gb.build(), mat); m.castShadow = true; m.receiveShadow = true; scene.add(m);
+        const m = new THREE.Mesh(gb.build(), mat); m.castShadow = true; m.receiveShadow = false; scene.add(m);
       });
       // Low-pitched roof with a raised clerestory "monitor" running round the arc
       const roofMat = new THREE.MeshStandardMaterial({ color: 0x2b2a2a, roughness: 0.8, envMapIntensity: 0.15, side: THREE.DoubleSide });
@@ -9076,7 +9212,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       // 1. Grand Beaux-Arts Indiana Limestone Podium (0m -> 24m)
       const basePoly = makeBoxPoly(-18, -1.5, 146, 64);
       const baseWalls = new THREE.Mesh(wallsGeo(basePoly, 0, () => 24, TILE_W, 24), ryPodiumMat);
-      baseWalls.castShadow = baseWalls.receiveShadow = true;
+      baseWalls.castShadow = true; baseWalls.receiveShadow = false;
       scene.add(baseWalls);
       scene.add(new THREE.Mesh(capGeo(basePoly, () => 24), trimStone));
 
@@ -9126,7 +9262,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
 
       [westWingPoly, eastWingPoly, northSpinePoly, centerPavPoly].forEach(poly => {
         const wMesh = new THREE.Mesh(wallsGeo(poly, 24, () => 84, TILE_W, TILE_H), ryShaftMat);
-        wMesh.castShadow = wMesh.receiveShadow = true;
+        wMesh.castShadow = true; wMesh.receiveShadow = false;
         scene.add(wMesh);
         scene.add(new THREE.Mesh(capGeo(poly, () => 84), trimStone));
         // Stringcourses at 52m and 74m
@@ -9148,7 +9284,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       // 5. Central Chateau Tower (84m -> 106m)
       const centerTowerPoly = makeBoxPoly(-18, -6, 68, 42);
       const towerMesh = new THREE.Mesh(wallsGeo(centerTowerPoly, 84, () => 106, TILE_W, TILE_H), ryShaftMat);
-      towerMesh.castShadow = towerMesh.receiveShadow = true;
+      towerMesh.castShadow = true; towerMesh.receiveShadow = false;
       scene.add(towerMesh);
       scene.add(new THREE.Mesh(capGeo(centerTowerPoly, () => 106), trimStone));
       // Parapet balustrade atop 106m terrace
@@ -9387,7 +9523,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
 
       [westPoly, eastPoly].forEach((wp, wi) => {
         const wMesh = new THREE.Mesh(wallsGeo(wp, 0, () => WING_H, 16, 16), uStoneMat);
-        wMesh.castShadow = wMesh.receiveShadow = true;
+        wMesh.castShadow = true; wMesh.receiveShadow = false;
         scene.add(wMesh);
         scene.add(new THREE.Mesh(capGeo(wp, () => WING_H), stoneCapMat));
         addSolid({ type: 'poly', pts: wp, h: WING_H, name: wi ? 'Union Station East Wing' : 'Union Station West Wing' });
@@ -9413,7 +9549,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       ];
       if (polyArea(loggiaPoly) < 0) loggiaPoly.reverse();
       const loggiaMesh = new THREE.Mesh(wallsGeo(loggiaPoly, 0, () => LOGGIA_H, 16, 16), uLoggiaMat);
-      loggiaMesh.castShadow = loggiaMesh.receiveShadow = true;
+      loggiaMesh.castShadow = true; loggiaMesh.receiveShadow = false;
       scene.add(loggiaMesh);
       scene.add(new THREE.Mesh(capGeo(loggiaPoly, () => LOGGIA_H), stoneCapMat));
       addSolid({ type: 'poly', pts: loggiaPoly, h: LOGGIA_H, name: 'Union Station Loggia' });
@@ -9673,7 +9809,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       [westSouthPoly, eastSouthPoly].forEach((sp, spi) => {
         if (polyArea(sp) < 0) sp.reverse();
         const sMesh = new THREE.Mesh(wallsGeo(sp, 0, () => SOUTH_H, 16, 12), uStoneMat);
-        sMesh.castShadow = sMesh.receiveShadow = true;
+        sMesh.castShadow = true; sMesh.receiveShadow = false;
         scene.add(sMesh);
         scene.add(new THREE.Mesh(capGeo(sp, () => SOUTH_H), stoneCapMat));
         addSolid({ type: 'poly', pts: sp, h: SOUTH_H, name: spi ? 'Union Station South East Pavilion' : 'Union Station South West Pavilion' });
@@ -9810,7 +9946,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
 
       // 1. Main Curved Crescent Massing (following OSM footprint)
       const dpWalls = new THREE.Mesh(wallsGeo(P, 0, () => H, 16, 16), dpMat);
-      dpWalls.castShadow = dpWalls.receiveShadow = true;
+      dpWalls.castShadow = true; dpWalls.receiveShadow = false;
       scene.add(dpWalls);
       scene.add(new THREE.Mesh(capGeo(P, () => H), dpStoneCapMat));
       addSolid({ type: 'poly', pts: P, h: H, name: 'Dominion Public Building' });
@@ -9948,7 +10084,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         color: 0x4b5563, roughness: 0.4, metalness: 0.45, envMapIntensity: 0.5, side: THREE.DoubleSide
       });
       const walls = new THREE.Mesh(wallsGeo(P, 0, () => H, 16, 16), arenaMat);
-      walls.castShadow = walls.receiveShadow = true;
+      walls.castShadow = true; walls.receiveShadow = false;
       scene.add(walls);
       scene.add(new THREE.Mesh(capGeo(P, () => H), new THREE.MeshStandardMaterial({ color: 0x374151, roughness: 0.7, side: THREE.DoubleSide })));
 
@@ -10268,7 +10404,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
 
       // 1. Main Ohio Sandstone Beaux-Arts Palazzo Walls (0m -> 16.5m)
       const baseWalls = new THREE.Mesh(wallsGeo(P, 0, () => 16.5, 16, 16.5), hhofFacadeMat);
-      baseWalls.castShadow = baseWalls.receiveShadow = true;
+      baseWalls.castShadow = true; baseWalls.receiveShadow = false;
       scene.add(baseWalls);
       scene.add(new THREE.Mesh(capGeo(P, () => 16.5), trimStone));
 
@@ -10491,7 +10627,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       podTex.repeat.set(3, 1);
       const podiumMat = new THREE.MeshStandardMaterial({ map: podTex, roughness: 0.75 });
       const podiumWalls = new THREE.Mesh(wallsGeo(foot, 0, () => 16.5, 8, 4), podiumMat);
-      podiumWalls.castShadow = true; podiumWalls.receiveShadow = true;
+      podiumWalls.castShadow = true; podiumWalls.receiveShadow = false;
       googleGrp.add(podiumWalls);
       const podiumRoof = new THREE.Mesh(capGeo(foot, () => 16.5), podiumMat);
       googleGrp.add(podiumRoof);
@@ -10574,7 +10710,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       });
       const towerFoot = foot.map(([x, z]) => [x + (gcx - x) * 0.05, z + (gcz - z) * 0.05]);
       const towerWalls = new THREE.Mesh(wallsGeo(towerFoot, 16.5, () => 82.0, 8, 4), towerMat);
-      towerWalls.castShadow = true; towerWalls.receiveShadow = true;
+      towerWalls.castShadow = true; towerWalls.receiveShadow = false;
       googleGrp.add(towerWalls);
       const towerRoof = new THREE.Mesh(capGeo(towerFoot, () => 82.0), towerMat);
       googleGrp.add(towerRoof);
@@ -11879,7 +12015,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         });
         const naveH = 15.2;
         const naveWalls = new THREE.Mesh(wallsGeo(stPts, 0, () => naveH, 14, 15.2), stWallMat);
-        naveWalls.castShadow = naveWalls.receiveShadow = true;
+        naveWalls.castShadow = true; naveWalls.receiveShadow = false;
         stGrp.add(naveWalls);
 
         // Pitched dark-slate sanctuary roof rising to 22.8m ridge
@@ -19128,7 +19264,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         const texel = 150.0 / 2048.0;
         const pr = Math.round((playerPos.x * rx + playerPos.z * rz) / texel) * texel;
         const pu = Math.round((playerPos.x * ux + playerPos.z * uz) / texel) * texel;
-        const pl = playerPos.x * lx + playerPos.z * lz;
+        const pl = Math.round((playerPos.x * lx + playerPos.z * lz) / 8.0) * 8.0;
         const tx = pr * rx + pu * ux + pl * lx;
         const ty = pu * uy + pl * ly;
         const tz = pr * rz + pu * uz + pl * lz;
