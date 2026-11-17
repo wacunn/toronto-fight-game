@@ -1158,12 +1158,19 @@ const state = {
   onSubway: false,
   onTaxi: false,
   isUnderground: false,
+  pendingMeleeAttack: null,
+  pendingMeleeTimer: 0,
+  pendingSlamImpact: null,
   skyShowdownActive: false,
   skyShowdownWave: 0,
   skyShowdownTotalWaves: 3,
   skyShowdownBoss: null,
   skyShowdownCleared: false
 };
+
+const _meleeFwd = new THREE.Vector3();
+const _meleeDir = new THREE.Vector3();
+const _knockDir = new THREE.Vector3();
 
 // ============================================================================
 // THREE.JS SETUP & 3D TORONTO OPEN-WORLD ARENA
@@ -1172,12 +1179,13 @@ const container = document.getElementById('game-container');
 const scene = new THREE.Scene();
 
 // Far clip increased to 4500m to render full Toronto Islands archipelago and downtown skyline across the harbour
-const camera = new THREE.PerspectiveCamera(78, window.innerWidth / window.innerHeight, 0.08, 4500);
+const camera = new THREE.PerspectiveCamera(78, window.innerWidth / window.innerHeight, 0.14, 4500);
 camera.position.set(0, 1.7, 0);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2.0));
+if (THREE.sRGBEncoding !== undefined) renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 container.insertBefore(renderer.domElement, container.firstChild);
@@ -1187,46 +1195,89 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 
 // Image-based lighting for MeshStandardMaterial (hands, boots, fighters, crates).
-// --- City Environment Map (Daytime sky reflection + Nighttime neon reflection) ---
+// --- City Environment Map (Daytime sky reflection + Nighttime neon reflection + Toronto skyline) ---
 let nightEnvMap = null, dayEnvMap = null;
 function buildCityEnvMap(renderer, isDay) {
   const envScene = new THREE.Scene();
   const c = document.createElement('canvas');
-  c.width = 8; c.height = 256;
+  c.width = 64; c.height = 512;
   const g = c.getContext('2d');
-  const grad = g.createLinearGradient(0, 0, 0, 256);
+  const grad = g.createLinearGradient(0, 0, 0, 512);
   if (isDay) {
     grad.addColorStop(0.0, '#144478');
-    grad.addColorStop(0.42, '#417ab0');
-    grad.addColorStop(0.50, '#78a5cc');
-    grad.addColorStop(0.56, '#485a6b');
+    grad.addColorStop(0.40, '#417ab0');
+    grad.addColorStop(0.49, '#78a5cc');
+    grad.addColorStop(0.54, '#485a6b');
     grad.addColorStop(1.0, '#222c36');
   } else {
     grad.addColorStop(0.0, '#05070f');
-    grad.addColorStop(0.42, '#151f33');
-    grad.addColorStop(0.5, '#1e2d42');
-    grad.addColorStop(0.56, '#181e28');
+    grad.addColorStop(0.40, '#151f33');
+    grad.addColorStop(0.49, '#1e2d42');
+    grad.addColorStop(0.55, '#181e28');
     grad.addColorStop(1.0, '#0a0d14');
   }
   g.fillStyle = grad;
-  g.fillRect(0, 0, 8, 256);
+  g.fillRect(0, 0, 64, 512);
+  // Subtle horizon glow + Toronto skyline silhouette (including CN Tower spire)
+  const horizonY = 256;
+  g.fillStyle = isDay ? 'rgba(195,222,248,0.42)' : 'rgba(62,118,185,0.34)';
+  g.fillRect(0, horizonY - 12, 64, 24);
+  const towers = [14, 24, 18, 36, 22, 48, 28, 16, 40, 30, 20, 44, 26, 18, 34, 22];
+  for (let i = 0; i < towers.length; i++) {
+    const bx = i * 4;
+    const bh = towers[i];
+    g.fillStyle = isDay ? '#2e4154' : '#090e18';
+    g.fillRect(bx, horizonY - bh, 4, bh + 18);
+    if (!isDay) {
+      g.fillStyle = (i % 3 === 0) ? '#7cf2ff' : '#ffd28a';
+      for (let wy = horizonY - bh + 4; wy < horizonY - 2; wy += 6) {
+        if ((wy + i) % 4 === 0) g.fillRect(bx + 1, wy, 2, 2);
+      }
+    }
+  }
+  // CN Tower silhouette on horizon
+  g.fillStyle = isDay ? '#35495c' : '#0a101b';
+  g.fillRect(29, horizonY - 82, 2, 84);
+  g.fillRect(27, horizonY - 58, 6, 4);
+  if (!isDay) {
+    g.fillStyle = '#3ef0ff';
+    g.fillRect(27, horizonY - 57, 6, 2);
+    g.fillStyle = '#ff4f7a';
+    g.fillRect(29, horizonY - 83, 2, 3);
+  }
   const skyTex = new THREE.CanvasTexture(c);
-  envScene.add(new THREE.Mesh(new THREE.SphereGeometry(50, 32, 16), new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide })));
+  if (THREE.sRGBEncoding !== undefined && renderer.outputEncoding === THREE.sRGBEncoding) {
+    skyTex.encoding = THREE.sRGBEncoding;
+  }
+  const tempGeos = [], tempMats = [];
+  const skyGeo = new THREE.SphereGeometry(50, 32, 16);
+  const skyMat = new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide });
+  tempGeos.push(skyGeo); tempMats.push(skyMat);
+  envScene.add(new THREE.Mesh(skyGeo, skyMat));
   const panelGeo = isDay ? new THREE.PlaneGeometry(14, 14) : new THREE.PlaneGeometry(5, 9);
+  tempGeos.push(panelGeo);
   const cols = isDay ? [0x88b4dc, 0x77a6d1, 0x9ac1e4, 0x6b9ac7, 0xa8cbe8, 0x7caad4] : [0xffd59a, 0xffb36b, 0x9fd2ff, 0xffffff, 0x70a0d0, 0x63f0ff];
   for (let i = 0; i < 18; i++) {
     const a = (i / 18) * Math.PI * 2;
-    const m = new THREE.Mesh(panelGeo, new THREE.MeshBasicMaterial({ color: cols[i % cols.length] }));
+    const pm = new THREE.MeshBasicMaterial({ color: cols[i % cols.length] });
+    tempMats.push(pm);
+    const m = new THREE.Mesh(panelGeo, pm);
     m.position.set(Math.cos(a) * 30, 2 + (i % 3) * 5, Math.sin(a) * 30);
     m.lookAt(0, 4, 0);
     envScene.add(m);
   }
-  const top = new THREE.Mesh(new THREE.CircleGeometry(10, 24), new THREE.MeshBasicMaterial({ color: isDay ? 0x6c9dc9 : 0x8090c0 }));
+  const topGeo = new THREE.CircleGeometry(10, 24);
+  const topMat = new THREE.MeshBasicMaterial({ color: isDay ? 0x6c9dc9 : 0x8090c0 });
+  tempGeos.push(topGeo); tempMats.push(topMat);
+  const top = new THREE.Mesh(topGeo, topMat);
   top.position.y = 45; top.rotation.x = Math.PI / 2;
   envScene.add(top);
   const pmrem = new THREE.PMREMGenerator(renderer);
   const rt = pmrem.fromScene(envScene, 0.035);
   pmrem.dispose();
+  skyTex.dispose();
+  for (let i = 0; i < tempGeos.length; i++) tempGeos[i].dispose();
+  for (let i = 0; i < tempMats.length; i++) tempMats[i].dispose();
   return rt.texture;
 }
 
@@ -1238,12 +1289,32 @@ function getCityTimeOfDay() {
   return (city && city.getTimeOfDay) ? city.getTimeOfDay() : 'night';
 }
 
+function syncSceneFog() {
+  if (!scene.fog) return;
+  const isDay = (getCityTimeOfDay() === 'day');
+  if (state.isUnderground) {
+    if (scene.fog.color && typeof scene.fog.color.setHex === 'function') scene.fog.color.setHex(0x0c1018);
+    scene.fog.density = 0.0085;
+    return;
+  }
+  if (scene.fog.color && typeof scene.fog.color.setHex === 'function') {
+    scene.fog.color.setHex(isDay ? 0x8cb7db : 0x0c1322);
+  }
+  if (state.onPlane) scene.fog.density = 0.00022;
+  else if (state.onIsland || state.onFerry) scene.fog.density = 0.00065;
+  else scene.fog.density = getMainlandFogDensity();
+}
+
 function setCityTimeOfDay(mode, fromNet, byName) {
   const tod = (mode === 'day') ? 'day' : 'night';
   const isDay = (tod === 'day');
   if (city && city.setTimeOfDay) city.setTimeOfDay(tod);
   if (islands && islands.setTimeOfDay) islands.setTimeOfDay(isDay);
   if (traffic && traffic.setTimeOfDay) traffic.setTimeOfDay(isDay);
+  if (typeof document !== 'undefined' && document.body && document.body.classList) {
+    if (isDay) document.body.classList.add('day-mode');
+    else document.body.classList.remove('day-mode');
+  }
   try {
     if (isDay) {
       if (!dayEnvMap) dayEnvMap = buildCityEnvMap(renderer, true);
@@ -1262,11 +1333,7 @@ function setCityTimeOfDay(mode, fromNet, byName) {
     bloomPass.radius = isDay ? 0.2 : 0.5;
     bloomPass.threshold = isDay ? 1.5 : 0.80;
   }
-  if (scene.fog) {
-    if (state.onPlane) scene.fog.density = 0.00022;
-    else if (state.onIsland || state.onFerry) scene.fog.density = 0.00065;
-    else scene.fog.density = getMainlandFogDensity();
-  }
+  syncSceneFog();
   const todBadge = document.getElementById('tod-badge');
   if (todBadge) {
     todBadge.innerText = isDay ? '☀️ DAYTIME' : '🌙 NIGHTTIME';
@@ -1282,28 +1349,51 @@ function setCityTimeOfDay(mode, fromNet, byName) {
 }
 
 // --- Bloom post-processing (lit windows, neon, lamps, CN Tower LEDs glow) ---
-let composer = null, bloomPass = null;
+let composer = null, bloomPass = null, outputEncodingPass = null;
 function setupPostFX() {
   if (!THREE.EffectComposer || !THREE.RenderPass || !THREE.UnrealBloomPass) return; // scripts not loaded: plain render
-  const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+  const pr = (renderer && typeof renderer.getPixelRatio === 'function') ? renderer.getPixelRatio() : 1;
+  const size = (renderer && typeof renderer.getDrawingBufferSize === 'function')
+    ? renderer.getDrawingBufferSize(new THREE.Vector2())
+    : new THREE.Vector2(window.innerWidth, window.innerHeight);
+  const caps = (renderer && renderer.capabilities) ? renderer.capabilities : {};
+  const gl = (renderer && typeof renderer.getContext === 'function') ? renderer.getContext() : null;
+  const supportsHalfFloatRT = !!(
+    THREE.HalfFloatType && caps.isWebGL2 && gl && typeof gl.getExtension === 'function' &&
+    (gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float'))
+  );
+  const rtOpts = { format: THREE.RGBAFormat };
+  if (supportsHalfFloatRT) rtOpts.type = THREE.HalfFloatType;
   let rt;
-  if (renderer.capabilities.isWebGL2 && THREE.WebGLMultisampleRenderTarget) {
-    // keep MSAA when rendering through the composer (otherwise edges go jaggy)
-    rt = new THREE.WebGLMultisampleRenderTarget(size.x, size.y, { format: THREE.RGBAFormat });
-    rt.samples = 4;
+  if (caps.isWebGL2 && THREE.WebGLMultisampleRenderTarget) {
+    // keep MSAA when rendering through the composer at <=1.5x DPR; disable extra MSAA at 2x retina
+    rt = new THREE.WebGLMultisampleRenderTarget(size.x, size.y, rtOpts);
+    rt.samples = (pr >= 1.75 ? 0 : 2);
   }
   composer = new THREE.EffectComposer(renderer, rt);
-  composer.setPixelRatio(renderer.getPixelRatio());
+  composer.setPixelRatio(pr);
   composer.setSize(window.innerWidth, window.innerHeight);
   composer.addPass(new THREE.RenderPass(scene, camera));
   const isDayInit = (getCityTimeOfDay() === 'day');
+  const halfW = Math.max(1, Math.floor(window.innerWidth * 0.5));
+  const halfH = Math.max(1, Math.floor(window.innerHeight * 0.5));
   bloomPass = new THREE.UnrealBloomPass(
-    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    new THREE.Vector2(halfW, halfH),
     isDayInit ? 0.0 : 0.85,
     isDayInit ? 0.2 : 0.5,
     isDayInit ? 1.5 : 0.8
   );
+  bloomPass.setSize(halfW, halfH);
   composer.addPass(bloomPass);
+  if (THREE.ShaderPass && THREE.sRGBEncoding !== undefined && renderer.outputEncoding === THREE.sRGBEncoding) {
+    outputEncodingPass = new THREE.ShaderPass({
+      uniforms: { tDiffuse: { value: null } },
+      vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: 'uniform sampler2D tDiffuse; varying vec2 vUv; void main() { gl_FragColor = texture2D(tDiffuse, vUv); #include <encodings_fragment> }'
+    });
+    if (outputEncodingPass.material) outputEncodingPass.material.toneMapped = false;
+    composer.addPass(outputEncodingPass);
+  }
 }
 
 // Build Toronto City from real OpenStreetMap data with CN Tower Peace Sanctuary
@@ -1343,8 +1433,9 @@ const colliders = [];
 // Texture Generators
 function createProceduralTexture(type) {
   const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 256;
+  const size = (type === 'crate') ? 512 : 256;
+  canvas.width = size;
+  canvas.height = size;
   const ctx = canvas.getContext('2d');
 
   if (type === 'wall') {
@@ -1357,27 +1448,80 @@ function createProceduralTexture(type) {
     ctx.fillStyle = '#111318';
     ctx.fillRect(0, 0, 256, 256);
   } else if (type === 'crate') {
-    ctx.fillStyle = '#8b5a2b';
-    ctx.fillRect(0, 0, 256, 256);
-    ctx.fillStyle = '#5c3818';
-    ctx.fillRect(12, 12, 232, 232);
+    ctx.fillStyle = '#8d5b2b';
+    ctx.fillRect(0, 0, 512, 512);
+    ctx.fillStyle = '#623c1a';
+    ctx.fillRect(24, 24, 464, 464);
+    // Horizontal wood planks and grain detail
+    for (let y = 32; y < 480; y += 64) {
+      ctx.fillStyle = ((y / 64) % 2 === 0) ? 'rgba(138,88,42,0.28)' : 'rgba(62,36,16,0.28)';
+      ctx.fillRect(24, y, 464, 58);
+      ctx.fillStyle = 'rgba(28,15,6,0.55)';
+      ctx.fillRect(24, y + 58, 464, 4);
+    }
+    for (let g = 0; g < 60; g++) {
+      ctx.fillStyle = (g % 2 === 0) ? 'rgba(42,24,10,0.22)' : 'rgba(176,120,66,0.16)';
+      ctx.fillRect(28, 30 + ((g * 37) % 452), 456, 2);
+    }
+    // Outer frame + diagonal brace + steel corner brackets
     ctx.strokeStyle = '#3d2510';
-    ctx.lineWidth = 14;
-    ctx.strokeRect(8, 8, 240, 240);
+    ctx.lineWidth = 26;
+    ctx.strokeRect(16, 16, 480, 480);
     ctx.beginPath();
-    ctx.moveTo(8, 8); ctx.lineTo(248, 248);
-    ctx.moveTo(248, 8); ctx.lineTo(8, 248);
+    ctx.moveTo(18, 18); ctx.lineTo(494, 494);
+    ctx.moveTo(494, 18); ctx.lineTo(18, 494);
     ctx.stroke();
+    ctx.fillStyle = '#48505c';
+    ctx.fillRect(8, 8, 48, 48); ctx.fillRect(456, 8, 48, 48);
+    ctx.fillRect(8, 456, 48, 48); ctx.fillRect(456, 456, 48, 48);
     ctx.fillStyle = '#ffea00';
-    ctx.font = 'bold 36px monospace';
+    ctx.font = 'bold 68px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('SUPPLY', 128, 140);
+    ctx.fillText('SUPPLY', 256, 276);
   }
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.magFilter = THREE.LinearFilter;
   texture.minFilter = THREE.LinearMipmapLinearFilter;
+  if (THREE.sRGBEncoding !== undefined && renderer && renderer.outputEncoding === THREE.sRGBEncoding) {
+    texture.encoding = THREE.sRGBEncoding;
+  }
   return texture;
+}
+
+function upgradeSceneTextureQuality() {
+  if (!scene || typeof scene.traverse !== 'function') return;
+  const caps = (renderer && renderer.capabilities) ? renderer.capabilities : {};
+  const maxAniso = (typeof caps.getMaxAnisotropy === 'function')
+    ? Math.max(1, Math.min(16, caps.getMaxAnisotropy() || 1))
+    : 1;
+  const srgbOn = (THREE.sRGBEncoding !== undefined && renderer && renderer.outputEncoding === THREE.sRGBEncoding);
+  const seen = new Set();
+  const slots = ['map', 'emissiveMap', 'roughnessMap', 'bumpMap', 'normalMap', 'alphaMap'];
+  const upgradeMat = (mat) => {
+    if (!mat) return;
+    for (let i = 0; i < slots.length; i++) {
+      const slot = slots[i];
+      const tex = mat[slot];
+      if (!tex || seen.has(tex)) continue;
+      seen.add(tex);
+      if (typeof tex.anisotropy === 'number' && maxAniso > 1) {
+        tex.anisotropy = Math.max(tex.anisotropy, maxAniso);
+      }
+      if (srgbOn && (slot === 'map' || slot === 'emissiveMap') && tex.encoding !== THREE.sRGBEncoding) {
+        tex.encoding = THREE.sRGBEncoding;
+      }
+    }
+  };
+  scene.traverse((obj) => {
+    const mat = obj && obj.material;
+    if (!mat) return;
+    if (Array.isArray(mat)) {
+      for (let i = 0; i < mat.length; i++) upgradeMat(mat[i]);
+    } else {
+      upgradeMat(mat);
+    }
+  });
 }
 
 const crateTex = createProceduralTexture('crate');
@@ -1387,6 +1531,7 @@ if (city) {
   // Live traffic on the real street network (traffic.js)
   if (typeof window.createTraffic === 'function') traffic = window.createTraffic(scene, city, audio, { count: 30 });
   setCityTimeOfDay(city.getTimeOfDay ? city.getTimeOfDay() : 'night', true);
+  upgradeSceneTextureQuality();
   const todBadgeEl = document.getElementById('tod-badge');
   if (todBadgeEl) {
     todBadgeEl.addEventListener('click', (e) => {
@@ -1894,8 +2039,20 @@ function spawnCrates() {
 }
 spawnCrates();
 
-// Loot Pickups
+// Loot Pickups (shared geometries, color materials, additive ground halo instead of PointLight)
 const pickups = [];
+let _pickupGeo = null;
+let _pickupHaloGeo = null;
+const _pickupMatCache = {};
+const _pickupHaloMatCache = {};
+
+function getEffectGroundY(x, y, z) {
+  if (islands && islands.isInsideIslands && islands.isInsideIslands(x, z) && islands.floorAt) {
+    return islands.floorAt(x, z, y);
+  }
+  if (city && city.floorAt) return city.floorAt(x, z, y);
+  return 0;
+}
 
 function spawnPickup(x, y, z, loot, desc) {
   const group = new THREE.Group();
@@ -1907,14 +2064,31 @@ function spawnPickup(x, y, z, loot, desc) {
   if (loot === 'HEALTH') color = 0x22c55e;
   if (loot === 'ARMOR') color = 0x38bdf8;
 
-  const itemMesh = new THREE.Mesh(
-    new THREE.OctahedronGeometry(0.55, 0),
-    new THREE.MeshStandardMaterial({ color: color, emissive: color, emissiveIntensity: 0.6 })
-  );
+  if (!_pickupGeo) _pickupGeo = new THREE.OctahedronGeometry(0.55, 0);
+  if (!_pickupHaloGeo) {
+    _pickupHaloGeo = new THREE.RingGeometry(0.45, 0.78, 24);
+    if (_pickupHaloGeo.rotateX) _pickupHaloGeo.rotateX(-Math.PI / 2);
+  }
+  if (!_pickupMatCache[color]) {
+    _pickupMatCache[color] = new THREE.MeshStandardMaterial({ color: color, emissive: color, emissiveIntensity: 0.65 });
+  }
+  if (!_pickupHaloMatCache[color]) {
+    _pickupHaloMatCache[color] = new THREE.MeshBasicMaterial({
+      color: color,
+      transparent: true,
+      opacity: 0.42,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    });
+  }
+
+  const itemMesh = new THREE.Mesh(_pickupGeo, _pickupMatCache[color]);
   group.add(itemMesh);
 
-  const pLight = new THREE.PointLight(color, 2.5, 6);
-  group.add(pLight);
+  const halo = new THREE.Mesh(_pickupHaloGeo, _pickupHaloMatCache[color]);
+  halo.position.y = -0.48;
+  group.add(halo);
   scene.add(group);
 
   pickups.push({
@@ -1926,59 +2100,102 @@ function spawnPickup(x, y, z, loot, desc) {
   });
 }
 
-// 3D Particles (Blood, Splinters, Debris)
+// 3D Particles (Pooled Blood, Splinters, Debris)
 const particles = [];
+const _debrisPool = [];
+const _debrisMatCache = {};
+let _debrisBoxGeo = null;
+const MAX_ACTIVE_PARTICLES = 180;
 
 function spawnDebris(x, y, z, colorHex, count = 20, speed = 7) {
-  for (let i = 0; i < count; i++) {
-    const pMesh = new THREE.Mesh(
-      new THREE.BoxGeometry(0.14, 0.14, 0.14),
-      new THREE.MeshBasicMaterial({ color: colorHex })
-    );
-    pMesh.position.set(x, y, z);
-    scene.add(pMesh);
+  if (!_debrisBoxGeo) _debrisBoxGeo = new THREE.BoxGeometry(0.14, 0.14, 0.14);
+  if (!_debrisMatCache[colorHex]) {
+    _debrisMatCache[colorHex] = new THREE.MeshBasicMaterial({ color: colorHex });
+  }
+  const mat = _debrisMatCache[colorHex];
+  const floorY = getEffectGroundY(x, Math.max(y, player ? player.pos.y : y), z) + 0.08;
+  const maxAdd = Math.max(0, MAX_ACTIVE_PARTICLES - particles.length);
+  const spawnCount = Math.min(count, maxAdd);
+
+  for (let i = 0; i < spawnCount; i++) {
+    let p = _debrisPool.pop();
+    if (!p) {
+      const pMesh = new THREE.Mesh(_debrisBoxGeo, mat);
+      p = {
+        mesh: pMesh,
+        vx: 0, vy: 0, vz: 0,
+        rx: 0, ry: 0,
+        floorY: 0.1,
+        life: 0, maxLife: 1
+      };
+    } else {
+      p.mesh.material = mat;
+    }
+    p.mesh.visible = true;
+    p.mesh.position.set(x, y, z);
+    p.mesh.scale.set(1, 1, 1);
+    if (p.mesh.rotation) p.mesh.rotation.set(Math.random() * 3.14, Math.random() * 3.14, 0);
+    if (!p.mesh.parent) scene.add(p.mesh);
 
     const angle = Math.random() * Math.PI * 2;
     const upward = Math.random() * speed + 1.5;
     const spread = Math.random() * speed;
-
-    particles.push({
-      mesh: pMesh,
-      vx: Math.cos(angle) * spread,
-      vy: upward,
-      vz: Math.sin(angle) * spread,
-      life: 0.6 + Math.random() * 0.4
-    });
+    p.vx = Math.cos(angle) * spread;
+    p.vy = upward;
+    p.vz = Math.sin(angle) * spread;
+    p.rx = (Math.random() - 0.5) * 10;
+    p.ry = (Math.random() - 0.5) * 10;
+    p.floorY = floorY;
+    p.life = 0.6 + Math.random() * 0.4;
+    p.maxLife = p.life;
+    particles.push(p);
   }
 }
 
-// Radial Shockwave Effect for Meteor Slam
-function createMeteorShockwave(x, z) {
-  const geo = new THREE.RingGeometry(0.3, 1.0, 36);
-  const mat = new THREE.MeshBasicMaterial({
-    color: 0xffaa00,
-    side: THREE.DoubleSide,
-    transparent: true,
-    opacity: 0.95
-  });
-  const ring = new THREE.Mesh(geo, mat);
-  ring.rotation.x = -Math.PI / 2;
-  ring.position.set(x, 0.08, z);
-  scene.add(ring);
+// Radial Shockwave Effect for Meteor Slam (pooled, simDt-driven, dynamic surface groundY)
+const activeShockwaves = [];
+const _shockwavePool = [];
+let _shockwaveGeo = null;
 
-  let radius = 1.0;
-  let opacity = 0.95;
+function createMeteorShockwave(x, z, groundY) {
+  if (!_shockwaveGeo) _shockwaveGeo = new THREE.RingGeometry(0.3, 1.0, 36);
+  let sw = _shockwavePool.pop();
+  if (!sw) {
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0xffaa00,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.95
+    });
+    const ring = new THREE.Mesh(_shockwaveGeo, mat);
+    ring.rotation.x = -Math.PI / 2;
+    sw = { ring, radius: 1.0, opacity: 0.95 };
+  }
+  const baseY = (groundY !== undefined) ? groundY : getEffectGroundY(x, player ? player.pos.y : 0, z);
+  sw.radius = 1.0;
+  sw.opacity = 0.95;
+  sw.ring.visible = true;
+  sw.ring.position.set(x, baseY + 0.08, z);
+  sw.ring.scale.set(1, 1, 1);
+  sw.ring.material.opacity = 0.95;
+  if (!sw.ring.parent) scene.add(sw.ring);
+  activeShockwaves.push(sw);
+}
 
-  const interval = setInterval(() => {
-    radius += 0.55;
-    opacity -= 0.06;
-    ring.scale.set(radius, radius, 1);
-    ring.material.opacity = Math.max(0, opacity);
-    if (opacity <= 0) {
-      clearInterval(interval);
-      scene.remove(ring);
+function updateShockwaves(dt) {
+  for (let i = activeShockwaves.length - 1; i >= 0; i--) {
+    const sw = activeShockwaves[i];
+    sw.radius += dt * 34;
+    sw.opacity -= dt * 3.7;
+    sw.ring.scale.set(sw.radius, sw.radius, 1);
+    sw.ring.material.opacity = Math.max(0, sw.opacity);
+    if (sw.opacity <= 0) {
+      sw.ring.visible = false;
+      activeShockwaves.splice(i, 1);
+      if (_shockwavePool.length < 8) _shockwavePool.push(sw);
+      else scene.remove(sw.ring);
     }
-  }, 16);
+  }
 }
 
 // ============================================================================
@@ -1999,17 +2216,33 @@ function isNetGuest() {
 function isNetHostWithPeers() {
   return !!(window.multiplayer && window.multiplayer.isHostWithPeers && window.multiplayer.isHostWithPeers());
 }
-// Positions (x,z) of every player whose game we're simulating enemies for
+// Positions (x,z) of every player whose game we're simulating enemies for (zero per-frame allocs)
+const _playerPosPool = [{ x: 0, z: 0 }];
+const _playerPosOut = [];
 function allPlayerPositions() {
-  const out = [{ x: player.pos.x, z: player.pos.z }];
+  _playerPosPool[0].x = player.pos.x;
+  _playerPosPool[0].z = player.pos.z;
+  let count = 1;
   if (isNetHostWithPeers()) {
-    window.multiplayer.remotePlayers.forEach(rp => { out.push({ x: rp.currentPos.x, z: rp.currentPos.z }); });
+    window.multiplayer.remotePlayers.forEach(rp => {
+      if (!_playerPosPool[count]) _playerPosPool[count] = { x: 0, z: 0 };
+      _playerPosPool[count].x = rp.currentPos.x;
+      _playerPosPool[count].z = rp.currentPos.z;
+      count++;
+    });
   }
-  return out;
+  _playerPosOut.length = count;
+  for (let i = 0; i < count; i++) _playerPosOut[i] = _playerPosPool[i];
+  return _playerPosOut;
 }
 function nearestPlayerDist(x, z) {
+  const list = allPlayerPositions();
   let best = Infinity;
-  allPlayerPositions().forEach(p => { best = Math.min(best, Math.hypot(p.x - x, p.z - z)); });
+  for (let i = 0; i < list.length; i++) {
+    const p = list[i];
+    const d = Math.hypot(p.x - x, p.z - z);
+    if (d < best) best = d;
+  }
   return best;
 }
 
@@ -2248,9 +2481,225 @@ const SNATCHER_ARCHETYPES = [
 // Alias for legacy references
 const FIGHTER_ARCHETYPES = ROBOT_ARCHETYPES;
 
-function create3DHumanFighter(x, z, kind = 'robot', archetypeIndex = 0) {
+// Shared NPC Geometry, Material, and Nameplate Pools (reduces ~8,250 geos & ~4,950 mats to shared caches)
+let _npcGeos = null;
+function getNpcGeos() {
+  if (_npcGeos) return _npcGeos;
+  _npcGeos = {
+    hips: new THREE.BoxGeometry(0.48, 0.22, 0.3),
+    belt: new THREE.BoxGeometry(0.5, 0.07, 0.32),
+    buckle: new THREE.BoxGeometry(0.12, 0.08, 0.34),
+    thigh: new THREE.BoxGeometry(0.18, 0.42, 0.2),
+    calf: new THREE.BoxGeometry(0.16, 0.4, 0.18),
+    boot: new THREE.BoxGeometry(0.18, 0.16, 0.26),
+    abdomen: new THREE.BoxGeometry(0.44, 0.24, 0.26),
+    chest: new THREE.BoxGeometry(0.56, 0.36, 0.32),
+    neck: new THREE.CylinderGeometry(0.08, 0.1, 0.14, 8),
+    head: new THREE.BoxGeometry(0.28, 0.32, 0.28),
+    eye: new THREE.BoxGeometry(0.06, 0.04, 0.02),
+    pupil: new THREE.BoxGeometry(0.03, 0.04, 0.022),
+    brow: new THREE.BoxGeometry(0.24, 0.03, 0.03),
+    visor: new THREE.BoxGeometry(0.26, 0.065, 0.05),
+    earNode: new THREE.CylinderGeometry(0.02, 0.025, 0.08, 6),
+    earLight: new THREE.SphereGeometry(0.02, 6, 6),
+    sporeSpine: new THREE.CylinderGeometry(0.025, 0.045, 0.28, 6),
+    sporeTip: new THREE.SphereGeometry(0.05, 8, 8),
+    band: new THREE.BoxGeometry(0.3, 0.08, 0.3),
+    tail: new THREE.BoxGeometry(0.08, 0.22, 0.06),
+    hairTop: new THREE.BoxGeometry(0.29, 0.1, 0.29),
+    knot: new THREE.CylinderGeometry(0.05, 0.06, 0.12, 6),
+    buzz: new THREE.BoxGeometry(0.29, 0.08, 0.29),
+    bicep: new THREE.BoxGeometry(0.15, 0.3, 0.16),
+    forearm: new THREE.BoxGeometry(0.14, 0.28, 0.15),
+    fist: new THREE.BoxGeometry(0.18, 0.18, 0.2),
+    wristBand: new THREE.CylinderGeometry(0.08, 0.08, 0.06, 8),
+    shadow: new THREE.CircleGeometry(0.48, 16)
+  };
+  return _npcGeos;
+}
+
+let _npcStaticMats = null;
+function getNpcStaticMats() {
+  if (_npcStaticMats) return _npcStaticMats;
+  _npcStaticMats = {
+    beltMat: new THREE.MeshStandardMaterial({ color: 0x09090b, roughness: 0.4, metalness: 0.5 }),
+    buckleMat: new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.2, metalness: 0.9 }),
+    eyeWhiteMat: new THREE.MeshBasicMaterial({ color: 0xffffff }),
+    civPupilMat: new THREE.MeshBasicMaterial({ color: 0x0f172a }),
+    unmaskedPupilMat: new THREE.MeshBasicMaterial({ color: 0xff00ea }),
+    civBrowMat: new THREE.MeshBasicMaterial({ color: 0x27272a }),
+    botBrowMat: new THREE.MeshBasicMaterial({ color: 0x111111 }),
+    earNodeMat: new THREE.MeshStandardMaterial({ color: 0x09090b, metalness: 0.8, roughness: 0.2 }),
+    tendrilMat: new THREE.MeshStandardMaterial({
+      color: 0xc084fc,
+      roughness: 0.25,
+      metalness: 0.3,
+      emissive: 0x9333ea,
+      emissiveIntensity: 0.8
+    }),
+    wristAlienMat: new THREE.MeshBasicMaterial({ color: 0xd946ef }),
+    shadowMat: new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.45 })
+  };
+  return _npcStaticMats;
+}
+
+const _npcArchMatCache = {};
+function getNpcArchMats(kind, archIndex, arch) {
+  const key = `${kind}:${archIndex}`;
+  if (_npcArchMatCache[key]) return _npcArchMatCache[key];
+  const isCiv = (kind === 'civilian');
+  const isBot = (kind === 'robot');
+  const isSnatcher = (kind === 'snatcher');
+  const skinMat = new THREE.MeshStandardMaterial({
+    color: arch.skinColor,
+    roughness: isBot ? 0.4 : 0.7,
+    metalness: isBot ? 0.5 : 0.05
+  });
+  const vestMat = new THREE.MeshStandardMaterial({ color: arch.vestColor, roughness: 0.6, metalness: isBot ? 0.3 : 0.1 });
+  const pantsMat = new THREE.MeshStandardMaterial({ color: arch.pantsColor, roughness: 0.6, metalness: 0.1 });
+  const wrapMat = isCiv ? skinMat : new THREE.MeshStandardMaterial({
+    color: arch.wrapColor,
+    roughness: 0.5,
+    metalness: isBot ? 0.4 : 0.2
+  });
+  const bootMat = new THREE.MeshStandardMaterial({ color: arch.bootColor, roughness: 0.7, metalness: 0.2 });
+  const hairMat = new THREE.MeshStandardMaterial({ color: arch.hairColor, roughness: 0.9, metalness: 0.0 });
+  const visorMat = isBot ? new THREE.MeshBasicMaterial({ color: arch.visorColor || 0x00f0ff }) : null;
+  const bandanaMat = (arch.hairStyle === 'bandana' && arch.bandanaColor)
+    ? new THREE.MeshStandardMaterial({ color: arch.bandanaColor })
+    : null;
+  const snatcherPupilMat = isSnatcher
+    ? new THREE.MeshBasicMaterial({ color: arch.snatcherGlow || 0xd946ef })
+    : null;
+  const bundle = { skinMat, vestMat, pantsMat, wrapMat, bootMat, hairMat, visorMat, bandanaMat, snatcherPupilMat };
+  _npcArchMatCache[key] = bundle;
+  return bundle;
+}
+
+const NP_WIDTH = 384;
+const NP_HEIGHT = 108;
+const _sharedFullNpTex = {};
+const _dynamicNpPool = [];
+const MAX_DYNAMIC_NP_POOL = 32;
+
+function drawNameplateToCtx(npCtx, kind, hp, maxHp, isStaggered, isUnmasked) {
+  npCtx.clearRect(0, 0, NP_WIDTH, NP_HEIGHT);
+  npCtx.fillStyle = 'rgba(8, 12, 18, 0.92)';
+  if (npCtx.roundRect) {
+    npCtx.beginPath();
+    npCtx.roundRect(9, 9, NP_WIDTH - 18, NP_HEIGHT - 18, 15);
+    npCtx.fill();
+  } else {
+    npCtx.fillRect(9, 9, NP_WIDTH - 18, NP_HEIGHT - 18);
+  }
+
+  let borderCol = '#ef4444';
+  let titleText = '🔴 ROBOT';
+  let barColor = '#ef4444';
+
+  if (isStaggered) {
+    borderCol = '#ffea00';
+    titleText = '⚡ DIZZY!';
+    barColor = '#ffea00';
+  } else if (kind === 'civilian') {
+    borderCol = '#22c55e';
+    titleText = '🟢 CITIZEN';
+    barColor = '#22c55e';
+  } else if (kind === 'snatcher') {
+    borderCol = isUnmasked ? '#f43f5e' : '#c026d3';
+    titleText = isUnmasked ? '🟣 SNATCHER (UNMASKED)' : '🟣 ALIEN SNATCHER';
+    barColor = '#c026d3';
+  }
+
+  npCtx.lineWidth = 6;
+  npCtx.strokeStyle = borderCol;
+  npCtx.stroke();
+
+  npCtx.font = 'bold 32px "Chakra Petch", "Rajdhani", sans-serif';
+  npCtx.fillStyle = borderCol;
+  npCtx.textAlign = 'center';
+  npCtx.fillText(titleText, NP_WIDTH * 0.5, 48);
+  npCtx.textAlign = 'left';
+
+  const barX = 30;
+  const barY = 60;
+  const barW = NP_WIDTH - 60;
+  const barH = 24;
+  npCtx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+  if (npCtx.roundRect) {
+    npCtx.beginPath();
+    npCtx.roundRect(barX, barY, barW, barH, 6);
+    npCtx.fill();
+  } else {
+    npCtx.fillRect(barX, barY, barW, barH);
+  }
+
+  const pct = maxHp > 0 ? Math.max(0, Math.min(1, hp / maxHp)) : 0;
+  if (pct > 0) {
+    npCtx.fillStyle = barColor;
+    if (npCtx.roundRect) {
+      npCtx.beginPath();
+      npCtx.roundRect(barX, barY, barW * pct, barH, 6);
+      npCtx.fill();
+    } else {
+      npCtx.fillRect(barX, barY, barW * pct, barH);
+    }
+  }
+}
+
+function getSharedFullNameplateTex(kind) {
+  if (_sharedFullNpTex[kind]) return _sharedFullNpTex[kind];
+  const c = document.createElement('canvas');
+  c.width = NP_WIDTH;
+  c.height = NP_HEIGHT;
+  const ctx = c.getContext('2d');
+  drawNameplateToCtx(ctx, kind, 100, 100, false, false);
+  const tex = new THREE.CanvasTexture(c);
+  tex.minFilter = THREE.LinearFilter;
+  if (THREE.sRGBEncoding !== undefined && renderer && renderer.outputEncoding === THREE.sRGBEncoding) {
+    tex.encoding = THREE.sRGBEncoding;
+  }
+  tex.needsUpdate = true;
+  _sharedFullNpTex[kind] = tex;
+  return tex;
+}
+
+function acquireDynamicNameplate() {
+  if (_dynamicNpPool.length > 0) return _dynamicNpPool.pop();
+  const canvas = document.createElement('canvas');
+  canvas.width = NP_WIDTH;
+  canvas.height = NP_HEIGHT;
+  const ctx = canvas.getContext('2d');
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.minFilter = THREE.LinearFilter;
+  if (THREE.sRGBEncoding !== undefined && renderer && renderer.outputEncoding === THREE.sRGBEncoding) {
+    tex.encoding = THREE.sRGBEncoding;
+  }
+  return { canvas, ctx, tex };
+}
+
+function releaseDynamicNameplate(entry) {
+  if (!entry) return;
+  if (_dynamicNpPool.length < MAX_DYNAMIC_NP_POOL) {
+    _dynamicNpPool.push(entry);
+  } else if (entry.tex && typeof entry.tex.dispose === 'function') {
+    entry.tex.dispose();
+  }
+}
+
+function disposeFighterRig(rig) {
+  if (!rig) return;
+  if (rig.root) {
+    if (rig.root.parent && typeof rig.root.parent.remove === 'function') rig.root.parent.remove(rig.root);
+    else if (scene) scene.remove(rig.root);
+  }
+  if (typeof rig.releaseResources === 'function') rig.releaseResources();
+}
+
+function create3DHumanFighter(x, z, kind = 'robot', archetypeIndex = 0, opts = null) {
   // Support legacy signature create3DHumanFighter(x, z, archetypeIndex)
   if (typeof kind === 'number') {
+    opts = (typeof archetypeIndex === 'object') ? archetypeIndex : opts;
     archetypeIndex = kind;
     kind = 'robot';
   }
@@ -2259,111 +2708,125 @@ function create3DHumanFighter(x, z, kind = 'robot', archetypeIndex = 0) {
   if (kind === 'civilian') archList = CIVILIAN_ARCHETYPES;
   else if (kind === 'snatcher') archList = SNATCHER_ARCHETYPES;
 
-  const arch = archList[archetypeIndex % archList.length];
+  const archIdx = archetypeIndex % archList.length;
+  const arch = archList[archIdx];
   const root = new THREE.Group();
   root.position.set(x, 0, z);
   root.scale.set(arch.scale, arch.scale, arch.scale);
 
-  // Materials
   const isCiv = (kind === 'civilian');
   const isBot = (kind === 'robot');
   const isSnatcher = (kind === 'snatcher');
+  const skipNameplate = !!(opts && opts.skipNameplate);
 
-  const skinMat = new THREE.MeshStandardMaterial({
-    color: arch.skinColor,
-    roughness: isBot ? 0.4 : 0.7,
-    metalness: isBot ? 0.5 : 0.05
-  });
-  const vestMat = new THREE.MeshStandardMaterial({ color: arch.vestColor, roughness: 0.6, metalness: isBot ? 0.3 : 0.1 });
-  const pantsMat = new THREE.MeshStandardMaterial({ color: arch.pantsColor, roughness: 0.6, metalness: 0.1 });
-  // Civilians have bare natural hands matching their skin tone!
-  const wrapMat = isCiv ? skinMat : new THREE.MeshStandardMaterial({
-    color: arch.wrapColor,
-    roughness: 0.5,
-    metalness: isBot ? 0.4 : 0.2
-  });
-  const bootMat = new THREE.MeshStandardMaterial({ color: arch.bootColor, roughness: 0.7, metalness: 0.2 });
-  const hairMat = new THREE.MeshStandardMaterial({ color: arch.hairColor, roughness: 0.9, metalness: 0.0 });
-  const beltMat = new THREE.MeshStandardMaterial({ color: 0x09090b, roughness: 0.4, metalness: 0.5 });
-  const buckleMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.2, metalness: 0.9 });
+  const geos = getNpcGeos();
+  const staticMats = getNpcStaticMats();
+  const archMats = getNpcArchMats(kind, archIdx, arch);
 
-  // Eyes:
-  // - Civilians: Natural white sclera + dark brown/black pupils (completely non-glowing)
-  // - Robots: Rectangular visor covers the eyes entirely
-  // - Snatchers: Natural white sclera BUT bioluminescent glowing violet/magenta slit pupils!
-  const eyeWhiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-  const eyePupilMat = isSnatcher
-    ? new THREE.MeshBasicMaterial({ color: arch.snatcherGlow || 0xd946ef })
-    : new THREE.MeshBasicMaterial({ color: 0x0f172a });
+  const skinMat = archMats.skinMat;
+  const vestMat = archMats.vestMat;
+  const pantsMat = archMats.pantsMat;
+  const wrapMat = archMats.wrapMat;
+  const bootMat = archMats.bootMat;
+  const hairMat = archMats.hairMat;
+  const eyePupilMat = isSnatcher ? archMats.snatcherPupilMat : staticMats.civPupilMat;
 
-  // Store all mesh materials for hit flash & stagger tinting
-  const flashableMaterials = [skinMat, vestMat, pantsMat, bootMat];
-  if (!isCiv) flashableMaterials.push(wrapMat);
+  // Bindings for lazy per-instance material cloning when hit-flashing or staggering
+  const skinMeshes = [], vestMeshes = [], pantsMeshes = [], bootMeshes = [];
+  const wrapMeshes = isCiv ? skinMeshes : [];
+  const tendrilMeshes = [];
+  const bandanaMeshes = [];
+
+  const matGroups = [
+    { mat: skinMat, origHex: skinMat.color.getHex(), meshes: skinMeshes },
+    { mat: vestMat, origHex: vestMat.color.getHex(), meshes: vestMeshes },
+    { mat: pantsMat, origHex: pantsMat.color.getHex(), meshes: pantsMeshes },
+    { mat: bootMat, origHex: bootMat.color.getHex(), meshes: bootMeshes }
+  ];
+  if (!isCiv) matGroups.push({ mat: wrapMat, origHex: wrapMat.color.getHex(), meshes: wrapMeshes });
+  if (isSnatcher) matGroups.push({ mat: staticMats.tendrilMat, origHex: staticMats.tendrilMat.color.getHex(), meshes: tendrilMeshes });
+  if (archMats.bandanaMat) matGroups.push({ mat: archMats.bandanaMat, origHex: archMats.bandanaMat.color.getHex(), meshes: bandanaMeshes });
+
+  const flashableMaterials = matGroups.map(g => g.mat);
+  const originalColors = matGroups.map(g => g.origHex);
+  let hasUniqueMaterials = false;
+
+  function ensureUniqueMaterials() {
+    if (hasUniqueMaterials) return;
+    hasUniqueMaterials = true;
+    for (let i = 0; i < matGroups.length; i++) {
+      const grp = matGroups[i];
+      const cloned = (typeof grp.mat.clone === 'function') ? grp.mat.clone() : grp.mat;
+      grp.mat = cloned;
+      flashableMaterials[i] = cloned;
+      for (let j = 0; j < grp.meshes.length; j++) {
+        grp.meshes[j].material = cloned;
+      }
+    }
+  }
 
   // --- Pelvis & Hips ---
   const pelvisGroup = new THREE.Group();
   pelvisGroup.position.set(0, 0.9, 0);
   root.add(pelvisGroup);
 
-  const hips = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.22, 0.3), pantsMat);
-  hips.castShadow = true;
+  const hips = new THREE.Mesh(geos.hips, pantsMat);
+  pantsMeshes.push(hips);
   pelvisGroup.add(hips);
 
-  const belt = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.07, 0.32), beltMat);
+  const belt = new THREE.Mesh(geos.belt, staticMats.beltMat);
   belt.position.set(0, 0.08, 0);
   pelvisGroup.add(belt);
 
-  const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.08, 0.34), buckleMat);
+  const buckle = new THREE.Mesh(geos.buckle, staticMats.buckleMat);
   buckle.position.set(0, 0.08, 0);
   pelvisGroup.add(buckle);
 
   // --- Legs ---
-  // Left Leg
   const leftLegPivot = new THREE.Group();
   leftLegPivot.position.set(-0.16, 0.82, 0);
   root.add(leftLegPivot);
 
-  const leftThigh = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.42, 0.2), pantsMat);
+  const leftThigh = new THREE.Mesh(geos.thigh, pantsMat);
   leftThigh.position.set(0, -0.2, 0);
-  leftThigh.castShadow = true;
+  pantsMeshes.push(leftThigh);
   leftLegPivot.add(leftThigh);
 
   const leftCalfPivot = new THREE.Group();
   leftCalfPivot.position.set(0, -0.4, 0);
   leftLegPivot.add(leftCalfPivot);
 
-  const leftCalf = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.4, 0.18), pantsMat);
+  const leftCalf = new THREE.Mesh(geos.calf, pantsMat);
   leftCalf.position.set(0, -0.2, 0);
-  leftCalf.castShadow = true;
+  pantsMeshes.push(leftCalf);
   leftCalfPivot.add(leftCalf);
 
-  const leftBoot = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.16, 0.26), bootMat);
+  const leftBoot = new THREE.Mesh(geos.boot, bootMat);
   leftBoot.position.set(0, -0.38, 0.04);
-  leftBoot.castShadow = true;
+  bootMeshes.push(leftBoot);
   leftCalfPivot.add(leftBoot);
 
-  // Right Leg
   const rightLegPivot = new THREE.Group();
   rightLegPivot.position.set(0.16, 0.82, 0);
   root.add(rightLegPivot);
 
-  const rightThigh = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.42, 0.2), pantsMat);
+  const rightThigh = new THREE.Mesh(geos.thigh, pantsMat);
   rightThigh.position.set(0, -0.2, 0);
-  rightThigh.castShadow = true;
+  pantsMeshes.push(rightThigh);
   rightLegPivot.add(rightThigh);
 
   const rightCalfPivot = new THREE.Group();
   rightCalfPivot.position.set(0, -0.4, 0);
   rightLegPivot.add(rightCalfPivot);
 
-  const rightCalf = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.4, 0.18), pantsMat);
+  const rightCalf = new THREE.Mesh(geos.calf, pantsMat);
   rightCalf.position.set(0, -0.2, 0);
-  rightCalf.castShadow = true;
+  pantsMeshes.push(rightCalf);
   rightCalfPivot.add(rightCalf);
 
-  const rightBoot = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.16, 0.26), bootMat);
+  const rightBoot = new THREE.Mesh(geos.boot, bootMat);
   rightBoot.position.set(0, -0.38, 0.04);
-  rightBoot.castShadow = true;
+  bootMeshes.push(rightBoot);
   rightCalfPivot.add(rightBoot);
 
   // --- Upper Body / Torso ---
@@ -2371,20 +2834,21 @@ function create3DHumanFighter(x, z, kind = 'robot', archetypeIndex = 0) {
   torsoPivot.position.set(0, 0.98, 0);
   root.add(torsoPivot);
 
-  // Muscular abdomen & chest vest
-  const abdomen = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.24, 0.26), vestMat);
+  const abdomen = new THREE.Mesh(geos.abdomen, vestMat);
   abdomen.position.set(0, 0.1, 0);
-  abdomen.castShadow = true;
+  vestMeshes.push(abdomen);
   torsoPivot.add(abdomen);
 
-  const chest = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.36, 0.32), vestMat);
+  // Single shadow caster per NPC (torso chest) — cuts directional shadow draw calls 16x
+  const chest = new THREE.Mesh(geos.chest, vestMat);
   chest.position.set(0, 0.36, 0);
   chest.castShadow = true;
+  vestMeshes.push(chest);
   torsoPivot.add(chest);
 
-  // Neck
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.14, 8), skinMat);
+  const neck = new THREE.Mesh(geos.neck, skinMat);
   neck.position.set(0, 0.58, 0);
+  skinMeshes.push(neck);
   torsoPivot.add(neck);
 
   // Head
@@ -2392,198 +2856,169 @@ function create3DHumanFighter(x, z, kind = 'robot', archetypeIndex = 0) {
   headPivot.position.set(0, 0.68, 0);
   torsoPivot.add(headPivot);
 
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.32, 0.28), skinMat);
+  const head = new THREE.Mesh(geos.head, skinMat);
   head.position.set(0, 0.16, 0);
-  head.castShadow = true;
+  skinMeshes.push(head);
   headPivot.add(head);
 
-  // Eyes
-  const eyeLeft = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.02), eyeWhiteMat);
+  const eyeLeft = new THREE.Mesh(geos.eye, staticMats.eyeWhiteMat);
   eyeLeft.position.set(-0.07, 0.18, 0.142);
   headPivot.add(eyeLeft);
-  const pupilLeft = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.04, 0.022), eyePupilMat);
+  const pupilLeft = new THREE.Mesh(geos.pupil, eyePupilMat);
   pupilLeft.position.set(-0.07, 0.18, 0.144);
   headPivot.add(pupilLeft);
 
-  const eyeRight = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.02), eyeWhiteMat);
+  const eyeRight = new THREE.Mesh(geos.eye, staticMats.eyeWhiteMat);
   eyeRight.position.set(0.07, 0.18, 0.142);
   headPivot.add(eyeRight);
-  const pupilRight = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.04, 0.022), eyePupilMat);
+  const pupilRight = new THREE.Mesh(geos.pupil, eyePupilMat);
   pupilRight.position.set(0.07, 0.18, 0.144);
   headPivot.add(pupilRight);
 
-  // Eyebrows / Expression
-  const brow = new THREE.Mesh(
-    new THREE.BoxGeometry(0.24, 0.03, 0.03),
-    new THREE.MeshBasicMaterial({ color: isCiv ? 0x27272a : 0x111111 })
-  );
+  const brow = new THREE.Mesh(geos.brow, isCiv ? staticMats.civBrowMat : staticMats.botBrowMat);
   brow.position.set(0, 0.21, 0.144);
   headPivot.add(brow);
 
-  // --- SPECIAL CHARACTER CLASS MESHES & TELLTALES ---
   let snatcherParasiteGroup = null;
-
   if (isBot) {
-    // 🔴 ROBOTS: Glowing single-eye horizontal rectangular visor (user requested)
-    const visorMat = new THREE.MeshBasicMaterial({ color: arch.visorColor || 0x00f0ff });
-    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.065, 0.05), visorMat);
+    const visor = new THREE.Mesh(geos.visor, archMats.visorMat);
     visor.position.set(0, 0.18, 0.146);
     headPivot.add(visor);
 
-    // Antenna & sensor transceiver node on ear
-    const earNode = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.02, 0.025, 0.08, 6),
-      new THREE.MeshStandardMaterial({ color: 0x09090b, metalness: 0.8, roughness: 0.2 })
-    );
+    const earNode = new THREE.Mesh(geos.earNode, staticMats.earNodeMat);
     earNode.position.set(-0.16, 0.22, 0);
     earNode.rotation.z = Math.PI / 4;
     headPivot.add(earNode);
 
-    const earLight = new THREE.Mesh(
-      new THREE.SphereGeometry(0.02, 6, 6),
-      new THREE.MeshBasicMaterial({ color: arch.visorColor || 0x00f0ff })
-    );
+    const earLight = new THREE.Mesh(geos.earLight, archMats.visorMat);
     earLight.position.set(-0.19, 0.25, 0);
     headPivot.add(earLight);
   } else if (isSnatcher) {
-    // 🟣 BODY SNATCHERS: Glowing bioluminescent slit pupils + twin alien bio-tendrils curving over shoulders + bio-wrist bands!
     snatcherParasiteGroup = new THREE.Group();
     snatcherParasiteGroup.position.set(0, 0.45, 0);
-
-    const tendrilMat = new THREE.MeshStandardMaterial({
-      color: 0xc084fc,
-      roughness: 0.25,
-      metalness: 0.3,
-      emissive: 0x9333ea,
-      emissiveIntensity: 0.8
-    });
-    flashableMaterials.push(tendrilMat);
-
-    // Left and right curving alien spore tendrils emerging from upper back/shoulders
+    const tendrilMat = staticMats.tendrilMat;
     [-1, 1].forEach(side => {
-      const sporeSpine = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.045, 0.28, 6), tendrilMat);
+      const sporeSpine = new THREE.Mesh(geos.sporeSpine, tendrilMat);
       sporeSpine.position.set(side * 0.16, 0.18, -0.08);
       sporeSpine.rotation.set(0.3, 0, side * 0.35);
+      tendrilMeshes.push(sporeSpine);
       snatcherParasiteGroup.add(sporeSpine);
 
-      const sporeTip = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), tendrilMat);
+      const sporeTip = new THREE.Mesh(geos.sporeTip, tendrilMat);
       sporeTip.position.set(side * 0.22, 0.32, -0.04);
+      tendrilMeshes.push(sporeTip);
       snatcherParasiteGroup.add(sporeTip);
     });
-
     torsoPivot.add(snatcherParasiteGroup);
   }
 
-  // Hair / Bandana Styles
-  if (arch.hairStyle === 'bandana' && arch.bandanaColor) {
-    const bandanaMat = new THREE.MeshStandardMaterial({ color: arch.bandanaColor });
-    flashableMaterials.push(bandanaMat);
-    const band = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.08, 0.3), bandanaMat);
+  if (arch.hairStyle === 'bandana' && archMats.bandanaMat) {
+    const band = new THREE.Mesh(geos.band, archMats.bandanaMat);
     band.position.set(0, 0.24, 0);
+    bandanaMeshes.push(band);
     headPivot.add(band);
-    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.22, 0.06), bandanaMat);
+    const tail = new THREE.Mesh(geos.tail, archMats.bandanaMat);
     tail.position.set(0, 0.18, -0.16);
     tail.rotation.x = 0.2;
+    bandanaMeshes.push(tail);
     headPivot.add(tail);
   } else if (arch.hairStyle === 'topknot') {
-    const hairTop = new THREE.Mesh(new THREE.BoxGeometry(0.29, 0.1, 0.29), hairMat);
+    const hairTop = new THREE.Mesh(geos.hairTop, hairMat);
     hairTop.position.set(0, 0.33, 0);
     headPivot.add(hairTop);
-    const knot = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.12, 6), hairMat);
+    const knot = new THREE.Mesh(geos.knot, hairMat);
     knot.position.set(0, 0.42, -0.05);
     headPivot.add(knot);
   } else {
-    // Shaved / buzz cut hair cap
-    const buzz = new THREE.Mesh(new THREE.BoxGeometry(0.29, 0.08, 0.29), hairMat);
+    const buzz = new THREE.Mesh(geos.buzz, hairMat);
     buzz.position.set(0, 0.32, 0);
     headPivot.add(buzz);
   }
 
-  // --- Arms (Left & Right) ---
-  // Left Arm
+  // --- Arms ---
   const leftArmPivot = new THREE.Group();
   leftArmPivot.position.set(-0.35, 0.48, 0);
   torsoPivot.add(leftArmPivot);
 
-  const leftBicep = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.3, 0.16), skinMat);
+  const leftBicep = new THREE.Mesh(geos.bicep, skinMat);
   leftBicep.position.set(0, -0.15, 0);
-  leftBicep.castShadow = true;
+  skinMeshes.push(leftBicep);
   leftArmPivot.add(leftBicep);
 
   const leftForearmPivot = new THREE.Group();
   leftForearmPivot.position.set(0, -0.3, 0);
   leftArmPivot.add(leftForearmPivot);
 
-  const leftForearm = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.28, 0.15), skinMat);
+  const leftForearm = new THREE.Mesh(geos.forearm, skinMat);
   leftForearm.position.set(0, -0.14, 0);
-  leftForearm.castShadow = true;
+  skinMeshes.push(leftForearm);
   leftForearmPivot.add(leftForearm);
 
-  const leftFist = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.2), wrapMat);
+  const leftFist = new THREE.Mesh(geos.fist, wrapMat);
   leftFist.position.set(0, -0.3, 0.02);
-  leftFist.castShadow = true;
+  wrapMeshes.push(leftFist);
   leftForearmPivot.add(leftFist);
 
-  // Right Arm
   const rightArmPivot = new THREE.Group();
   rightArmPivot.position.set(0.35, 0.48, 0);
   torsoPivot.add(rightArmPivot);
 
-  const rightBicep = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.3, 0.16), skinMat);
+  const rightBicep = new THREE.Mesh(geos.bicep, skinMat);
   rightBicep.position.set(0, -0.15, 0);
-  rightBicep.castShadow = true;
+  skinMeshes.push(rightBicep);
   rightArmPivot.add(rightBicep);
 
   const rightForearmPivot = new THREE.Group();
   rightForearmPivot.position.set(0, -0.3, 0);
   rightArmPivot.add(rightForearmPivot);
 
-  const rightForearm = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.28, 0.15), skinMat);
+  const rightForearm = new THREE.Mesh(geos.forearm, skinMat);
   rightForearm.position.set(0, -0.14, 0);
-  rightForearm.castShadow = true;
+  skinMeshes.push(rightForearm);
   rightForearmPivot.add(rightForearm);
 
-  const rightFist = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.2), wrapMat);
+  const rightFist = new THREE.Mesh(geos.fist, wrapMat);
   rightFist.position.set(0, -0.3, 0.02);
-  rightFist.castShadow = true;
+  wrapMeshes.push(rightFist);
   rightForearmPivot.add(rightFist);
 
-  // If Body Snatcher, attach glowing purple alien wrist bio-bands so hands have a clear alien tell
   if (isSnatcher) {
-    const wristAlienMat = new THREE.MeshBasicMaterial({ color: 0xd946ef });
     [-1, 1].forEach((side) => {
-      const wb = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.06, 8), wristAlienMat);
+      const wb = new THREE.Mesh(geos.wristBand, staticMats.wristAlienMat);
       wb.position.set(0, -0.22, 0);
       if (side === -1) leftForearmPivot.add(wb);
       else rightForearmPivot.add(wb);
     });
   }
 
-  // Ground Contact Shadow Disc
-  const shadowGeo = new THREE.CircleGeometry(0.48, 16);
-  const shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.45 });
-  const shadowMesh = new THREE.Mesh(shadowGeo, shadowMat);
+  const shadowMesh = new THREE.Mesh(geos.shadow, staticMats.shadowMat);
   shadowMesh.rotation.x = -Math.PI / 2;
   shadowMesh.position.set(0, 0.02, 0);
   root.add(shadowMesh);
 
-  // --- Dynamic Overhead 3D Health Bar & Nameplate Sprite ---
-  const nameplateCanvas = document.createElement('canvas');
-  nameplateCanvas.width = 256;
-  nameplateCanvas.height = 72;
-  const npCtx = nameplateCanvas.getContext('2d');
-  const nameplateTexture = new THREE.CanvasTexture(nameplateCanvas);
-  nameplateTexture.minFilter = THREE.LinearFilter;
-  const nameplateMaterial = new THREE.SpriteMaterial({ map: nameplateTexture, depthTest: false, transparent: true });
-  const nameplateSprite = new THREE.Sprite(nameplateMaterial);
-  nameplateSprite.scale.set(1.9, 0.54, 1);
-  nameplateSprite.position.set(0, 2.2, 0);
-  root.add(nameplateSprite);
-
+  // --- Shared / Pooled Overhead 3D Health Bar & Nameplate Sprite (depthTest: true fixes underground bleed) ---
+  let nameplateMaterial = null;
+  let nameplateSprite = null;
+  let dynNpEntry = null;
   let fighterEnemyObj = null;
   let lastNpHp = NaN, lastNpMaxHp = NaN, lastNpStagger = null, lastNpUnmasked = null;
 
+  if (!skipNameplate) {
+    const sharedTex = getSharedFullNameplateTex(kind);
+    nameplateMaterial = new THREE.SpriteMaterial({
+      map: sharedTex,
+      depthTest: true,
+      alphaTest: 0.05,
+      transparent: true
+    });
+    nameplateSprite = new THREE.Sprite(nameplateMaterial);
+    nameplateSprite.scale.set(1.9, 0.54, 1);
+    nameplateSprite.position.set(0, 2.2, 0);
+    root.add(nameplateSprite);
+  }
+
   function updateNameplate(hp, maxHp, isStaggered) {
+    if (!nameplateMaterial) return;
     const isUnmasked = !!(fighterEnemyObj && fighterEnemyObj.unmasked);
     if (hp === lastNpHp && maxHp === lastNpMaxHp && !!isStaggered === lastNpStagger && isUnmasked === lastNpUnmasked) {
       return;
@@ -2593,88 +3028,55 @@ function create3DHumanFighter(x, z, kind = 'robot', archetypeIndex = 0) {
     lastNpStagger = !!isStaggered;
     lastNpUnmasked = isUnmasked;
 
-    npCtx.clearRect(0, 0, 256, 72);
-
-    // Background square/pill container
-    npCtx.fillStyle = 'rgba(8, 12, 18, 0.92)';
-    if (npCtx.roundRect) {
-      npCtx.beginPath();
-      npCtx.roundRect(6, 6, 244, 60, 10);
-      npCtx.fill();
-    } else {
-      npCtx.fillRect(6, 6, 244, 60);
-    }
-
-    let borderCol = '#ef4444';
-    let titleText = '🔴 ROBOT';
-    let barColor = '#ef4444';
-
-    if (isStaggered) {
-      borderCol = '#ffea00';
-      titleText = '⚡ DIZZY!';
-      barColor = '#ffea00';
-    } else if (isCiv) {
-      borderCol = '#22c55e';
-      titleText = '🟢 CITIZEN';
-      barColor = '#22c55e';
-    } else if (isSnatcher) {
-      const isUnmasked = fighterEnemyObj && fighterEnemyObj.unmasked;
-      borderCol = isUnmasked ? '#f43f5e' : '#c026d3';
-      titleText = isUnmasked ? '🟣 SNATCHER (UNMASKED)' : '🟣 ALIEN SNATCHER';
-      barColor = '#c026d3';
-    } else {
-      borderCol = '#ef4444';
-      titleText = '🔴 ROBOT';
-      barColor = '#ef4444';
-    }
-
-    npCtx.lineWidth = 4;
-    npCtx.strokeStyle = borderCol;
-    npCtx.stroke();
-
-    // Large, bold badge title (clear and uncluttered for kids)
-    npCtx.font = 'bold 22px "Chakra Petch", "Rajdhani", sans-serif';
-    npCtx.fillStyle = borderCol;
-    npCtx.textAlign = 'center';
-    npCtx.fillText(titleText, 128, 32);
-    npCtx.textAlign = 'left';
-
-    // Health bar container
-    const barX = 20;
-    const barY = 40;
-    const barW = 216;
-    const barH = 16;
-    npCtx.fillStyle = 'rgba(0, 0, 0, 0.75)';
-    if (npCtx.roundRect) {
-      npCtx.beginPath();
-      npCtx.roundRect(barX, barY, barW, barH, 4);
-      npCtx.fill();
-    } else {
-      npCtx.fillRect(barX, barY, barW, barH);
-    }
-
-    // Health bar fill
-    const pct = Math.max(0, Math.min(1, hp / maxHp));
-    if (pct > 0) {
-      npCtx.fillStyle = barColor;
-      if (npCtx.roundRect) {
-        npCtx.beginPath();
-        npCtx.roundRect(barX, barY, barW * pct, barH, 4);
-        npCtx.fill();
+    const isDefaultFull = (!isStaggered && !isUnmasked && hp >= maxHp);
+    if (isDefaultFull) {
+      if (dynNpEntry) {
+        nameplateMaterial.map = getSharedFullNameplateTex(kind);
+        releaseDynamicNameplate(dynNpEntry);
+        dynNpEntry = null;
       } else {
-        npCtx.fillRect(barX, barY, barW * pct, barH);
+        nameplateMaterial.map = getSharedFullNameplateTex(kind);
       }
+      return;
     }
 
-    nameplateTexture.needsUpdate = true;
+    if (!dynNpEntry) dynNpEntry = acquireDynamicNameplate();
+    drawNameplateToCtx(dynNpEntry.ctx, kind, hp, maxHp, !!isStaggered, isUnmasked);
+    dynNpEntry.tex.needsUpdate = true;
+    if (nameplateMaterial.map !== dynNpEntry.tex) {
+      nameplateMaterial.map = dynNpEntry.tex;
+    }
   }
-  updateNameplate(arch.hp, arch.hp, false);
 
   function unmaskSnatcher() {
     if (snatcherParasiteGroup) {
       snatcherParasiteGroup.scale.set(1.6, 1.6, 1.6);
     }
-    eyePupilMat.color.setHex(0xff00ea);
+    pupilLeft.material = staticMats.unmaskedPupilMat;
+    pupilRight.material = staticMats.unmaskedPupilMat;
+  }
+
+  function releaseResources() {
+    if (dynNpEntry) {
+      if (nameplateMaterial) nameplateMaterial.map = null;
+      releaseDynamicNameplate(dynNpEntry);
+      dynNpEntry = null;
+    }
+    if (nameplateMaterial && typeof nameplateMaterial.dispose === 'function') {
+      nameplateMaterial.dispose();
+    }
+    if (hasUniqueMaterials) {
+      for (let i = 0; i < flashableMaterials.length; i++) {
+        if (flashableMaterials[i] && typeof flashableMaterials[i].dispose === 'function') {
+          flashableMaterials[i].dispose();
+        }
+      }
+      hasUniqueMaterials = false;
+    }
+  }
+
+  function setEnemyObj(obj) {
+    fighterEnemyObj = obj;
   }
 
   scene.add(root);
@@ -2692,11 +3094,15 @@ function create3DHumanFighter(x, z, kind = 'robot', archetypeIndex = 0) {
     leftForearmPivot,
     rightArmPivot,
     rightForearmPivot,
+    shadowCaster: chest,
     nameplateSprite,
     updateNameplate,
     unmaskSnatcher,
+    ensureUniqueMaterials,
+    releaseResources,
+    setEnemyObj,
     materials: flashableMaterials,
-    originalColors: flashableMaterials.map(m => m.color.getHex()),
+    originalColors,
     arch,
     kind
   };
@@ -2760,7 +3166,7 @@ function spawnEnemy(x, z, kind = 'robot', archIdx = 0, isGuard = false, guardTit
   const maxHp = Math.round(arch.hp * (kind === 'civilian' ? 1.0 : cfg.hpMult) * (isGuard ? 1.25 : 1.0));
   const enemyName = guardTitle || arch.name;
   if (isGuard) {
-    fighterRig.arch.name = enemyName;
+    fighterRig.arch = Object.assign({}, arch, { name: enemyName });
   }
   fighterRig.updateNameplate(maxHp, maxHp, false);
 
@@ -2864,7 +3270,7 @@ function populateEnemies() {
   for (let i = enemies.length - 1; i >= 0; i--) {
     const e = enemies[i];
     if (!e.isMissionGuard && !e.isRemoteMirror && !e.isSubwayCitizen) {
-      if (e.rig && e.rig.root) scene.remove(e.rig.root);
+      disposeFighterRig(e.rig);
       enemies.splice(i, 1);
     }
   }
@@ -2904,8 +3310,11 @@ function populateEnemies() {
       if (spawned) spawnedCount++;
       else break;
     }
-    // Pre-populate peaceful citizens and tourists on Centre Island
-    populateCentreIslandCitizens();
+    // Lazy-stream island citizens when any player is approaching/on Toronto Islands
+    const players = allPlayerPositions();
+    if (state.onFerry || state.onIsland || players.some(p => p.z > 550)) {
+      ensureIslandCitizensPopulated();
+    }
     // Pre-populate peaceful commuters across TTC Subway stations & train cars
     populateSubwayCitizens();
   } else {
@@ -2987,6 +3396,25 @@ function spawnAdditionalEnemies(count) {
   if (!city) return;
   for (let i = 0; i < count; i++) {
     spawnSingleReinforcement();
+  }
+}
+
+let islandLeaveUnloadTimer = 0;
+function ensureIslandCitizensPopulated() {
+  if (!city) return;
+  if (!enemies.some(e => e.isIslandCitizen)) {
+    populateCentreIslandCitizens();
+  }
+  islandLeaveUnloadTimer = 0;
+}
+
+function unloadDistantIslandCitizens() {
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i];
+    if (e.isIslandCitizen && !e.isRemoteMirror && !e.isMissionGuard) {
+      disposeFighterRig(e.rig);
+      enemies.splice(i, 1);
+    }
   }
 }
 
@@ -3139,7 +3567,7 @@ function setDifficulty(diffKey, announce = true) {
     });
     for (let i = 0; i < excess; i++) {
       const e = sorted[i];
-      if (e.rig && e.rig.root) scene.remove(e.rig.root);
+      disposeFighterRig(e.rig);
       const idx = enemies.indexOf(e);
       if (idx !== -1) enemies.splice(idx, 1);
     }
@@ -3503,77 +3931,121 @@ function updateMission(dt) {
   updateMissionHUD(dist);
 }
 
+const _missionHudCache = {
+  inited: false,
+  trackerEl: null, pulseEl: null, titleEl: null, locEl: null, distEl: null, dirEl: null, statusPill: null,
+  display: '', hex: '', glow: '', title: '', loc: '', distText: '', arrow: '', statusText: '', statusColor: ''
+};
 function updateMissionHUD(dist) {
-  const trackerEl = document.getElementById('mission-tracker');
+  if (!_missionHudCache.inited) {
+    _missionHudCache.inited = true;
+    _missionHudCache.trackerEl = document.getElementById('mission-tracker');
+    _missionHudCache.pulseEl = document.getElementById('mission-pulse');
+    _missionHudCache.titleEl = document.getElementById('mission-title');
+    _missionHudCache.locEl = document.getElementById('mission-location');
+    _missionHudCache.distEl = document.getElementById('mission-distance');
+    _missionHudCache.dirEl = document.getElementById('mission-dir');
+    _missionHudCache.statusPill = document.getElementById('mission-status-pill');
+  }
+  const c = _missionHudCache;
+  const trackerEl = c.trackerEl;
   if (!trackerEl) return;
 
   if (!missionState.active || !missionState.landmark || !missionState.color) {
-    if (missionState.state !== 'completed') {
+    if (missionState.state !== 'completed' && c.display !== 'none') {
+      c.display = 'none';
       trackerEl.style.display = 'none';
     }
     return;
   }
-  trackerEl.style.display = 'flex';
+  if (c.display !== 'flex') {
+    c.display = 'flex';
+    trackerEl.style.display = 'flex';
+  }
 
   const d = (dist !== undefined) ? dist : Math.hypot(player.pos.x - missionState.pos.x, player.pos.z - missionState.pos.z);
   const roundedDist = Math.round(d);
+  const hex = missionState.color.hex;
+  const glow = missionState.color.glow || 'rgba(0, 240, 255, 0.15)';
 
-  trackerEl.style.borderLeftColor = missionState.color.hex;
-  trackerEl.style.boxShadow = `0 8px 28px rgba(0, 0, 0, 0.75), 0 0 16px ${missionState.color.glow || 'rgba(0, 240, 255, 0.15)'}`;
-  const pulseEl = document.getElementById('mission-pulse');
-  if (pulseEl) {
-    pulseEl.style.background = missionState.color.hex;
-    pulseEl.style.boxShadow = `0 0 8px ${missionState.color.hex}`;
+  if (c.hex !== hex || c.glow !== glow) {
+    c.hex = hex; c.glow = glow;
+    trackerEl.style.borderLeftColor = hex;
+    trackerEl.style.boxShadow = `0 8px 28px rgba(0, 0, 0, 0.75), 0 0 16px ${glow}`;
+    if (c.pulseEl) {
+      c.pulseEl.style.background = hex;
+      c.pulseEl.style.boxShadow = `0 0 8px ${hex}`;
+    }
   }
 
-  const titleEl = document.getElementById('mission-title');
-  if (titleEl) {
-    titleEl.innerText = `GET THE ${missionState.color.name.toUpperCase()}`;
-    titleEl.style.color = '#ffffff';
+  if (c.titleEl) {
+    const nextTitle = `GET THE ${missionState.color.name.toUpperCase()}`;
+    if (c.title !== nextTitle) {
+      c.title = nextTitle;
+      c.titleEl.innerText = nextTitle;
+      c.titleEl.style.color = '#ffffff';
+    }
   }
 
-  const locEl = document.getElementById('mission-location');
-  if (locEl) {
-    locEl.innerText = `📍 ${missionState.landmark.name} (${missionState.landmark.sub})`;
+  if (c.locEl) {
+    const nextLoc = `📍 ${missionState.landmark.name} (${missionState.landmark.sub})`;
+    if (c.loc !== nextLoc) {
+      c.loc = nextLoc;
+      c.locEl.innerText = nextLoc;
+    }
   }
 
-  const distEl = document.getElementById('mission-distance');
-  if (distEl) {
-    distEl.innerText = `📐 ${roundedDist}m`;
+  if (c.distEl) {
+    const nextDistText = `📐 ${roundedDist}m`;
+    if (c.distText !== nextDistText) {
+      c.distText = nextDistText;
+      c.distEl.innerText = nextDistText;
+    }
   }
 
-  const dirEl = document.getElementById('mission-dir');
-  if (dirEl) {
+  if (c.dirEl) {
     const dx = missionState.pos.x - player.pos.x;
     const dz = missionState.pos.z - player.pos.z;
-    const worldAngle = Math.atan2(dx, dz);
-    const relAngle = worldAngle - player.yaw;
-
-    let norm = (relAngle + Math.PI) % (Math.PI * 2) - Math.PI;
+    const relAngle = Math.atan2(dx, dz) - player.yaw;
+    const norm = (relAngle + Math.PI) % (Math.PI * 2) - Math.PI;
     let arrow = '↑ AHEAD';
     if (norm > Math.PI * 0.75 || norm < -Math.PI * 0.75) arrow = '↓ BEHIND';
     else if (norm > Math.PI * 0.25) arrow = '→ RIGHT';
     else if (norm < -Math.PI * 0.25) arrow = '← LEFT';
     else if (norm > 0.1) arrow = '↗ AHEAD-R';
     else if (norm < -0.1) arrow = '↖ AHEAD-L';
-
-    dirEl.innerText = arrow;
+    if (c.arrow !== arrow) {
+      c.arrow = arrow;
+      c.dirEl.innerText = arrow;
+    }
   }
 
-  const statusPill = document.getElementById('mission-status-pill');
-  if (statusPill) {
+  if (c.statusPill) {
+    let nextStatus, nextCol;
     if (roundedDist <= 6.5) {
-      statusPill.innerText = `🎯 HIT / WALK OVER CRATE!`;
-      statusPill.style.color = '#facc15';
+      nextStatus = '🎯 HIT / WALK OVER CRATE!';
+      nextCol = '#facc15';
     } else {
-      const aliveGuards = missionState.guards.filter(g => g && !g.isDead && !g.isKnockedOut).length;
-      if (aliveGuards > 0) {
-        statusPill.innerText = `⚔️ ${aliveGuards} GUARD${aliveGuards > 1 ? 'S' : ''}`;
-        statusPill.style.color = '#ef4444';
-      } else {
-        statusPill.innerText = `🔓 UNGUARDED`;
-        statusPill.style.color = '#10b981';
+      let aliveGuards = 0;
+      for (let i = 0; i < missionState.guards.length; i++) {
+        const g = missionState.guards[i];
+        if (g && !g.isDead && !g.isKnockedOut) aliveGuards++;
       }
+      if (aliveGuards > 0) {
+        nextStatus = `⚔️ ${aliveGuards} GUARD${aliveGuards > 1 ? 'S' : ''}`;
+        nextCol = '#ef4444';
+      } else {
+        nextStatus = '🔓 UNGUARDED';
+        nextCol = '#10b981';
+      }
+    }
+    if (c.statusText !== nextStatus) {
+      c.statusText = nextStatus;
+      c.statusPill.innerText = nextStatus;
+    }
+    if (c.statusColor !== nextCol) {
+      c.statusColor = nextCol;
+      c.statusPill.style.color = nextCol;
     }
   }
 }
@@ -4430,7 +4902,8 @@ function startFerryRide(dir, explicitFromId) {
   ferryController.progress = 0;
   ferryController.duration = isAirport ? 4.5 : 8.5;
   state.onFerry = true;
-  if (scene.fog) scene.fog.density = 0.00065;
+  syncSceneFog();
+  ensureIslandCitizensPopulated();
   audio.playFerryHorn();
 
   // Face forward over the bow at initial boarding, while allowing full 360° free look during the voyage!
@@ -4495,7 +4968,7 @@ function updateFerry(dt) {
   const fwdZ = fz + Math.cos(heading) * fwdDist;
   player.pos.set(fwdX, waterY + deckH + EYE_HEIGHT + bob, fwdZ);
   player.velocity.set(0, 0, 0);
-  if (scene.fog) scene.fog.density = 0.00065;
+  syncSceneFog();
 
   if (ferryController.progress >= 1.0) {
     arriveFerry(ferryController.dir);
@@ -4513,7 +4986,7 @@ function arriveFerry(dir) {
     const aFerry = city.islandFerry.airportFerryMesh;
     if (ferryController.toDock === 'airport_island') {
       state.onIsland = true;
-      if (scene.fog) scene.fog.density = 0.00065;
+      syncSceneFog();
       const islFloor = (city && city.floorAt) ? city.floorAt(-1060, 870) : 0.55;
       player.pos.set(-1060, islFloor + EYE_HEIGHT, 870);
       player.yaw = Math.PI; // facing south (+Z) toward Billy Bishop Terminal & Porter Q400s
@@ -4525,10 +4998,10 @@ function arriveFerry(dir) {
         aFerry.position.set(-1060, waterY, 842);
         aFerry.rotation.y = 0;
       }
-      populateCentreIslandCitizens();
+      ensureIslandCitizensPopulated();
     } else {
       state.onIsland = false;
-      if (scene.fog) scene.fog.density = getMainlandFogDensity();
+      syncSceneFog();
       const mainFloor = (city && city.floorAt) ? city.floorAt(-1060, 702) : 0.55;
       player.pos.set(-1060, mainFloor + EYE_HEIGHT, 702);
       player.yaw = 0; // facing north (-Z) toward Bathurst Quay & downtown
@@ -4549,7 +5022,7 @@ function arriveFerry(dir) {
 
   if (destDock.onIsland) {
     state.onIsland = true;
-    if (scene.fog) scene.fog.density = 0.00065;
+    syncSceneFog();
     const islandFloor = (city && city.floorAt) ? city.floorAt(destDock.boardX, destDock.boardZ) : 0.55;
     player.pos.set(destDock.boardX, islandFloor + EYE_HEIGHT, destDock.boardZ);
     player.yaw = destDock.yaw;
@@ -4563,10 +5036,10 @@ function arriveFerry(dir) {
       ferry.rotation.y = 0;
     }
 
-    populateCentreIslandCitizens();
+    ensureIslandCitizensPopulated();
   } else {
     state.onIsland = false;
-    if (scene.fog) scene.fog.density = getMainlandFogDensity();
+    syncSceneFog();
     const mainFloor = (city && city.floorAt) ? city.floorAt(712, 318) : 0.5;
     player.pos.set(712, mainFloor + EYE_HEIGHT, 318);
     player.yaw = 0; // facing north (-Z) towards Queens Quay & downtown
@@ -4655,7 +5128,8 @@ function startPorterFlight(viewMode) {
   porterFlightController.pitch = 0;
   porterFlightController.roll = 0;
   state.onPlane = true;
-  if (scene.fog) scene.fog.density = 0.00022; // crisp 6km aerial visibility across Greater Toronto!
+  syncSceneFog(); // crisp 6km aerial visibility across Greater Toronto!
+  ensureIslandCitizensPopulated();
 
   // Point camera out the left window (-X relative to plane, which is North toward the CN Tower & Downtown Skyline on takeoff!)
   player.yaw = porterFlightController.viewMode === 'window' ? (porterFlightController.heading - Math.PI / 2) : (porterFlightController.heading + Math.PI);
@@ -4692,6 +5166,7 @@ function togglePorterFreePilot() {
   return true;
 }
 
+const _flightEyeLocal = new THREE.Vector3();
 function updatePorterFlight(dt) {
   if (!porterFlightController.isFlying || !state.onPlane) return;
 
@@ -4763,8 +5238,8 @@ function updatePorterFlight(dt) {
     planeMesh.rotation.z = porterFlightController.roll;
   }
 
-  // Exact 3D local eye position relative to the aircraft coordinate frame
-  const eyeLocal = new THREE.Vector3();
+  // Exact 3D local eye position relative to the aircraft coordinate frame (zero alloc)
+  const eyeLocal = _flightEyeLocal;
   if (porterFlightController.viewMode === 'cockpit') {
     // Flight deck captain's seat looking over the glareshield (y=0.22) and EFIS controls out the front/side windshields!
     eyeLocal.set(-0.48, 0.56, -13.10);
@@ -4791,7 +5266,7 @@ function updatePorterFlight(dt) {
   }
   player.pos.set(fx + eyeLocal.x, fy + eyeLocal.y, fz + eyeLocal.z);
   player.velocity.set(0, 0, 0);
-  if (scene.fog) scene.fog.density = 0.00022;
+  syncSceneFog();
 }
 
 function landPorterFlight() {
@@ -4799,7 +5274,8 @@ function landPorterFlight() {
   porterFlightController.freePilot = false;
   state.onPlane = false;
   state.onIsland = true;
-  if (scene.fog) scene.fog.density = 0.00065;
+  syncSceneFog();
+  ensureIslandCitizensPopulated();
 
   const planeMesh = (typeof islands !== 'undefined' && islands && islands.flightPlane) ? islands.flightPlane : null;
   if (planeMesh) {
@@ -5137,6 +5613,7 @@ function selectStreetcarStop(idxOrStopId, routeIdOverride) {
 
   // Clear underground state cleanly upon boarding Queens Quay / Union Streetcar tunnel car
   state.isUnderground = false;
+  syncSceneFog();
 
   if (!state.onStreetcar || streetcarController.activeCar !== sc) {
     boardStreetcar(sc);
@@ -5225,6 +5702,7 @@ function boardStreetcar(sc) {
   }
   state.onStreetcar = true;
   state.isUnderground = false;
+  syncSceneFog();
 
   if (traffic && traffic.ringGong) traffic.ringGong();
   // Face forward along the streetcar aisle (camera forward at yaw is (-sin(yaw), -cos(yaw)))
@@ -5319,6 +5797,7 @@ function disembarkStreetcar(arrivedStop) {
     const ub = (city && city.subway && city.subway.unionStreetcarLoop) || (city && city.streetcarNetwork && city.streetcarNetwork.unionLoop);
     if (arrivedStop && arrivedStop.isUnionLoop && ub) {
       state.isUnderground = true;
+      syncSceneFog();
       player.pos.set(ub.exitX, ub.y + EYE_HEIGHT, ub.exitZ);
       player.yaw = ub.exitYaw !== undefined ? ub.exitYaw : Math.PI;
       player.pitch = 0;
@@ -5351,6 +5830,7 @@ function disembarkStreetcar(arrivedStop) {
       }
     }
     state.isUnderground = false;
+    syncSceneFog();
     const floorY = (city && city.floorAt) ? city.floorAt(outX, outZ) : 0;
     player.pos.set(outX, floorY + EYE_HEIGHT, outZ);
     if (arrivedStop && typeof showAnnouncement === 'function') {
@@ -5386,6 +5866,7 @@ function boardSubwayTrainAtWorldPos(wx, wz, snapLook) {
   if (!city || !city.subway || !city.subway.state) return false;
   state.onSubway = true;
   state.isUnderground = true;
+  syncSceneFog();
   const tState = city.subway.state;
   tState.hasPlayer = true;
   if (tState.isStopped && tState.stopTimer > 2.5) {
@@ -5543,7 +6024,7 @@ function teleportToRandomSubwayEntrance() {
   camera.rotation.x = -0.18;
   state.onIsland = false;
   state.isUnderground = false;
-  if (scene.fog) scene.fog.density = getMainlandFogDensity();
+  syncSceneFog();
 
   // Position the 6-car TTC Rocket train at this station platform with doors open so it's ready when you head downstairs
   if (city.subway.state && stIdx >= 0) {
@@ -5598,7 +6079,7 @@ function populateSubwayCitizens() {
   if (Array.isArray(city.subway.cars) && subwayTrainPassengers.length === 0) {
     city.subway.cars.forEach((car, cIdx) => {
       // Commuter 1: Seated on crimson velvet bench (facing right)
-      const seatLeft = create3DHumanFighter(0, 0, 'civilian', (cIdx * 2) % CIVILIAN_ARCHETYPES.length);
+      const seatLeft = create3DHumanFighter(0, 0, 'civilian', (cIdx * 2) % CIVILIAN_ARCHETYPES.length, { skipNameplate: true });
       seatLeft.root.position.set(-1.08, 0.95, -2.5);
       seatLeft.root.rotation.y = Math.PI / 2;
       seatLeft.leftLegPivot.rotation.x = -Math.PI / 2;
@@ -5609,12 +6090,11 @@ function populateSubwayCitizens() {
       seatLeft.torsoPivot.position.set(0, 0.52, 0);
       seatLeft.leftArmPivot.rotation.set(-0.2, 0, 0.15);
       seatLeft.rightArmPivot.rotation.set(-0.2, 0, -0.15);
-      if (seatLeft.nameplateSprite) seatLeft.nameplateSprite.visible = false;
       car.add(seatLeft.root);
       subwayTrainPassengers.push(seatLeft);
 
       // Commuter 2: Seated on priority blue bench (facing left)
-      const seatRight = create3DHumanFighter(0, 0, 'civilian', (cIdx * 2 + 1) % CIVILIAN_ARCHETYPES.length);
+      const seatRight = create3DHumanFighter(0, 0, 'civilian', (cIdx * 2 + 1) % CIVILIAN_ARCHETYPES.length, { skipNameplate: true });
       seatRight.root.position.set(1.08, 0.95, 2.5);
       seatRight.root.rotation.y = -Math.PI / 2;
       seatRight.leftLegPivot.rotation.x = -Math.PI / 2;
@@ -5625,17 +6105,15 @@ function populateSubwayCitizens() {
       seatRight.torsoPivot.position.set(0, 0.52, 0);
       seatRight.leftArmPivot.rotation.set(-0.2, 0, 0.15);
       seatRight.rightArmPivot.rotation.set(-0.2, 0, -0.15);
-      if (seatRight.nameplateSprite) seatRight.nameplateSprite.visible = false;
       car.add(seatRight.root);
       subwayTrainPassengers.push(seatRight);
 
       // Commuter 3: Standing holding central stanchion pole
-      const standing = create3DHumanFighter(0, 0, 'civilian', (cIdx * 2 + 2) % CIVILIAN_ARCHETYPES.length);
+      const standing = create3DHumanFighter(0, 0, 'civilian', (cIdx * 2 + 2) % CIVILIAN_ARCHETYPES.length, { skipNameplate: true });
       standing.root.position.set(0.24, 1.04, 0.0);
       standing.root.rotation.y = -Math.PI / 4;
       standing.rightArmPivot.rotation.set(-1.6, 0, 0.25);
       standing.rightForearmPivot.rotation.set(-0.5, 0, 0);
-      if (standing.nameplateSprite) standing.nameplateSprite.visible = false;
       car.add(standing.root);
       subwayTrainPassengers.push(standing);
     });
@@ -5875,7 +6353,7 @@ function arriveElevator() {
   elevatorController.state = stop.id;
   state.onObservationDeck = idx > 0;
   state.deckFloor = Math.max(1, idx);
-  if (scene.fog && idx === 0) scene.fog.density = getMainlandFogDensity();
+  if (idx === 0) syncSceneFog();
 }
 
 // Kept for older callers: floor under (x, z) given EYE height
@@ -5885,25 +6363,57 @@ function getDeckFloorY(x, z, eyeY) {
 }
 
 let activeDeckAction = null;
+const _deckDomCache = {
+  inited: false, promptEl: null, actionText: null, actionKey: null, glassFloorEl: null,
+  lastKey: '', lastText: '', hidden: true, glassHidden: true
+};
+
+function initDeckDomCache() {
+  if (_deckDomCache.inited) return;
+  _deckDomCache.inited = true;
+  _deckDomCache.promptEl = document.getElementById('deck-action-prompt');
+  _deckDomCache.actionText = document.getElementById('deck-action-text');
+  _deckDomCache.actionKey = document.getElementById('deck-action-key');
+  _deckDomCache.glassFloorEl = document.getElementById('glass-floor-indicator');
+}
 
 function setDeckPrompt(key, text) {
-  const promptEl = document.getElementById('deck-action-prompt');
-  const actionText = document.getElementById('deck-action-text');
-  const actionKey = document.getElementById('deck-action-key');
-  if (promptEl && actionText && actionKey) {
-    actionKey.innerText = key;
-    actionText.innerText = text;
-    promptEl.classList.remove('hidden');
+  initDeckDomCache();
+  const c = _deckDomCache;
+  if (c.promptEl && c.actionText && c.actionKey) {
+    if (c.lastKey !== key) { c.lastKey = key; c.actionKey.innerText = key; }
+    if (c.lastText !== text) { c.lastText = text; c.actionText.innerText = text; }
+    if (c.hidden || c.promptEl.classList.contains('hidden')) {
+      c.hidden = false;
+      c.promptEl.classList.remove('hidden');
+    }
+  }
+}
+
+function hideDeckPrompt() {
+  initDeckDomCache();
+  const c = _deckDomCache;
+  if (c.promptEl && (!c.hidden || !c.promptEl.classList.contains('hidden'))) {
+    c.hidden = true;
+    c.promptEl.classList.add('hidden');
+  }
+}
+
+function hideGlassFloorIndicator() {
+  initDeckDomCache();
+  const c = _deckDomCache;
+  if (c.glassFloorEl && (!c.glassHidden || !c.glassFloorEl.classList.contains('hidden'))) {
+    c.glassHidden = true;
+    c.glassFloorEl.classList.add('hidden');
   }
 }
 
 function updateObservationDeck(dt) {
   if (!city) return;
-  const promptEl = document.getElementById('deck-action-prompt');
   activeDeckAction = null;
 
   if (state.inElevator || state.onFerry || state.onTaxi) {
-    if (promptEl) promptEl.classList.add('hidden');
+    hideDeckPrompt();
     closeElevatorPanel();
     closeFerryPanel();
     closeTaxiPanel();
@@ -6214,8 +6724,7 @@ function updateObservationDeck(dt) {
     state.onObservationDeck = true;
     state.deckFloor = feet > 356.0 ? 4 : (feet > 351.0 ? 3 : (feet > 345.0 ? 2 : 1));
 
-    const glassFloorEl = document.getElementById('glass-floor-indicator');
-    if (glassFloorEl) glassFloorEl.classList.add('hidden');
+    hideGlassFloorIndicator();
 
     if (dElev < elevCallR && [342, 348, 354, 358.6].some(y => Math.abs(feet - y) < 0.8)) {
       activeDeckAction = 'elevator';
@@ -6228,7 +6737,7 @@ function updateObservationDeck(dt) {
     }
 
     if (state.deckFloor === 4) {
-      if (promptEl) promptEl.classList.add('hidden');
+      hideDeckPrompt();
       return;
     }
 
@@ -6255,11 +6764,10 @@ function updateObservationDeck(dt) {
     }
   } else {
     state.onObservationDeck = false;
-    const glassFloorEl = document.getElementById('glass-floor-indicator');
-    if (glassFloorEl) glassFloorEl.classList.add('hidden');
+    hideGlassFloorIndicator();
   }
 
-  if (promptEl) promptEl.classList.add('hidden');
+  hideDeckPrompt();
 }
 
 function enterUnionPortalTunnel() {
@@ -6274,6 +6782,7 @@ function enterUnionPortalTunnel() {
   camera.rotation.y = player.yaw;
   camera.rotation.x = 0;
   state.isUnderground = true;
+  syncSceneFog();
   if (audio && audio.playPrestoChime) audio.playPrestoChime();
   else if (audio && audio.playPickup) audio.playPickup();
   if (typeof showAnnouncement === 'function') {
@@ -6325,7 +6834,7 @@ function handleDeckAction() {
       player.velocity.set(0, 0, 0);
       player.yaw = Math.atan2(-fx, -fz) + Math.PI;
       state.isUnderground = false;
-      if (scene.fog) scene.fog.density = getMainlandFogDensity();
+      syncSceneFog();
       camera.rotation.order = 'YXZ';
       camera.rotation.y = player.yaw;
       camera.rotation.x = 0;
@@ -6426,6 +6935,7 @@ function handleDeckAction() {
       camera.rotation.y = player.yaw;
       camera.rotation.x = 0;
       state.isUnderground = true;
+      syncSceneFog();
 
       // Ensure the Line 1 subway train is at this station with doors open ready to board!
       if (city.subway.state) {
@@ -6459,6 +6969,7 @@ function handleDeckAction() {
       player.pos.set(ent.streetX, 1.7, ent.streetZ);
       player.velocity.set(0, 0, 0);
       state.isUnderground = false;
+      syncSceneFog();
       return true;
     }
   }
@@ -6636,11 +7147,12 @@ function updateRotatingRestaurant(dt) {
   if (Array.isArray(pickups)) {
     for (let i = 0; i < pickups.length; i++) {
       const p = pickups[i];
-      if (!p || !p.mesh) continue;
-      const pPos = p.mesh.position;
+      const pNode = p && (p.group || p.mesh);
+      if (!pNode || p.collected) continue;
+      const pPos = pNode.position;
       if (pPos.y > 351.0) {
         if (rotateOnPlatform(pPos)) {
-          p.mesh.rotation.y += dRot;
+          pNode.rotation.y += dRot;
         }
       }
     }
@@ -6842,48 +7354,70 @@ function triggerDeckFireworks() {
   }
 }
 
+let _fireworkGeo = null;
+const _fireworkMatCache = {};
+const _fireworkPool = [];
+const MAX_FIREWORKS = 360;
+
 function createFireworkBurst(x, y, z) {
   audio.playFireworks();
   const colors = [0x38bdf8, 0xef4444, 0xfacc15, 0x4ade80, 0xa855f7, 0xf43f5e];
   const color = colors[Math.floor(Math.random() * colors.length)];
+  if (!_fireworkGeo) _fireworkGeo = new THREE.SphereGeometry(0.3, 6, 6);
+  if (!_fireworkMatCache[color]) {
+    _fireworkMatCache[color] = new THREE.MeshBasicMaterial({ color, fog: false });
+  }
+  const mat = _fireworkMatCache[color];
   const count = 45;
-  const particles = [];
+  const maxAdd = Math.max(0, MAX_FIREWORKS - deckFireworks.length);
+  const spawnCount = Math.min(count, maxAdd);
 
-  for (let i = 0; i < count; i++) {
-    const mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(0.3, 6, 6),
-      new THREE.MeshBasicMaterial({ color, fog: false })
-    );
-    mesh.position.set(x, y, z);
-    scene.add(mesh);
+  for (let i = 0; i < spawnCount; i++) {
+    let p = _fireworkPool.pop();
+    if (!p) {
+      p = {
+        mesh: new THREE.Mesh(_fireworkGeo, mat),
+        vel: new THREE.Vector3(),
+        life: 1.2,
+        maxLife: 1.2
+      };
+    } else {
+      p.mesh.material = mat;
+    }
+    p.mesh.visible = true;
+    p.mesh.position.set(x, y, z);
+    p.mesh.scale.set(1, 1, 1);
+    if (!p.mesh.parent) scene.add(p.mesh);
 
     const theta = Math.random() * Math.PI * 2;
     const phi = Math.acos(Math.random() * 2 - 1);
     const speed = 12.0 + Math.random() * 16.0;
-    const vel = new THREE.Vector3(
+    p.vel.set(
       speed * Math.sin(phi) * Math.cos(theta),
       speed * Math.cos(phi),
       speed * Math.sin(phi) * Math.sin(theta)
     );
-
-    particles.push({ mesh, vel, life: 1.2, maxLife: 1.2 });
+    p.life = 1.2;
+    p.maxLife = 1.2;
+    deckFireworks.push(p);
   }
-
-  deckFireworks.push(...particles);
 }
 
 function updateFireworks(dt) {
+  const damp = Math.pow(0.97, Math.max(0.25, dt * 60));
   for (let i = deckFireworks.length - 1; i >= 0; i--) {
     const p = deckFireworks[i];
     p.life -= dt;
     if (p.life <= 0) {
-      scene.remove(p.mesh);
+      p.mesh.visible = false;
       deckFireworks.splice(i, 1);
+      if (_fireworkPool.length < MAX_FIREWORKS) _fireworkPool.push(p);
+      else scene.remove(p.mesh);
       continue;
     }
     p.mesh.position.addScaledVector(p.vel, dt);
     p.vel.y -= 9.8 * dt; // gravity
-    p.vel.multiplyScalar(0.97); // air resistance
+    p.vel.multiplyScalar(damp); // frame-rate independent air resistance
     const scale = p.life / p.maxLife;
     p.mesh.scale.set(scale, scale, scale);
   }
@@ -7229,7 +7763,7 @@ window.addEventListener('keydown', (e) => {
       camera.rotation.y = -0.35;
       camera.rotation.x = 0;
       state.onIsland = false;
-      if (scene.fog) scene.fog.density = getMainlandFogDensity();
+      syncSceneFog();
       audio.playFerryHorn();
       showAnnouncement("🏙️ CHEAT: TELEPORTED TO MAINLAND FERRY DOCK (JACK LAYTON TERMINAL)!", 3200);
     } else if (dMainDock < 22) {
@@ -7243,10 +7777,10 @@ window.addEventListener('keydown', (e) => {
       camera.rotation.y = 0;
       camera.rotation.x = 0;
       state.onIsland = true;
-      if (scene.fog) scene.fog.density = 0.00065;
+      syncSceneFog();
       audio.playFerryArrival();
       showAnnouncement("🌳 CHEAT: TELEPORTED TO DEDICATED TORONTO ISLANDS ARCHIPELAGO! 🌸\nCentre Island, Olympic, Gibraltar Lighthouse, Airport & Ward's Island!", 4500);
-      populateCentreIslandCitizens();
+      ensureIslandCitizensPopulated();
     } else {
       // Teleport to Mainland Ferry Dock (Jack Layton Ferry Terminal)
       const mainFloor = (city && city.floorAt) ? city.floorAt(712, 318) : 0.5;
@@ -7258,7 +7792,7 @@ window.addEventListener('keydown', (e) => {
       camera.rotation.y = -0.35;
       camera.rotation.x = 0;
       state.onIsland = false;
-      if (scene.fog) scene.fog.density = getMainlandFogDensity();
+      syncSceneFog();
       audio.playFerryHorn();
       showAnnouncement("🚢 CHEAT: TELEPORTED TO MAINLAND FERRY DOCK (JACK LAYTON TERMINAL)!", 3200);
     }
@@ -7505,10 +8039,9 @@ function triggerAttack() {
     window.multiplayer.broadcastAttack(atk.type);
   }
 
-  // Land the hit on the frame the fist reaches full extension
-  setTimeout(() => {
-    checkMeleeHits(atk);
-  }, atk.cooldown * (IMPACT_FRACTION[atk.type] || 0.35) * 1000);
+  // Land the hit on the frame the fist reaches full extension (pause & hitStop aware)
+  state.pendingMeleeAttack = atk;
+  state.pendingMeleeTimer = atk.cooldown * (IMPACT_FRACTION[atk.type] || 0.35);
 }
 
 function triggerQuickKick() {
@@ -7546,9 +8079,8 @@ function triggerQuickKick() {
     window.multiplayer.broadcastAttack('kick');
   }
 
-  setTimeout(() => {
-    checkMeleeHits(atk);
-  }, atk.cooldown * IMPACT_FRACTION.kick * 1000);
+  state.pendingMeleeAttack = atk;
+  state.pendingMeleeTimer = atk.cooldown * IMPACT_FRACTION.kick;
 }
 
 function executeMeteorSlam() {
@@ -7578,41 +8110,7 @@ function executeMeteorSlam() {
     window.multiplayer.broadcastAttack('slam');
   }
 
-  const checkImpact = setInterval(() => {
-    if (player.isGrounded) {
-      clearInterval(checkImpact);
-
-      // Detonation on impact
-      audio.playImpact('slam');
-      triggerScreenShake(28);
-      triggerSlamFlash();
-      createMeteorShockwave(player.pos.x, player.pos.z);
-      spawnDebris(player.pos.x, 0.5, player.pos.z, 0xffaa00, 40, 11);
-
-      // Hit all enemies in AoE
-      enemies.forEach(enemy => {
-        if (enemy.isDead) return;
-        const dist = enemy.sprite.position.distanceTo(player.pos);
-        if (dist <= atk.range) {
-          const dmg = state.isBerserk ? atk.damage * 2.5 : atk.damage;
-          hitEnemy(enemy, dmg, atk.knockback * 1.6, 'slam');
-        }
-      });
-
-      // Break crates
-      crates.forEach(crate => {
-        if (crate.destroyed) return;
-        const dist = crate.mesh.position.distanceTo(player.pos);
-        if (dist <= atk.range) damageCrate(crate, 300);
-      });
-
-      // Check Mission Crate Slam
-      if (missionState.active && missionState.state === 'active' && missionState.boxObj) {
-        const dist = Math.hypot(missionState.pos.x - player.pos.x, missionState.pos.z - player.pos.z);
-        if (dist <= atk.range + 3.0) completeMission();
-      }
-    }
-  }, 25);
+  state.pendingSlamImpact = atk;
 }
 
 function executeGloryKill(enemy) {
@@ -7650,6 +8148,7 @@ window.executeGloryKill = executeGloryKill;
 
 function checkMeleeHits(atk) {
   let hitSomething = false;
+  camera.getWorldDirection(_meleeFwd);
 
   // Check Active Mission Crate
   if (missionState.active && missionState.state === 'active' && missionState.boxObj) {
@@ -7661,46 +8160,45 @@ function checkMeleeHits(atk) {
   }
 
   // Check Crates
-  crates.forEach(crate => {
-    if (crate.destroyed) return;
-    const dist = crate.mesh.position.distanceTo(camera.position);
+  for (let i = 0; i < crates.length; i++) {
+    const crate = crates[i];
+    if (crate.destroyed) continue;
+    const cPos = crate.mesh.position;
+    const dist = cPos.distanceTo(camera.position);
     if (dist <= atk.range) {
-      if (city && player.pos.y < 50 && !city.hasLineOfSight(camera.position.x, camera.position.z, crate.mesh.position.x, crate.mesh.position.z)) {
-        return; // Building wall blocks melee strike
+      if (city && player.pos.y < 50 && !city.hasLineOfSight(camera.position.x, camera.position.z, cPos.x, cPos.z)) {
+        continue; // Building wall blocks melee strike
       }
-      const dirToCrate = crate.mesh.position.clone().sub(camera.position).normalize();
-      const forward = new THREE.Vector3();
-      camera.getWorldDirection(forward);
-      const dot3D = dirToCrate.dot(forward);
-      // Horizontal cone check so low crates on the sidewalk are never missed by camera pitch
-      const dx = crate.mesh.position.x - camera.position.x, dz = crate.mesh.position.z - camera.position.z;
+      _meleeDir.subVectors(cPos, camera.position);
+      if (_meleeDir.lengthSq() > 1e-6) _meleeDir.normalize();
+      const dot3D = _meleeDir.dot(_meleeFwd);
+      const dx = cPos.x - camera.position.x, dz = cPos.z - camera.position.z;
       const dH = Math.hypot(dx, dz);
-      const dotH = dH > 0.01 ? (dx * forward.x + dz * forward.z) / dH : 1.0;
-      const isFacing = dot3D > 0.45 || (dotH > 0.58 && Math.abs(crate.mesh.position.y - camera.position.y) < 2.5);
+      const dotH = dH > 0.01 ? (dx * _meleeFwd.x + dz * _meleeFwd.z) / dH : 1.0;
+      const isFacing = dot3D > 0.45 || (dotH > 0.58 && Math.abs(cPos.y - camera.position.y) < 2.5);
       if (isFacing) {
         damageCrate(crate, state.isBerserk ? atk.damage * 3 : atk.damage);
         hitSomething = true;
       }
     }
-  });
+  }
 
   // Check Enemies
-  enemies.forEach(enemy => {
-    if (enemy.isDead || enemy.isKnockedOut) return;
+  for (let i = 0; i < enemies.length; i++) {
+    const enemy = enemies[i];
+    if (enemy.isDead || enemy.isKnockedOut) continue;
     const pos = enemy.rig ? enemy.rig.root.position : enemy.sprite.position;
     const dist = pos.distanceTo(camera.position);
     if (dist <= atk.range) {
       if (city && player.pos.y < 50 && !city.hasLineOfSight(camera.position.x, camera.position.z, pos.x, pos.z)) {
-        return; // Building wall blocks melee strike
+        continue; // Building wall blocks melee strike
       }
-      const dirToEnemy = pos.clone().sub(camera.position).normalize();
-      const forward = new THREE.Vector3();
-      camera.getWorldDirection(forward);
-      const dot3D = dirToEnemy.dot(forward);
-      // Horizontal cone check so punches connect cleanly to enemy torso/head even with pitch differences
+      _meleeDir.subVectors(pos, camera.position);
+      if (_meleeDir.lengthSq() > 1e-6) _meleeDir.normalize();
+      const dot3D = _meleeDir.dot(_meleeFwd);
       const dx = pos.x - camera.position.x, dz = pos.z - camera.position.z;
       const dH = Math.hypot(dx, dz);
-      const dotH = dH > 0.01 ? (dx * forward.x + dz * forward.z) / dH : 1.0;
+      const dotH = dH > 0.01 ? (dx * _meleeFwd.x + dz * _meleeFwd.z) / dH : 1.0;
       const isFacing = dot3D > 0.45 || (dotH > 0.55 && Math.abs(pos.y - camera.position.y) < 2.5);
       if (isFacing) {
         const dmg = state.isBerserk ? atk.damage * 3 : atk.damage;
@@ -7709,7 +8207,7 @@ function checkMeleeHits(atk) {
         hitSomething = true;
       }
     }
-  });
+  }
 
   // Check Remote Players (Multiplayer Co-op / PvP)
   if (window.multiplayer && window.multiplayer.checkMeleeHits) {
@@ -7753,13 +8251,18 @@ function damageCrate(crate, dmg) {
 
 function setEnemyTint(enemy, hex) {
   if (enemy.rig && enemy.rig.materials) {
-    enemy.rig.materials.forEach(mat => mat.color.setHex(hex));
+    if (enemy.rig.ensureUniqueMaterials) enemy.rig.ensureUniqueMaterials();
+    for (let i = 0; i < enemy.rig.materials.length; i++) {
+      enemy.rig.materials[i].color.setHex(hex);
+    }
   }
 }
 
 function restoreEnemyTint(enemy) {
   if (enemy.rig && enemy.rig.materials && enemy.rig.originalColors) {
-    enemy.rig.materials.forEach((mat, i) => mat.color.setHex(enemy.rig.originalColors[i]));
+    for (let i = 0; i < enemy.rig.materials.length; i++) {
+      enemy.rig.materials[i].color.setHex(enemy.rig.originalColors[i]);
+    }
   }
 }
 
@@ -7809,9 +8312,7 @@ function hitEnemy(enemy, dmg, knockback, type, attacker) {
     // Score penalty goes to whoever threw the punch (a car isn't anybody's punch)
     if (type !== 'car') creditScore({ ev: 'civ_hit' }, remoteId);
     setEnemyTint(enemy, 0x22c55e); // gentle green warning flash
-    setTimeout(() => {
-      if (!enemy.isDead && !enemy.isStaggered) restoreEnemyTint(enemy);
-    }, 120);
+    enemy.hitFlashTimer = 0.12;
 
     // Update 3D overhead health bar
     if (enemy.rig && enemy.rig.updateNameplate) {
@@ -7820,9 +8321,10 @@ function hitEnemy(enemy, dmg, knockback, type, attacker) {
 
     // Knockback physics
     const pos = enemy.rig ? enemy.rig.root.position : enemy.sprite.position;
-    const dir = pos.clone().sub(srcPos); dir.y = 0; dir.normalize();
-    enemy.vx = dir.x * knockback * 0.9;
-    enemy.vz = dir.z * knockback * 0.9;
+    _knockDir.subVectors(pos, srcPos); _knockDir.y = 0;
+    if (_knockDir.lengthSq() > 1e-6) _knockDir.normalize();
+    enemy.vx = _knockDir.x * knockback * 0.9;
+    enemy.vz = _knockDir.z * knockback * 0.9;
     spawnDebris(pos.x, 1.0, pos.z, 0x38bdf8, 12, 6);
 
     // CRITICAL USER CONSTRAINT: don't reset combos for attacking civilians, just lose points!
@@ -7862,11 +8364,7 @@ function hitEnemy(enemy, dmg, knockback, type, attacker) {
   } else {
     // Normal flash on hit
     setEnemyTint(enemy, enemy.kind === 'snatcher' ? 0xc026d3 : 0xff2222);
-    setTimeout(() => {
-      if (!enemy.isDead && !enemy.isStaggered) {
-        restoreEnemyTint(enemy);
-      }
-    }, 110);
+    enemy.hitFlashTimer = 0.11;
   }
 
   // Update Boss Bar if Mini-Boss
@@ -7880,9 +8378,10 @@ function hitEnemy(enemy, dmg, knockback, type, attacker) {
 
   // Knockback physics (away from whoever hit it)
   const pos = enemy.rig ? enemy.rig.root.position : enemy.sprite.position;
-  const dir = pos.clone().sub(srcPos); dir.y = 0; dir.normalize();
-  enemy.vx = dir.x * knockback;
-  enemy.vz = dir.z * knockback;
+  _knockDir.subVectors(pos, srcPos); _knockDir.y = 0;
+  if (_knockDir.lengthSq() > 1e-6) _knockDir.normalize();
+  enemy.vx = _knockDir.x * knockback;
+  enemy.vz = _knockDir.z * knockback;
 
   // Particle debris: Sparks for robot, alien purple slime for snatcher
   if (enemy.kind === 'robot') {
@@ -7939,25 +8438,39 @@ function killEnemy(enemy, isGlory = false, attacker) {
     enemy.rig.nameplateSprite.visible = false;
   }
 
-  // Clean up mesh after dramatic knockout fall
+  // Clean up mesh and pooled nameplate/materials after dramatic knockout fall
   setTimeout(() => {
-    if (enemy.rig && enemy.rig.root) scene.remove(enemy.rig.root);
+    disposeFighterRig(enemy.rig);
 
     // If an ambient enemy/civilian was defeated, schedule a reinforcement near the player
     if (!enemy.isMissionGuard && !enemy.isDeckEnemy) {
       const cfg = DIFFICULTY_CONFIGS[state.difficulty || 'medium'] || DIFFICULTY_CONFIGS.medium;
-      const aliveAmbient = enemies.filter(e => !e.isDead && !e.isMissionGuard && !e.isDeckEnemy).length;
+      let aliveAmbient = 0;
+      for (let k = 0; k < enemies.length; k++) {
+        const e = enemies[k];
+        if (!e.isDead && !e.isMissionGuard && !e.isDeckEnemy) aliveAmbient++;
+      }
       if (aliveAmbient < cfg.targetEnemies) {
         setTimeout(() => spawnSingleReinforcement(), 2400);
       }
     }
 
     // Respawn next wave of fighters when all ambient foes are KO'd
-    const ambientThreats = enemies.filter(e => !e.isMissionGuard && !e.isDeckEnemy && e.kind !== 'civilian');
-    if (!isNetGuest() && ambientThreats.length > 0 && ambientThreats.every(e => e.isDead)) {
+    let hasThreat = false, allDead = true;
+    for (let k = 0; k < enemies.length; k++) {
+      const e = enemies[k];
+      if (!e.isMissionGuard && !e.isDeckEnemy && e.kind !== 'civilian') {
+        hasThreat = true;
+        if (!e.isDead) { allDead = false; break; }
+      }
+    }
+    if (!isNetGuest() && hasThreat && allDead) {
       showAnnouncement("🔥 STREET SECTOR SECURED! NEXT PATROL INCOMING! 🔥");
       setTimeout(() => populateEnemies(), 2200);
     }
+
+    const eIdx = enemies.indexOf(enemy);
+    if (eIdx !== -1) enemies.splice(eIdx, 1);
   }, 2400);
 }
 
@@ -8025,7 +8538,7 @@ const mirrorsById = new Map();
 function removeMirror(e, delayMs) {
   mirrorsById.delete(e.netId);
   const kill = () => {
-    if (e.rig && e.rig.root) scene.remove(e.rig.root);
+    disposeFighterRig(e.rig);
     const i = enemies.indexOf(e);
     if (i !== -1) enemies.splice(i, 1);
   };
@@ -8133,11 +8646,15 @@ function mirrorHitCosmetics(e, type) {
     if (!e.isStaggered) setEnemyTint(e, e.kind === 'snatcher' ? 0xc026d3 : 0xff2222);
     spawnDebris(pos.x, 1.0, pos.z, e.kind === 'snatcher' ? 0xc026d3 : 0x00f0ff, 18, 8);
   }
-  setTimeout(() => { if (!e.isDead && !e.isStaggered) restoreEnemyTint(e); }, 110);
+  e.hitFlashTimer = 0.11;
 }
 
 function updateMirrorEnemy(e, dt) {
   const rig = e.rig, p = rig.root.position;
+  if (e.hitFlashTimer > 0) {
+    e.hitFlashTimer -= dt;
+    if (e.hitFlashTimer <= 0 && !e.isDead && !e.isStaggered) restoreEnemyTint(e);
+  }
   const gap = p.distanceTo(e.netTarget);
   if (gap > 12) p.copy(e.netTarget); else p.lerp(e.netTarget, Math.min(1, dt * 10));
   let dy = (e.netRotY || 0) - rig.root.rotation.y;
@@ -8151,12 +8668,18 @@ function updateMirrorEnemy(e, dt) {
     rig.torsoPivot.rotation.x = 0; rig.headPivot.rotation.x = 0;
   }
   if (e.isStaggered) {
-    setEnemyTint(e, Math.sin(Date.now() * 0.02) > 0 ? 0xffea00 : 0xef4444);
+    const nowMs = Date.now();
+    const flash = Math.sin(nowMs * 0.02) > 0 ? 1 : 0;
+    if (e._lastStaggerFlash !== flash) {
+      e._lastStaggerFlash = flash;
+      setEnemyTint(e, flash ? 0xffea00 : 0xef4444);
+    }
     rig.torsoPivot.rotation.x = 0.3;
-    rig.headPivot.rotation.z = Math.sin(Date.now() * 0.007) * 0.25;
+    rig.headPivot.rotation.z = Math.sin(nowMs * 0.007) * 0.25;
     rig.leftArmPivot.rotation.x = -0.3; rig.rightArmPivot.rotation.x = -0.3;
     return;
   }
+  e._lastStaggerFlash = -1;
 
   const calm = e.kind === 'civilian' || (e.kind === 'snatcher' && !e.unmasked);
   if (e.netMoving || gap > 0.08) {
@@ -8425,6 +8948,35 @@ function updateKickLeg(prog) {
   return kickEnvelope(prog);
 }
 
+// Pre-allocated scratch poses for zero-allocation updateArmsRig()
+const _armR = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 };
+const _armL = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 };
+const _armTmpA = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 };
+const _armTmpB = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 };
+const _poseSwingBack = { x: 0.34, y: -0.52, z: 0.12, rx: -0.35, ry: -0.35, rz: -1.1 };
+const _poseHighGuard = { x: -0.21, y: -0.27, z: 0.04, rx: 0.68, ry: -0.08, rz: 0.75 };
+const _poseRaised = { x: 0.25, y: -0.05, z: -0.05, rx: 1.0, ry: 0.1, rz: -0.6 };
+const _poseSmashed = { x: 0.15, y: -0.1, z: -0.3, rx: -0.35, ry: 0.15, rz: -0.25 };
+const _poseWound = { x: 0.3, y: -0.3, z: 0.04, rx: 0.5, ry: -0.15, rz: -0.9 };
+const _poseLanded = { x: 0.22, y: -0.2, z: -0.42, rx: 0.12, ry: 1.2, rz: -1.55 };
+const _poseJabExt = { x: 0.11, y: -0.19, z: -0.3, rx: 0.3, ry: 0.12, rz: -0.12 };
+
+function copyPose(dst, src) {
+  dst.x = src.x; dst.y = src.y; dst.z = src.z;
+  dst.rx = src.rx; dst.ry = src.ry; dst.rz = src.rz;
+  return dst;
+}
+function lerpPoseInto(dst, a, b, t) {
+  dst.x = a.x + (b.x - a.x) * t; dst.y = a.y + (b.y - a.y) * t; dst.z = a.z + (b.z - a.z) * t;
+  dst.rx = a.rx + (b.rx - a.rx) * t; dst.ry = a.ry + (b.ry - a.ry) * t; dst.rz = a.rz + (b.rz - a.rz) * t;
+  return dst;
+}
+function mirrorInto(dst, p) {
+  dst.x = -p.x; dst.y = p.y; dst.z = p.z;
+  dst.rx = p.rx; dst.ry = -p.ry; dst.rz = -p.rz;
+  return dst;
+}
+
 function updateArmsRig(dt) {
   armsRig.visible = !(state.onPlane || state.telescopeActive || state.onStreetcar || state.onSubway || state.onTaxi);
   if (!armsRig.visible) return;
@@ -8500,54 +9052,49 @@ function updateArmsRig(dt) {
   leftArm.visible = true;
   kickLeg.visible = false;
 
-  // Idle guard: hands up, slight sprint pump
-  let R = { ...GUARD };
-  let L = mirror(GUARD);
+  // Idle guard: hands up, slight sprint pump (zero alloc)
+  const R = copyPose(_armR, GUARD);
+  const L = mirrorInto(_armL, GUARD);
   if (sprinting && player.bobTimer > 0.05) {
     const pump = Math.sin(player.bobTimer * 0.5) * 0.07;
-    R = { ...R, y: R.y - 0.05, z: R.z + pump, rx: R.rx - 0.2 };
-    L = { ...L, y: L.y - 0.05, z: L.z - pump, rx: L.rx - 0.2 };
+    R.y -= 0.05; R.z += pump; R.rx -= 0.2;
+    L.y -= 0.05; L.z -= pump; L.rx -= 0.2;
   }
 
   if (state.isAttacking) {
     if (anim === 'kick') {
       const b = updateKickLeg(prog);
-      // Right arm swings down and back to counterbalance the right leg;
-      // left hand comes up high to cover the face (what fighters actually do)
-      const swingBack = { x: 0.34, y: -0.52, z: 0.12, rx: -0.35, ry: -0.35, rz: -1.1 };
-      const highGuard = { x: -0.21, y: -0.27, z: 0.04, rx: 0.68, ry: -0.08, rz: 0.75 };
-      R = lerpPose(R, swingBack, b);
-      L = lerpPose(L, highGuard, b);
+      lerpPoseInto(R, R, _poseSwingBack, b);
+      lerpPoseInto(L, L, _poseHighGuard, b);
     } else if (anim === 'slam') {
-      // raise both fists overhead, then hammer down
       let up, down;
       if (prog < 0.35) { up = easeOutCubic(prog / 0.35); down = 0; }
       else if (prog < 0.55) { up = 1; down = easeOutCubic((prog - 0.35) / 0.2); }
       else { up = 1 - easeInOutSine((prog - 0.55) / 0.45); down = up; }
-      const raised = { x: 0.25, y: -0.05, z: -0.05, rx: 1.0, ry: 0.1, rz: -0.6 };
-      const smashed = { x: 0.15, y: -0.1, z: -0.3, rx: -0.35, ry: 0.15, rz: -0.25 };
-      const pose = lerpPose(lerpPose(GUARD, raised, up), smashed, down);
-      R = pose; L = mirror(pose);
+      lerpPoseInto(_armTmpA, GUARD, _poseRaised, up);
+      lerpPoseInto(R, _armTmpA, _poseSmashed, down);
+      mirrorInto(L, R);
     } else if (anim === 'heavy') {
-      // Hook: elbow stays out right, forearm swings horizontal across the screen
       const a = strikeCurve(prog, 0.2, 0.45, 0.55, 0.3);
       const arc = Math.max(0, a);
-      const wound = { x: 0.3, y: -0.3, z: 0.04, rx: 0.5, ry: -0.15, rz: -0.9 };
-      const landed = { x: 0.22, y: -0.2, z: -0.42, rx: 0.12, ry: 1.2, rz: -1.55 };
-      R = a < 0 ? lerpPose(GUARD, wound, -a / 0.3) : lerpPose(wound, landed, arc);
-      L = { ...L, z: L.z + 0.04 * arc, x: L.x + 0.02 * arc };
-      armsRig.rotation.y = 0.1 * a;     // shoulders rotate into the punch
+      if (a < 0) lerpPoseInto(R, GUARD, _poseWound, -a / 0.3);
+      else lerpPoseInto(R, _poseWound, _poseLanded, arc);
+      L.z += 0.04 * arc;
+      L.x += 0.02 * arc;
+      armsRig.rotation.y = 0.1 * a;
       armsRig.rotation.z = -0.04 * arc;
     } else {
-      // Jab / cross: alternate hands, corkscrew the fist palm-down at impact
       const e = strikeCurve(prog, 0.12, 0.34, 0.44, 0.18);
       const ext = Math.max(0, e);
-      const extended = { x: 0.11, y: -0.19, z: -0.3, rx: 0.3, ry: 0.12, rz: -0.12 };
-      const pull = lerpPose(GUARD, { ...GUARD, z: GUARD.z + 0.04 }, Math.max(0, -e) / 0.18);
-      const punch = lerpPose(pull, extended, ext);
-      const guardTight = { ...GUARD, x: GUARD.x - 0.015, z: GUARD.z + 0.035 * ext };
-      if (vm.jabHand === 'right') { R = punch; L = mirror(guardTight); }
-      else { L = mirror(punch); R = guardTight; }
+      copyPose(_armTmpA, GUARD);
+      _armTmpA.z += 0.04;
+      lerpPoseInto(_armTmpB, GUARD, _armTmpA, Math.max(0, -e) / 0.18);
+      const punch = lerpPoseInto(_armTmpA, _armTmpB, _poseJabExt, ext);
+      const guardTight = copyPose(_armTmpB, GUARD);
+      guardTight.x -= 0.015;
+      guardTight.z += 0.035 * ext;
+      if (vm.jabHand === 'right') { copyPose(R, punch); mirrorInto(L, guardTight); }
+      else { mirrorInto(L, punch); copyPose(R, guardTight); }
       armsRig.rotation.y = (vm.jabHand === 'right' ? 0.05 : -0.05) * ext;
     }
   }
@@ -8579,10 +9126,23 @@ function updateHUDWeapon() {
 }
 
 function updateHUDHealth() {
-  document.getElementById('hud-health').innerText = Math.max(0, Math.round(state.health));
-  document.getElementById('hud-health-bar').style.width = `${Math.max(0, state.health)}%`;
-  document.getElementById('hud-armor').innerText = Math.max(0, Math.round(state.armor));
-  document.getElementById('hud-armor-bar').style.width = `${Math.max(0, state.armor)}%`;
+  const hpEl = document.getElementById('hud-health');
+  if (hpEl) hpEl.innerText = Math.max(0, Math.round(state.health));
+  const hpBar = document.getElementById('hud-health-bar');
+  if (hpBar) hpBar.style.width = `${Math.max(0, state.health)}%`;
+  const arEl = document.getElementById('hud-armor');
+  if (arEl) arEl.innerText = Math.max(0, Math.round(state.armor));
+  const arBar = document.getElementById('hud-armor-bar');
+  if (arBar) arBar.style.width = `${Math.max(0, state.armor)}%`;
+}
+
+function updateHUDScore() {
+  const scoreEl = document.getElementById('hud-score');
+  if (scoreEl) scoreEl.innerText = state.score;
+  const killsEl = document.getElementById('hud-kills');
+  if (killsEl) killsEl.innerText = state.kills;
+  const boxesEl = document.getElementById('hud-boxes');
+  if (boxesEl) boxesEl.innerText = `${state.boxesSmashed}/${state.totalBoxes}`;
 }
 
 function showHitMarker() {
@@ -8636,8 +9196,48 @@ setupPostFX();
 let fpsCount = 0;
 let fpsTimer = 0;
 
+const _hudAnimCache = {
+  inited: false,
+  fpsEl: null,
+  minimapCanvas: null,
+  minimapCtx: null,
+  locEl: null,
+  compassEl: null,
+  towerDistEl: null,
+  goalLabelEl: null,
+  goalDistEl: null,
+  goalRowEl: null,
+  lastLoc: '',
+  lastCompass: '',
+  lastTowerText: '',
+  lastTowerCol: '',
+  lastGoalLabel: '',
+  lastGoalDist: '',
+  lastGoalCol: '',
+  lastGoalBorder: '',
+  lastGoalDisplay: ''
+};
+
+function initHudAnimCache() {
+  if (_hudAnimCache.inited) return;
+  _hudAnimCache.inited = true;
+  _hudAnimCache.fpsEl = document.getElementById('fps-counter');
+  _hudAnimCache.minimapCanvas = document.getElementById('minimap-canvas');
+  if (_hudAnimCache.minimapCanvas && _hudAnimCache.minimapCanvas.getContext) {
+    _hudAnimCache.minimapCtx = _hudAnimCache.minimapCanvas.getContext('2d');
+  }
+  _hudAnimCache.locEl = document.getElementById('minimap-location');
+  _hudAnimCache.compassEl = document.getElementById('street-compass-hud');
+  _hudAnimCache.towerDistEl = document.getElementById('tower-distance');
+  _hudAnimCache.goalLabelEl = document.getElementById('minimap-goal-label');
+  _hudAnimCache.goalDistEl = document.getElementById('minimap-goal-distance');
+  _hudAnimCache.goalRowEl = document.getElementById('minimap-goal-row');
+}
+
 function updateNeighborhood() {
   if (!city || !city.landmarks) return;
+  initHudAnimCache();
+  const c = _hudAnimCache;
   const p = player.pos;
   const lms = city.landmarks;
   let name = "DOWNTOWN TORONTO";
@@ -8682,15 +9282,17 @@ function updateNeighborhood() {
     name = "ENTERTAINMENT DISTRICT";
   }
 
-  const locEl = document.getElementById('minimap-location');
-  if (locEl && locEl.innerText !== name) {
-    locEl.innerText = name;
+  if (c.locEl && c.lastLoc !== name) {
+    c.lastLoc = name;
+    c.locEl.innerText = name;
   }
 
-  const compassEl = document.getElementById('street-compass-hud');
-  if (compassEl) {
+  if (c.compassEl) {
     const stmt = getLocationCompassStatement();
-    if (compassEl.innerText !== stmt) compassEl.innerText = stmt;
+    if (c.lastCompass !== stmt) {
+      c.lastCompass = stmt;
+      c.compassEl.innerText = stmt;
+    }
   }
 }
 
@@ -8719,8 +9321,43 @@ function getLocationCompassStatement() {
   return `Downtown Toronto - ${heading}`;
 }
 
+const MINIMAP_LOGICAL_SIZE = 140;
+let _mmLastDpr = 0;
+function ensureMinimapCanvasSize(minimapCanvas) {
+  if (!minimapCanvas) return 1;
+  const dpr = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) ? window.devicePixelRatio : 1, 2.0);
+  const targetPx = Math.round(MINIMAP_LOGICAL_SIZE * dpr);
+  if (minimapCanvas.width !== targetPx || minimapCanvas.height !== targetPx || _mmLastDpr !== dpr) {
+    minimapCanvas.width = targetPx;
+    minimapCanvas.height = targetPx;
+    _mmLastDpr = dpr;
+  }
+  return dpr;
+}
+
+const _minimapDotPool = [];
+const _minimapDots = [];
+function pushMinimapDot(x, z, c, r, isPlayer, initial, yaw, isMission) {
+  const idx = _minimapDots.length;
+  let d = _minimapDotPool[idx];
+  if (!d) {
+    d = { x: 0, z: 0, c: '#ef4444', r: 3, isPlayer: false, initial: '', yaw: 0, isMission: false };
+    _minimapDotPool[idx] = d;
+  }
+  d.x = x; d.z = z; d.c = c; d.r = r;
+  d.isPlayer = !!isPlayer; d.initial = initial || ''; d.yaw = yaw || 0; d.isMission = !!isMission;
+  _minimapDots.push(d);
+}
+
+let _minimapTimer = 1.0;
+let _hudNbrTimer = 1.0;
+let _hudSquadTimer = 1.0;
+const _kickOff = new THREE.Vector3();
+
 function animate(now) {
   requestAnimationFrame(animate);
+  initHudAnimCache();
+  const hc = _hudAnimCache;
 
   const dt = Math.min((now - lastTime) / 1000, 0.1);
   lastTime = now;
@@ -8729,7 +9366,7 @@ function animate(now) {
   fpsCount++;
   fpsTimer += dt;
   if (fpsTimer >= 1.0) {
-    document.getElementById('fps-counter').innerText = `${fpsCount} FPS`;
+    if (hc.fpsEl) hc.fpsEl.innerText = `${fpsCount} FPS`;
     fpsCount = 0;
     fpsTimer = 0;
   }
@@ -8770,8 +9407,6 @@ function animate(now) {
       window.multiplayer.update(simDt);
     }
   } else if (window.multiplayer && window.multiplayer.connected && window.multiplayer.remotePlayers.size > 0) {
-    // Shared room: our menu / death screen must not freeze the city for everyone else.
-    // Keep NPCs (or their mirrors), effects and networking running; only local input stops.
     updateEnemies(dt);
     keepPeopleOutOfRailCut();
     updateParticles(dt);
@@ -8791,86 +9426,74 @@ function animate(now) {
     try { islands.update(dt, player.pos); } catch (e) { console.warn('islands.update error:', e); }
   }
 
-  // Draw Toronto GPS Minimap & Sanctuary Radar
-  const minimapCanvas = document.getElementById('minimap-canvas');
-  if (city && minimapCanvas) {
-    const ctx = minimapCanvas.getContext('2d');
-    const dots = [];
-    enemies.forEach(e => {
-      if (!e.isDead && !e.isKnockedOut) {
-        let dotColor = '#ef4444'; // Red for robots
-        let dotRadius = 3.0;
-
-        if (e.isStaggered) {
-          dotColor = '#ffea00'; // Gold for glory kill targets
-          dotRadius = 4.5;
-        } else if (e.kind === 'civilian') {
-          dotColor = '#22c55e'; // Green for innocent civilians
-          dotRadius = 2.8;
-        } else if (e.kind === 'snatcher') {
-          dotColor = '#c026d3'; // Purple/magenta for body snatchers
-          dotRadius = 3.5;
-        }
-
-        dots.push({
-          x: e.rig.root.position.x,
-          z: e.rig.root.position.z,
-          c: dotColor,
-          r: dotRadius
-        });
+  // Draw Toronto GPS Minimap & Sanctuary Radar (Retina DPR scaled, throttled to ~15 Hz)
+  _minimapTimer += dt;
+  if (city && hc.minimapCanvas && hc.minimapCtx && _minimapTimer >= 0.066) {
+    _minimapTimer = 0;
+    const mmDpr = ensureMinimapCanvasSize(hc.minimapCanvas);
+    if (typeof hc.minimapCtx.setTransform === 'function') {
+      hc.minimapCtx.setTransform(mmDpr, 0, 0, mmDpr, 0, 0);
+    }
+    _minimapDots.length = 0;
+    for (let i = 0; i < enemies.length; i++) {
+      const e = enemies[i];
+      if (e.isDead || e.isKnockedOut || !e.rig || !e.rig.root) continue;
+      let dotColor = '#ef4444';
+      let dotRadius = 3.0;
+      if (e.isStaggered) {
+        dotColor = '#ffea00';
+        dotRadius = 4.5;
+      } else if (e.kind === 'civilian') {
+        dotColor = '#22c55e';
+        dotRadius = 2.8;
+      } else if (e.kind === 'snatcher') {
+        dotColor = '#c026d3';
+        dotRadius = 3.5;
       }
-    });
-    crates.forEach(c => {
+      pushMinimapDot(e.rig.root.position.x, e.rig.root.position.z, dotColor, dotRadius);
+    }
+    for (let i = 0; i < crates.length; i++) {
+      const c = crates[i];
       if (!c.destroyed) {
-        dots.push({
-          x: c.mesh.position.x,
-          z: c.mesh.position.z,
-          c: '#f59e0b',
-          r: 2.5
-        });
+        pushMinimapDot(c.mesh.position.x, c.mesh.position.z, '#f59e0b', 2.5);
       }
-    });
-    // Remote Squad Players on Minimap Radar (distinct directional chevron + colored medallion)
+    }
     if (window.multiplayer && window.multiplayer.remotePlayers) {
       window.multiplayer.remotePlayers.forEach(rp => {
-        dots.push({
-          x: rp.currentPos.x,
-          z: rp.currentPos.z,
-          c: rp.colorHexStr || '#38bdf8',
-          r: 5.5,
-          isPlayer: true,
-          initial: rp.initial || (rp.name ? rp.name.charAt(0).toUpperCase() : 'P'),
-          yaw: rp.currentYaw || 0
-        });
+        pushMinimapDot(
+          rp.currentPos.x,
+          rp.currentPos.z,
+          rp.colorHexStr || '#38bdf8',
+          5.5,
+          true,
+          rp.initial || (rp.name ? rp.name.charAt(0).toUpperCase() : 'P'),
+          rp.currentYaw || 0,
+          false
+        );
       });
     }
-    // Active exploration mission objective waypoint
     if (missionState.active && missionState.color && missionState.state === 'active') {
-      dots.push({
-        x: missionState.pos.x,
-        z: missionState.pos.z,
-        c: missionState.color.hex,
-        r: 6,
-        isMission: true
-      });
+      pushMinimapDot(missionState.pos.x, missionState.pos.z, missionState.color.hex, 6, false, '', 0, true);
     }
-    if (traffic) traffic.cars.forEach(c => dots.push({ x: c.vx, z: c.vz, c: '#e5e7eb', r: 2 }));
+    if (traffic && traffic.cars) {
+      for (let i = 0; i < traffic.cars.length; i++) {
+        const car = traffic.cars[i];
+        pushMinimapDot(car.vx, car.vz, '#e5e7eb', 2);
+      }
+    }
     try {
       if (islands && islands.isInsideIslands(player.pos.x, player.pos.z)) {
-        islands.drawMinimap(ctx, 160, player.pos, player.yaw, dots);
+        islands.drawMinimap(hc.minimapCtx, MINIMAP_LOGICAL_SIZE, player.pos, player.yaw, _minimapDots);
       } else {
-        city.drawMinimap(ctx, 160, player.pos, player.yaw, dots);
+        city.drawMinimap(hc.minimapCtx, MINIMAP_LOGICAL_SIZE, player.pos, player.yaw, _minimapDots);
       }
     } catch (e) {
       console.warn('drawMinimap error:', e);
     }
-    updateSquadTrackingHUD();
-    updateNeighborhood();
 
     // 1. Distance & status to CN Tower (Peace Sanctuary)
-    const towerDist = Math.round(Math.hypot(player.pos.x - city.landmarks.cnTower[0], player.pos.z - city.landmarks.cnTower[1]));
-    const towerDistEl = document.getElementById('tower-distance');
-    if (towerDistEl) {
+    if (hc.towerDistEl) {
+      const towerDist = Math.round(Math.hypot(player.pos.x - city.landmarks.cnTower[0], player.pos.z - city.landmarks.cnTower[1]));
       let nextTowerText, nextTowerCol;
       if (player.pos.y > 50) {
         nextTowerText = player.pos.y > 345.5 ? '348m LOOKOUT' : '342m GLASS FLR';
@@ -8882,21 +9505,18 @@ function animate(now) {
         nextTowerText = `${towerDist}m`;
         nextTowerCol = '#34d399';
       }
-      if (towerDistEl.innerText !== nextTowerText) towerDistEl.innerText = nextTowerText;
-      if (towerDistEl.style.color !== nextTowerCol) towerDistEl.style.color = nextTowerCol;
+      if (hc.lastTowerText !== nextTowerText) { hc.lastTowerText = nextTowerText; hc.towerDistEl.innerText = nextTowerText; }
+      if (hc.lastTowerCol !== nextTowerCol) { hc.lastTowerCol = nextTowerCol; hc.towerDistEl.style.color = nextTowerCol; }
     }
 
     // 2. Pointer & distance to Mission Goal
-    const goalLabelEl = document.getElementById('minimap-goal-label');
-    const goalDistEl = document.getElementById('minimap-goal-distance');
-    const goalRowEl = document.getElementById('minimap-goal-row');
-    if (goalLabelEl && goalDistEl && goalRowEl) {
+    if (hc.goalLabelEl && hc.goalDistEl && hc.goalRowEl) {
       if (missionState.active && missionState.landmark && missionState.color && missionState.state === 'active') {
         const mDist = Math.round(Math.hypot(player.pos.x - missionState.pos.x, player.pos.z - missionState.pos.z));
         const dx = missionState.pos.x - player.pos.x;
         const dz = missionState.pos.z - player.pos.z;
         const relAngle = Math.atan2(dx, dz) - player.yaw;
-        let norm = (relAngle + Math.PI) % (Math.PI * 2) - Math.PI;
+        const norm = (relAngle + Math.PI) % (Math.PI * 2) - Math.PI;
         let arrow = '↑';
         if (norm > Math.PI * 0.75 || norm < -Math.PI * 0.75) arrow = '↓';
         else if (norm > Math.PI * 0.25) arrow = '→';
@@ -8907,18 +9527,32 @@ function animate(now) {
         const shortName = missionState.landmark.name.length > 10 ? missionState.landmark.name.slice(0, 9) + '.' : missionState.landmark.name;
         const nextLabel = `${shortName.toUpperCase()}:`;
         const nextDist = `${mDist}m ${arrow}`;
-        if (goalLabelEl.innerText !== nextLabel) goalLabelEl.innerText = nextLabel;
-        if (goalDistEl.innerText !== nextDist) goalDistEl.innerText = nextDist;
-        if (goalDistEl.style.color !== missionState.color.hex) goalDistEl.style.color = missionState.color.hex;
-        if (goalRowEl.style.borderColor !== missionState.color.hex) goalRowEl.style.borderColor = missionState.color.hex;
-        if (goalRowEl.style.display !== 'flex') goalRowEl.style.display = 'flex';
+        const colHex = missionState.color.hex;
+        if (hc.lastGoalLabel !== nextLabel) { hc.lastGoalLabel = nextLabel; hc.goalLabelEl.innerText = nextLabel; }
+        if (hc.lastGoalDist !== nextDist) { hc.lastGoalDist = nextDist; hc.goalDistEl.innerText = nextDist; }
+        if (hc.lastGoalCol !== colHex) { hc.lastGoalCol = colHex; hc.goalDistEl.style.color = colHex; }
+        if (hc.lastGoalBorder !== colHex) { hc.lastGoalBorder = colHex; hc.goalRowEl.style.borderColor = colHex; }
+        if (hc.lastGoalDisplay !== 'flex') { hc.lastGoalDisplay = 'flex'; hc.goalRowEl.style.display = 'flex'; }
       } else {
-        if (goalLabelEl.innerText !== 'GOAL:') goalLabelEl.innerText = 'GOAL:';
-        if (goalDistEl.innerText !== 'NEXT SOON...') goalDistEl.innerText = 'NEXT SOON...';
-        if (goalDistEl.style.color !== '#f59e0b') goalDistEl.style.color = '#f59e0b';
-        if (goalRowEl.style.borderColor !== 'rgba(245, 158, 11, 0.3)') goalRowEl.style.borderColor = 'rgba(245, 158, 11, 0.3)';
+        if (hc.lastGoalLabel !== 'GOAL:') { hc.lastGoalLabel = 'GOAL:'; hc.goalLabelEl.innerText = 'GOAL:'; }
+        if (hc.lastGoalDist !== 'NEXT SOON...') { hc.lastGoalDist = 'NEXT SOON...'; hc.goalDistEl.innerText = 'NEXT SOON...'; }
+        if (hc.lastGoalCol !== '#f59e0b') { hc.lastGoalCol = '#f59e0b'; hc.goalDistEl.style.color = '#f59e0b'; }
+        const borderDim = 'rgba(245, 158, 11, 0.3)';
+        if (hc.lastGoalBorder !== borderDim) { hc.lastGoalBorder = borderDim; hc.goalRowEl.style.borderColor = borderDim; }
       }
     }
+  }
+
+  _hudNbrTimer += dt;
+  if (_hudNbrTimer >= 0.125) {
+    _hudNbrTimer = 0;
+    updateNeighborhood();
+  }
+
+  _hudSquadTimer += dt;
+  if (_hudSquadTimer >= 0.033) {
+    _hudSquadTimer = 0;
+    updateSquadTrackingHUD();
   }
 
   // Camera Shake (applied as a temporary offset, removed at the top of next frame)
@@ -8937,32 +9571,43 @@ function animate(now) {
     if (state.screenShake < 0.05) state.screenShake = 0;
   }
 
-  // Full-body kick motion seen through the eyes: lean back/away, dip, hip turn, head tilt
+  // Full-body kick motion seen through the eyes (zero alloc)
   if (state.isAttacking && state.currentAnimType === 'kick' && state.inGame && !state.isPaused) {
     const k = kickBodyPose(clamp01(state.attackProgress));
     const sy = Math.sin(player.yaw), cy = Math.cos(player.yaw);
-    // forward = (-sin, 0, -cos), right = (cos, 0, -sin)
-    const off = new THREE.Vector3(-sy * k.fwd + cy * k.side, k.drop, -cy * k.fwd - sy * k.side);
-    if (!canMoveTo(camera.position.x + off.x, camera.position.z + off.z)) {
-      off.x = 0;
-      off.z = 0;
+    _kickOff.set(-sy * k.fwd + cy * k.side, k.drop, -cy * k.fwd - sy * k.side);
+    if (!canMoveTo(camera.position.x + _kickOff.x, camera.position.z + _kickOff.z)) {
+      _kickOff.x = 0;
+      _kickOff.z = 0;
     }
-    shakeOffset.add(off);
-    camera.position.add(off);
+    shakeOffset.add(_kickOff);
+    camera.position.add(_kickOff);
     bodyRot.set(k.pitch, k.yaw, k.roll);
     camera.rotation.x += k.pitch; camera.rotation.y += k.yaw; camera.rotation.z += k.roll;
   }
 
-  // Camera punch: quick pitch kick + FOV squeeze on impact, springs back
+  // Camera punch + dynamic near plane & Berserk/Peameal speed FOV boost (respecting telescope zoom!)
   if (state.camPunch > 0.001 && state.inGame && !state.isPaused) {
     camera.rotation.x += state.camPunch * 0.018;
     state.camPunch *= Math.exp(-dt * 14);
   }
-  const targetFov = BASE_FOV + (keys['ShiftLeft'] || keys['ShiftRight'] ? 4 : 0) - state.camPunch * 2.5;
-  if (Math.abs(camera.fov - targetFov) > 0.01) {
-    camera.fov += (targetFov - camera.fov) * (1 - Math.exp(-dt * 10));
-    camera.updateProjectionMatrix();
+  let projChanged = false;
+  const targetNear = (player.pos.y > 40 || state.onPlane || state.telescopeActive) ? 0.5 : 0.14;
+  if (Math.abs(camera.near - targetNear) > 0.01) {
+    camera.near = targetNear;
+    projChanged = true;
   }
+  if (!state.telescopeActive) {
+    const boostFov = (keys['ShiftLeft'] || keys['ShiftRight'] ? 4 : 0)
+      + (state.isBerserk ? 6 : 0)
+      + (state.peamealBoostTimer > 0 ? 4 : 0);
+    const targetFov = Math.min(92, BASE_FOV + boostFov) - state.camPunch * 2.5;
+    if (Math.abs(camera.fov - targetFov) > 0.01) {
+      camera.fov += (targetFov - camera.fov) * (1 - Math.exp(-dt * 10));
+      projChanged = true;
+    }
+  }
+  if (projChanged) camera.updateProjectionMatrix();
 
   updateArmsRig(simDt);
   drawFace();
@@ -8970,6 +9615,10 @@ function animate(now) {
   if (composer && getCityTimeOfDay() !== 'day') composer.render(dt);
   else renderer.render(scene, camera);
 }
+
+const _pForward = new THREE.Vector3();
+const _pRight = new THREE.Vector3();
+const _pMoveDir = new THREE.Vector3();
 
 function updatePlayer(dt) {
   // Turning: ArrowLeft / ArrowRight or Q (E is reserved for kick)
@@ -8988,15 +9637,17 @@ function updatePlayer(dt) {
   if (keys['KeyD']) rollTarget = -0.025;
   camera.rotation.z += (rollTarget - camera.rotation.z) * 0.1;
 
-  // Movement input: Support W/S/A/D and Arrow keys by e.code
-  const forward = new THREE.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw));
-  const right = new THREE.Vector3(Math.cos(player.yaw), 0, -Math.sin(player.yaw));
-  const moveDir = new THREE.Vector3();
+  // Movement input: Support W/S/A/D and Arrow keys by e.code (zero alloc)
+  const sy = Math.sin(player.yaw), cy = Math.cos(player.yaw);
+  _pForward.set(-sy, 0, -cy);
+  _pRight.set(cy, 0, -sy);
+  _pMoveDir.set(0, 0, 0);
 
-  if (keys['KeyW'] || keys['ArrowUp']) moveDir.add(forward);
-  if (keys['KeyS'] || keys['ArrowDown']) moveDir.sub(forward);
-  if (keys['KeyD']) moveDir.add(right);
-  if (keys['KeyA']) moveDir.sub(right);
+  if (keys['KeyW'] || keys['ArrowUp']) _pMoveDir.add(_pForward);
+  if (keys['KeyS'] || keys['ArrowDown']) _pMoveDir.sub(_pForward);
+  if (keys['KeyD']) _pMoveDir.add(_pRight);
+  if (keys['KeyA']) _pMoveDir.sub(_pRight);
+  const moveDir = _pMoveDir;
 
   // Autonomous AI Copilot / Watch AI Mode integration
   if (window.aiCopilot && window.aiCopilot.isActive) {
@@ -9091,6 +9742,7 @@ function updatePlayer(dt) {
   const nowUnderground = (player.pos.y < -4.0);
   if (nowUnderground && !state.isUnderground) {
     state.isUnderground = true;
+    syncSceneFog();
     // Have the 6-car TTC Line 1 train waiting at the nearest station platform when walking down the stairs!
     if (city && city.subway && city.subway.stations && city.subway.state) {
       const stations = city.subway.stations;
@@ -9117,6 +9769,7 @@ function updatePlayer(dt) {
     }
   } else if (!nowUnderground && state.isUnderground && !state.onSubway) {
     state.isUnderground = false;
+    syncSceneFog();
   }
 
   if (isMoving && player.isGrounded) {
@@ -9211,13 +9864,15 @@ function canMoveTo(x, z) {
   for (let i = 0; i < crates.length; i++) {
     const c = crates[i];
     if (!c.destroyed) {
-      const dist = Math.hypot(x - c.mesh.position.x, z - c.mesh.position.z);
-      if (dist < 1.3) return false;
+      const cp = c.mesh.position;
+      if (Math.abs(x - cp.x) < 1.3 && Math.abs(z - cp.z) < 1.3 && Math.hypot(x - cp.x, z - cp.z) < 1.3) {
+        return false;
+      }
     }
   }
 
-  // --- Solid Fighter & Guard Physical Body Blocking ---
-  // Player CANNOT run right through alive fighters or guards!
+  // --- Solid Fighter & Guard Physical Body Blocking (AABB early-reject before hypot) ---
+  const minFighterDist = 0.75;
   for (let i = 0; i < enemies.length; i++) {
     const e = enemies[i];
     if (e.isDead || e.isKnockedOut || e.isDeckEnemy) continue;
@@ -9226,11 +9881,13 @@ function canMoveTo(x, z) {
 
     if (pY > 50) continue;
     if (Math.abs(pY - ePos.y) > 2.2) continue;
+    const dx = x - ePos.x;
+    if (dx >= minFighterDist || dx <= -minFighterDist) continue;
+    const dz = z - ePos.z;
+    if (dz >= minFighterDist || dz <= -minFighterDist) continue;
 
-    const dNew = Math.hypot(x - ePos.x, z - ePos.z);
-    const minFighterDist = 0.75; // contact boundary
+    const dNew = Math.hypot(dx, dz);
     if (dNew < minFighterDist) {
-      // In Canadian Berserker Mode: player can bulldoze and shove fighters out of the way!
       if (state.isBerserk) {
         const pushX = ePos.x - player.pos.x;
         const pushZ = ePos.z - player.pos.z;
@@ -9242,7 +9899,6 @@ function canMoveTo(x, z) {
         return true;
       }
 
-      // If moving closer to enemy body, physically block the player!
       const dCurr = Math.hypot(player.pos.x - ePos.x, player.pos.z - ePos.z);
       if (dNew < dCurr) {
         return false;
@@ -9259,26 +9915,45 @@ function keepPeopleOutOfRailCut() {
   if (!city || !city.pushOutOfTrench) return;
   for (let i = 0; i < enemies.length; i++) {
     const e = enemies[i];
-    if (!e.rig || e.isDeckEnemy) continue;
+    if (e.isDead || e.isKnockedOut || !e.rig || !e.rig.root.visible || e.isDeckEnemy || e.isSubwayCitizen) continue;
     const p = e.rig.root.position;
-    if (p.z > 250 || p.z < -250 || p.y > 20) continue;
+    if (p.z > 250 || p.z < -250 || p.y > 20 || p.x < -905 || p.x > 865) continue;
     const fix = city.pushOutOfTrench(p.x, p.z, 1.2);
     if (fix) { p.x = fix[0]; p.z = fix[1]; }
   }
-  if (player.pos.y < 20 && player.pos.z <= 250 && player.pos.z >= -250 && !state.inElevator) {
+  if (player.pos.y < 20 && player.pos.z <= 250 && player.pos.z >= -250 && player.pos.x >= -905 && player.pos.x <= 865 && !state.inElevator) {
     const fix = city.pushOutOfTrench(player.pos.x, player.pos.z, 1.2);
     if (fix && player.pos.y > -1) { player.pos.x = fix[0]; player.pos.z = fix[1]; }
   }
 }
 
+const _netTargetPool = [{ pos: null, remoteId: null, inPeace: false, dead: false }];
+const _netTargets = [];
+const _sepNearEnemies = [];
+let _gloryPromptEl = null;
+let _lastGloryActive = null;
+
+function pickNearestNetTarget(epos, anyAlive) {
+  let best = _netTargets[0], bd = Infinity;
+  for (let i = 0; i < _netTargets.length; i++) {
+    const t = _netTargets[i];
+    if (anyAlive && t.dead) continue;
+    const d = Math.hypot(t.pos.x - epos.x, t.pos.z - epos.z);
+    if (d < bd) { bd = d; best = t; }
+  }
+  return anyAlive ? best : null;
+}
+
 function updateEnemies(dt) {
   let nearestStaggered = null;
   let minDist = 4.0;
-  const playerInPeace = (city && player.pos.y <= 50) ? city.isInsidePeaceZone(player.pos.x, player.pos.z, player.pos.y) : false;
+  const nowMs = Date.now();
+  const playerY = player.pos.y;
+  const playerInPeace = (city && playerY <= 50) ? city.isInsidePeaceZone(player.pos.x, player.pos.z, playerY) : false;
 
-  // Ambient subway train passenger animations (breathing & natural head turning)
-  if (subwayTrainPassengers.length > 0) {
-    const pTime = Date.now() * 0.0018;
+  // Ambient subway train passenger animations (only animate when player is underground)
+  if (subwayTrainPassengers.length > 0 && playerY < -2.0) {
+    const pTime = nowMs * 0.0018;
     for (let i = 0; i < subwayTrainPassengers.length; i++) {
       const sp = subwayTrainPassengers[i];
       if (sp && sp.headPivot) {
@@ -9287,32 +9962,51 @@ function updateEnemies(dt) {
     }
   }
 
-  // Who can NPCs go after? Just us in single-player; every living player when hosting.
-  // A paused / dead / in-menu player isn't a valid target (matters once the world keeps running for others)
+  // Pooled target list: local player + any active peers when hosting (zero alloc)
   const localAway = state.isDead || state.isPaused || !state.inGame;
-  const netTargets = [{ pos: player.pos, remoteId: null, inPeace: playerInPeace, dead: localAway }];
+  _netTargetPool[0].pos = player.pos;
+  _netTargetPool[0].remoteId = null;
+  _netTargetPool[0].inPeace = playerInPeace;
+  _netTargetPool[0].dead = localAway;
+  _netTargets.length = 1;
+  _netTargets[0] = _netTargetPool[0];
+  let maxPlayerZ = player.pos.z;
+  let minPlayerY = playerY;
+  let anyAlive = !localAway;
+
   if (isNetHostWithPeers()) {
+    let tIdx = 1;
     window.multiplayer.remotePlayers.forEach((rp, id) => {
       const ep = rp.eyePos;
-      const inPeace = (city && ep.y <= 50) ? city.isInsidePeaceZone(ep.x, ep.z, ep.y) : false;
-      netTargets.push({ pos: ep, remoteId: id, inPeace, dead: !(rp.health > 0) });
+      if (!_netTargetPool[tIdx]) {
+        _netTargetPool[tIdx] = { pos: null, remoteId: null, inPeace: false, dead: false };
+      }
+      const slot = _netTargetPool[tIdx++];
+      slot.pos = ep;
+      slot.remoteId = id;
+      slot.inPeace = (city && ep.y <= 50) ? city.isInsidePeaceZone(ep.x, ep.z, ep.y) : false;
+      slot.dead = !(rp.health > 0);
+      if (!slot.dead) anyAlive = true;
+      if (ep.z > maxPlayerZ) maxPlayerZ = ep.z;
+      if (ep.y < minPlayerY) minPlayerY = ep.y;
+      _netTargets.push(slot);
     });
   }
-  const anyAlive = netTargets.some(t => !t.dead);
-  function pickTarget(epos) {
-    let best = netTargets[0], bd = Infinity;
-    for (const t of netTargets) {
-      if (anyAlive && t.dead) continue;
-      const d = Math.hypot(t.pos.x - epos.x, t.pos.z - epos.z);
-      if (d < bd) { bd = d; best = t; }
+
+  // Lazy-stream island citizens when approaching harbour/islands; unload cleanly after 12s back downtown
+  if (maxPlayerZ > 550 || state.onFerry || state.onIsland) {
+    ensureIslandCitizensPopulated();
+  } else if (maxPlayerZ < 200 && !state.onFerry && !state.onIsland && !state.onPlane && minPlayerY < 20) {
+    islandLeaveUnloadTimer += dt;
+    if (islandLeaveUnloadTimer > 12.0) {
+      islandLeaveUnloadTimer = 0;
+      unloadDistantIslandCitizens();
     }
-    // Nobody available: stand down (treated like a sanctuary — no chasing, no punching)
-    return anyAlive ? best : { pos: best.pos, remoteId: best.remoteId, inPeace: true, dead: true };
+  } else {
+    islandLeaveUnloadTimer = 0;
   }
 
   // Dynamic Roaming Distance Culling & Local Neighborhood Respawn
-  // If player runs away into the city (> 110m away), despawn distant ambient enemies
-  // and spawn fresh enemies near the player's new position!
   state.enemyRoamingTimer = (state.enemyRoamingTimer || 0) + dt;
   if (state.enemyRoamingTimer >= 1.2 && !isNetGuest()) {
     state.enemyRoamingTimer = 0;
@@ -9325,46 +10019,66 @@ function updateEnemies(dt) {
 
       const d = nearestPlayerDist(e.rig.root.position.x, e.rig.root.position.z);
       if (d > (e.isDynamicIslandSpawn ? 140 : 115)) {
-        if (e.rig && e.rig.root) scene.remove(e.rig.root);
+        disposeFighterRig(e.rig);
         enemies.splice(i, 1);
         if (!e.isDynamicIslandSpawn) spawnSingleReinforcement();
       }
     }
 
-    // Maintain ambient target count
-    const aliveAmbient = enemies.filter(e => !e.isDead && !e.isMissionGuard && !e.isDeckEnemy && e.kind !== 'civilian' && !e.isIslandCitizen && !e.isSubwayCitizen).length;
+    let aliveAmbient = 0;
+    let nearbyCitizens = 0;
+    const onIslandsNow = (player.pos.z > 840 || (typeof islands !== 'undefined' && islands && islands.isInsideIslands && islands.isInsideIslands(player.pos.x, player.pos.z)));
+    for (let i = 0; i < enemies.length; i++) {
+      const e = enemies[i];
+      if (e.isDead) continue;
+      if (!e.isMissionGuard && !e.isDeckEnemy && e.kind !== 'civilian' && !e.isIslandCitizen && !e.isSubwayCitizen) {
+        aliveAmbient++;
+      }
+      if (onIslandsNow && (e.kind === 'civilian' || e.isIslandCitizen) && e.rig && e.rig.root) {
+        if (nearestPlayerDist(e.rig.root.position.x, e.rig.root.position.z) < 65) nearbyCitizens++;
+      }
+    }
     if (aliveAmbient < cfg.targetEnemies) {
       spawnSingleReinforcement();
     }
 
-    // When player is on the island, guarantee vibrant, bustling park life around the player
-    if (player.pos.z > 840 || (typeof islands !== 'undefined' && islands && islands.isInsideIslands && islands.isInsideIslands(player.pos.x, player.pos.z))) {
-      const nearbyCitizens = enemies.filter(e => !e.isDead && (e.kind === 'civilian' || e.isIslandCitizen) && nearestPlayerDist(e.rig.root.position.x, e.rig.root.position.z) < 65).length;
-      if (nearbyCitizens < 24 && enemies.length < 235) {
-        const toSpawn = Math.min(4, 24 - nearbyCitizens);
-        for (let s = 0; s < toSpawn; s++) {
-          const angle = Math.random() * Math.PI * 2;
-          const dist = 14 + Math.random() * 42;
-          const sx = player.pos.x + Math.cos(angle) * dist;
-          const sz = player.pos.z + Math.sin(angle) * dist;
-          // Never spawn ambient park citizens on Billy Bishop active runway or taxiways!
-          const onRwy = (typeof islands !== 'undefined' && islands && islands.isAirportRunway && islands.isAirportRunway(sx, sz)) ||
-            (typeof city !== 'undefined' && city && city.isAirportRunway && city.isAirportRunway(sx, sz));
-          if (onRwy) continue;
-          if (city && city.canMoveTo && city.canMoveTo(sx, sz, 0.5, 0.55)) {
-            const archIdx = Math.floor(Math.random() * CIVILIAN_ARCHETYPES.length);
-            const cit = spawnEnemy(sx, sz, 'civilian', archIdx);
-            if (cit) {
-              cit.isIslandCitizen = true;
-              cit.isDynamicIslandSpawn = true;
-            }
+    if (onIslandsNow && nearbyCitizens < 24 && enemies.length < 235) {
+      const toSpawn = Math.min(4, 24 - nearbyCitizens);
+      for (let s = 0; s < toSpawn; s++) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 14 + Math.random() * 42;
+        const sx = player.pos.x + Math.cos(angle) * dist;
+        const sz = player.pos.z + Math.sin(angle) * dist;
+        const onRwy = (sx < -850 && sz > 840) && (
+          (typeof islands !== 'undefined' && islands && islands.isAirportRunway && islands.isAirportRunway(sx, sz)) ||
+          (typeof city !== 'undefined' && city && city.isAirportRunway && city.isAirportRunway(sx, sz))
+        );
+        if (onRwy) continue;
+        if (city && city.canMoveTo && city.canMoveTo(sx, sz, 0.5, 0.55)) {
+          const archIdx = Math.floor(Math.random() * CIVILIAN_ARCHETYPES.length);
+          const cit = spawnEnemy(sx, sz, 'civilian', archIdx);
+          if (cit) {
+            cit.isIslandCitizen = true;
+            cit.isDynamicIslandSpawn = true;
           }
         }
       }
     }
   }
 
-  enemies.forEach(enemy => {
+  _sepNearEnemies.length = 0;
+  const fallbackTarget = _netTargets[0];
+
+  for (let idx = 0; idx < enemies.length; idx++) {
+    const enemy = enemies[idx];
+
+    if (enemy.hitFlashTimer > 0) {
+      enemy.hitFlashTimer -= dt;
+      if (enemy.hitFlashTimer <= 0 && !enemy.isDead && !enemy.isStaggered) {
+        restoreEnemyTint(enemy);
+      }
+    }
+
     // 1. Knockout knockdown animation
     if (enemy.isKnockedOut) {
       if (enemy.koProgress < 1.0) {
@@ -9376,26 +10090,33 @@ function updateEnemies(dt) {
         enemy.rig.leftArmPivot.rotation.x = 0.5 * enemy.koProgress;
         enemy.rig.rightArmPivot.rotation.x = 0.5 * enemy.koProgress;
       }
-      return;
+      continue;
     }
 
-    if (enemy.isDead) return;
+    if (enemy.isDead) continue;
 
     const ePos = enemy.rig.root.position;
-    const distToPlayer = Math.hypot(ePos.x - player.pos.x, ePos.y - player.pos.y, ePos.z - player.pos.z);
-    enemy.rig.root.visible = (distToPlayer < 210);
+    const distToPlayer = Math.hypot(ePos.x - player.pos.x, ePos.y - playerY, ePos.z - player.pos.z);
+
+    // Hide underground subway platform commuters when player is on surface street/sky
+    const subwayHidden = !!(enemy.isSubwayCitizen && playerY > -2.0);
+    const rootVisible = !subwayHidden && (distToPlayer < 210);
+    enemy.rig.root.visible = rootVisible;
+    if (enemy.rig.shadowCaster) {
+      enemy.rig.shadowCaster.castShadow = rootVisible && (distToPlayer < 55);
+    }
     if (enemy.rig.nameplateSprite) {
-      enemy.rig.nameplateSprite.visible = (distToPlayer < 58);
+      enemy.rig.nameplateSprite.visible = rootVisible && (distToPlayer < 58) && (Math.abs(ePos.y - playerY) < 12);
     }
 
-    // Safety escort: keep citizens strictly off active airport runways and taxiways (players can walk freely!)
-    if (enemy.kind === 'civilian' && ePos.x < -900 && ePos.z > 840) {
+    // Safety escort: keep citizens strictly off active airport runways and taxiways
+    if (enemy.kind === 'civilian' && ePos.x < -850 && ePos.z > 840) {
       const onRunway = (typeof islands !== 'undefined' && islands && islands.isAirportRunway && islands.isAirportRunway(ePos.x, ePos.z)) ||
         (typeof city !== 'undefined' && city && city.isAirportRunway && city.isAirportRunway(ePos.x, ePos.z));
       if (onRunway) {
-        // Escort civilian off active runway back to safe passenger terminal entrance plaza
         ePos.set(-1060 + (Math.random() - 0.5) * 16, 0.55, 938 + (Math.random() - 0.5) * 6);
-        enemy.wanderAngle = Math.PI; // Face north toward terminal/ferry
+        enemy._lastFloorX = undefined;
+        enemy.wanderAngle = Math.PI;
         enemy.wanderTimer = 3.0;
       }
     }
@@ -9403,24 +10124,29 @@ function updateEnemies(dt) {
     // Network mirror of a host-owned NPC: render only, no AI
     if (enemy.isRemoteMirror) {
       updateMirrorEnemy(enemy, dt);
-      if (enemy.isStaggered) {
-        if (distToPlayer < minDist) { nearestStaggered = enemy; minDist = distToPlayer; }
+      if (enemy.isStaggered && distToPlayer < minDist) {
+        nearestStaggered = enemy; minDist = distToPlayer;
       }
-      return;
+      continue;
     }
 
-    // Pick the nearest living player to chase / face / punch
-    const tgt = pickTarget(ePos);
-    const tpos = tgt.pos;
-    const targetInPeace = tgt.inPeace;
+    // Pick nearest living player (zero alloc)
+    const picked = pickNearestNetTarget(ePos, anyAlive);
+    const tpos = picked ? picked.pos : fallbackTarget.pos;
+    const tgtRemoteId = picked ? picked.remoteId : fallbackTarget.remoteId;
+    const targetInPeace = picked ? picked.inPeace : true;
     const distToTarget = Math.hypot(ePos.x - tpos.x, ePos.y - tpos.y, ePos.z - tpos.z);
 
-    // Distance LOD: skip per-frame physics, collision & limb matrix animations for NPCs > 135m from any player
+    // Distance LOD: skip physics, collision & limb animations for NPCs > 135m from any player
     if (distToPlayer > 135 && distToTarget > 135 && Math.abs(enemy.vx) < 0.05 && Math.abs(enemy.vz) < 0.05 && !enemy.isStaggered) {
-      return;
+      continue;
     }
 
-    // Apply knockback velocity (with wall collision check so enemies don't get punched into buildings)
+    if (Math.abs(ePos.x - player.pos.x) <= 95 && Math.abs(ePos.z - player.pos.z) <= 95) {
+      _sepNearEnemies.push(enemy);
+    }
+
+    // Apply knockback velocity
     if (Math.abs(enemy.vx) > 0.001 || Math.abs(enemy.vz) > 0.001) {
       const nextKx = ePos.x + enemy.vx * dt;
       const nextKz = ePos.z + enemy.vz * dt;
@@ -9437,71 +10163,73 @@ function updateEnemies(dt) {
 
     // Keep within world bounds
     if (enemy.isDeckEnemy && city && city.landmarks && city.landmarks.cnTower) {
-      enemy.rig.root.position.y = enemy.deckFloorY || 342.0;
+      ePos.y = enemy.deckFloorY || 342.0;
       const cx = city.landmarks.cnTower[0];
       const cz = city.landmarks.cnTower[1];
-      const edx = enemy.rig.root.position.x - cx;
-      const edz = enemy.rig.root.position.z - cz;
+      const edx = ePos.x - cx;
+      const edz = ePos.z - cz;
       const er = Math.hypot(edx, edz);
       if (er < 5.2 && er > 0.01) {
-        enemy.rig.root.position.x = cx + (edx / er) * 5.2;
-        enemy.rig.root.position.z = cz + (edz / er) * 5.2;
+        ePos.x = cx + (edx / er) * 5.2;
+        ePos.z = cz + (edz / er) * 5.2;
       } else if (er > 21.2) {
-        enemy.rig.root.position.x = cx + (edx / er) * 21.2;
-        enemy.rig.root.position.z = cz + (edz / er) * 21.2;
+        ePos.x = cx + (edx / er) * 21.2;
+        ePos.z = cz + (edz / er) * 21.2;
       }
     } else if (enemy.isSubwayCitizen) {
-      // Platform commuters stay peacefully on their station platform
       const pY = (city && city.subway) ? city.subway.platformY : -14.0;
-      enemy.rig.root.position.y = pY;
+      ePos.y = pY;
       if (city && city.subway && Array.isArray(city.subway.stations)) {
         const st = city.subway.stations.find(s => s.id === enemy.subwayStationId);
         if (st) {
-          enemy.rig.root.position.x = Math.max(st.x - 4.5, Math.min(st.x + 4.5, enemy.rig.root.position.x));
-          enemy.rig.root.position.z = Math.max(st.z - 30.0, Math.min(st.z + 30.0, enemy.rig.root.position.z));
+          ePos.x = Math.max(st.x - 4.5, Math.min(st.x + 4.5, ePos.x));
+          ePos.z = Math.max(st.z - 30.0, Math.min(st.z + 30.0, ePos.z));
         }
       }
-    } else if (enemy.isIslandCitizen || enemy.rig.root.position.z > 840 || (typeof islands !== 'undefined' && islands && islands.isInsideIslands && islands.isInsideIslands(enemy.rig.root.position.x, enemy.rig.root.position.z))) {
-      // Keep within Toronto Islands archipelago boundaries: preserve full archipelago exploration!
+    } else if (enemy.isIslandCitizen || ePos.z > 840 || (typeof islands !== 'undefined' && islands && islands.isInsideIslands && islands.isInsideIslands(ePos.x, ePos.z))) {
       const izBase = (typeof islands !== 'undefined' && islands && islands.Z_BASE) ? islands.Z_BASE : 1200;
-      enemy.rig.root.position.x = Math.max(-1450, Math.min(1350, enemy.rig.root.position.x));
-      enemy.rig.root.position.z = Math.max(izBase - 360, Math.min(izBase + 620, enemy.rig.root.position.z));
+      ePos.x = Math.max(-1450, Math.min(1350, ePos.x));
+      ePos.z = Math.max(izBase - 360, Math.min(izBase + 620, ePos.z));
     } else if (city && city.bounds) {
-      enemy.rig.root.position.x = Math.max(city.bounds.minX + 5, Math.min(city.bounds.maxX - 5, enemy.rig.root.position.x));
-      enemy.rig.root.position.z = Math.max(city.bounds.minZ + 5, Math.min(city.bounds.maxZ - 5, enemy.rig.root.position.z));
+      ePos.x = Math.max(city.bounds.minX + 5, Math.min(city.bounds.maxX - 5, ePos.x));
+      ePos.z = Math.max(city.bounds.minZ + 5, Math.min(city.bounds.maxZ - 5, ePos.z));
     } else {
-      enemy.rig.root.position.x = Math.max(-36, Math.min(36, enemy.rig.root.position.x));
-      enemy.rig.root.position.z = Math.max(-36, Math.min(36, enemy.rig.root.position.z));
+      ePos.x = Math.max(-36, Math.min(36, ePos.x));
+      ePos.z = Math.max(-36, Math.min(36, ePos.z));
     }
 
-    // Update ground NPCs vertical elevation to match bridges, piers, and terrain
+    // Update ground NPCs vertical elevation only when moved significantly
     if (!enemy.isDeckEnemy && !enemy.isSubwayCitizen && city && city.floorAt) {
-      const gFloor = city.floorAt(enemy.rig.root.position.x, enemy.rig.root.position.z, enemy.rig.root.position.y);
-      enemy.rig.root.position.y = gFloor;
+      if (enemy._lastFloorX === undefined || Math.abs(ePos.x - enemy._lastFloorX) > 0.12 || Math.abs(ePos.z - enemy._lastFloorZ) > 0.12) {
+        enemy._lastFloorX = ePos.x;
+        enemy._lastFloorZ = ePos.z;
+        ePos.y = city.floorAt(ePos.x, ePos.z, ePos.y);
+      }
     }
 
     // Peace Sanctuary Repulsion: push street enemies away from ground sanctuary
     if (city && city.peaceZone && !enemy.isDeckEnemy) {
-      const edx = enemy.rig.root.position.x - city.peaceZone.x;
-      const edz = enemy.rig.root.position.z - city.peaceZone.z;
-      const edist = Math.hypot(edx, edz);
+      const edx = ePos.x - city.peaceZone.x;
+      const edz = ePos.z - city.peaceZone.z;
       const minSafeDist = city.peaceZone.radius + 3.0;
-      if (edist < minSafeDist && edist > 0.05) {
-        const push = (minSafeDist - edist);
-        const px = enemy.rig.root.position.x + (edx / edist) * push;
-        const pz = enemy.rig.root.position.z + (edz / edist) * push;
-        if (!city || city.canMoveTo(px, pz, 0.45, enemy.rig.root.position.y)) {
-          enemy.rig.root.position.x = px;
-          enemy.rig.root.position.z = pz;
+      if (Math.abs(edx) < minSafeDist && Math.abs(edz) < minSafeDist) {
+        const edist = Math.hypot(edx, edz);
+        if (edist < minSafeDist && edist > 0.05) {
+          const push = (minSafeDist - edist);
+          const px = ePos.x + (edx / edist) * push;
+          const pz = ePos.z + (edz / edist) * push;
+          if (!city || city.canMoveTo(px, pz, 0.45, ePos.y)) {
+            ePos.x = px;
+            ePos.z = pz;
+          }
+          enemy.vx += (edx / edist) * 6.0;
+          enemy.vz += (edz / edist) * 6.0;
         }
-        enemy.vx += (edx / edist) * 6.0;
-        enemy.vz += (edz / edist) * 6.0;
       }
     }
 
-    // Rotate whole body to face the target (only Y yaw, perfectly upright!)
-    const targetAngle = Math.atan2(tpos.x - enemy.rig.root.position.x, tpos.z - enemy.rig.root.position.z);
-    enemy.rig.root.rotation.y = targetAngle;
+    // Rotate whole body to face target
+    enemy.rig.root.rotation.y = Math.atan2(tpos.x - ePos.x, tpos.z - ePos.z);
 
     // Handle Flinch on Hit
     if (enemy.flinchTimer > 0) {
@@ -9513,22 +10241,26 @@ function updateEnemies(dt) {
       enemy.rig.headPivot.rotation.x = 0;
     }
 
-    // Check Stagger state
+    // Check Stagger state (debounced material color flip)
     if (enemy.isStaggered) {
       enemy.staggerTimer -= dt;
       if (enemy.staggerTimer <= 0) {
         enemy.isStaggered = false;
+        enemy._lastStaggerFlash = -1;
         restoreEnemyTint(enemy);
         enemy.rig.updateNameplate(enemy.hp, enemy.maxHp, false);
       } else {
-        const flash = Math.sin(Date.now() * 0.02) > 0;
-        setEnemyTint(enemy, flash ? 0xffea00 : 0xef4444);
+        const flashState = Math.sin(nowMs * 0.02) > 0 ? 1 : 0;
+        if (enemy._lastStaggerFlash !== flashState) {
+          enemy._lastStaggerFlash = flashState;
+          setEnemyTint(enemy, flashState ? 0xffea00 : 0xef4444);
+        }
+        enemy.rig.updateNameplate(enemy.hp, enemy.maxHp, true);
       }
       enemy.rig.torsoPivot.rotation.x = 0.3;
-      enemy.rig.headPivot.rotation.z = Math.sin(Date.now() * 0.007) * 0.25;
+      enemy.rig.headPivot.rotation.z = Math.sin(nowMs * 0.007) * 0.25;
       enemy.rig.leftArmPivot.rotation.x = -0.3;
       enemy.rig.rightArmPivot.rotation.x = -0.3;
-      if (enemy.staggerTimer > 0) enemy.rig.updateNameplate(enemy.hp, enemy.maxHp, true);
     }
 
     // Track Glory Target
@@ -9537,7 +10269,7 @@ function updateEnemies(dt) {
       minDist = distToPlayer;
     }
 
-    const isDifferentFloor = (enemy.isDeckEnemy && Math.abs(tpos.y - enemy.rig.root.position.y) > 2.5) ||
+    const isDifferentFloor = (enemy.isDeckEnemy && Math.abs(tpos.y - ePos.y) > 2.5) ||
       (!enemy.isDeckEnemy && tpos.y > 50);
 
     // =========================================================================
@@ -9548,23 +10280,24 @@ function updateEnemies(dt) {
         enemy.fleeTimer -= dt;
         if (enemy.fleeTimer <= 0) enemy.isFleeing = false;
 
-        // Flee rapidly away from the player
-        const fleeDir = enemy.rig.root.position.clone().sub(tpos);
-        fleeDir.y = 0;
-        if (fleeDir.length() < 0.1) fleeDir.set(1, 0, 0);
-        fleeDir.normalize();
+        let fdx = ePos.x - tpos.x;
+        let fdz = ePos.z - tpos.z;
+        const fLen = Math.hypot(fdx, fdz);
+        if (fLen < 0.1) { fdx = 1; fdz = 0; }
+        else { fdx /= fLen; fdz /= fLen; }
 
-        const nextCx = enemy.rig.root.position.x + fleeDir.x * (enemy.speed * 1.5) * dt;
-        const nextCz = enemy.rig.root.position.z + fleeDir.z * (enemy.speed * 1.5) * dt;
-        const fleeRunway = (typeof islands !== 'undefined' && islands && islands.isAirportRunway && islands.isAirportRunway(nextCx, nextCz)) ||
-          (typeof city !== 'undefined' && city && city.isAirportRunway && city.isAirportRunway(nextCx, nextCz));
-        if (!fleeRunway && (!city || city.canMoveTo(nextCx, nextCz, 0.4, enemy.rig.root.position.y))) {
-          enemy.rig.root.position.x = nextCx;
-          enemy.rig.root.position.z = nextCz;
+        const nextCx = ePos.x + fdx * (enemy.speed * 1.5) * dt;
+        const nextCz = ePos.z + fdz * (enemy.speed * 1.5) * dt;
+        const fleeRunway = (nextCx < -850 && nextCz > 840) && (
+          (typeof islands !== 'undefined' && islands && islands.isAirportRunway && islands.isAirportRunway(nextCx, nextCz)) ||
+          (typeof city !== 'undefined' && city && city.isAirportRunway && city.isAirportRunway(nextCx, nextCz))
+        );
+        if (!fleeRunway && (!city || city.canMoveTo(nextCx, nextCz, 0.4, ePos.y))) {
+          ePos.x = nextCx;
+          ePos.z = nextCz;
         }
-        enemy.rig.root.rotation.y = Math.atan2(fleeDir.x, fleeDir.z);
+        enemy.rig.root.rotation.y = Math.atan2(fdx, fdz);
 
-        // Sprinting walk animation
         enemy.walkPhase += dt * enemy.speed * 5.5;
         const legSwing = Math.sin(enemy.walkPhase) * 0.7;
         enemy.rig.leftLegPivot.rotation.x = legSwing;
@@ -9576,7 +10309,6 @@ function updateEnemies(dt) {
         enemy.rig.rightArmPivot.rotation.x = legSwing * 0.9;
         enemy.rig.torsoPivot.position.y = 0.98 + Math.abs(Math.sin(enemy.walkPhase * 2)) * 0.05;
       } else {
-        // Peaceful civilian stroll around Toronto streets (citizens keep off active airport runways)
         enemy.wanderTimer = (enemy.wanderTimer || 3.0) - dt;
         if (enemy.wanderTimer <= 0) {
           enemy.wanderAngle = (enemy.wanderAngle || 0) + (Math.random() - 0.5) * Math.PI * 0.8;
@@ -9585,20 +10317,21 @@ function updateEnemies(dt) {
 
         const wx = Math.sin(enemy.wanderAngle);
         const wz = Math.cos(enemy.wanderAngle);
-        const nextCx = enemy.rig.root.position.x + wx * (enemy.speed * 0.6) * dt;
-        const nextCz = enemy.rig.root.position.z + wz * (enemy.speed * 0.6) * dt;
-        const entersRunway = (typeof islands !== 'undefined' && islands && islands.isAirportRunway && islands.isAirportRunway(nextCx, nextCz)) ||
-          (typeof city !== 'undefined' && city && city.isAirportRunway && city.isAirportRunway(nextCx, nextCz));
-        if (!entersRunway && (!city || city.canMoveTo(nextCx, nextCz, 0.4, enemy.rig.root.position.y))) {
-          enemy.rig.root.position.x = nextCx;
-          enemy.rig.root.position.z = nextCz;
+        const nextCx = ePos.x + wx * (enemy.speed * 0.6) * dt;
+        const nextCz = ePos.z + wz * (enemy.speed * 0.6) * dt;
+        const entersRunway = (nextCx < -850 && nextCz > 840) && (
+          (typeof islands !== 'undefined' && islands && islands.isAirportRunway && islands.isAirportRunway(nextCx, nextCz)) ||
+          (typeof city !== 'undefined' && city && city.isAirportRunway && city.isAirportRunway(nextCx, nextCz))
+        );
+        if (!entersRunway && (!city || city.canMoveTo(nextCx, nextCz, 0.4, ePos.y))) {
+          ePos.x = nextCx;
+          ePos.z = nextCz;
         } else {
           enemy.wanderAngle = (enemy.wanderAngle || 0) + Math.PI * 0.75;
           enemy.wanderTimer = 1.0;
         }
         enemy.rig.root.rotation.y = enemy.wanderAngle;
 
-        // Gentle walk cycle with natural swinging arms
         enemy.walkPhase += dt * enemy.speed * 2.8;
         const legSwing = Math.sin(enemy.walkPhase) * 0.45;
         enemy.rig.leftLegPivot.rotation.x = legSwing;
@@ -9612,15 +10345,15 @@ function updateEnemies(dt) {
         enemy.rig.rightForearmPivot.rotation.set(-0.2, 0, 0);
         enemy.rig.torsoPivot.position.y = 0.98 + Math.abs(Math.sin(enemy.walkPhase * 2)) * 0.02;
       }
-      return; // Civilians never punch or attack!
+      continue;
     }
 
-    // Body Snatcher proximity trigger: unmask if player gets within 10m!
+    // Body Snatcher proximity trigger: unmask if player gets within 10m
     if (enemy.kind === 'snatcher' && !enemy.unmasked && distToTarget <= 10.0 && !targetInPeace && !isDifferentFloor) {
       exposeBodySnatcher(enemy);
     }
 
-    // Disguised Snatchers wander peacefully until exposed, so players are never swarmed by disguised figures
+    // Disguised Snatchers wander peacefully until exposed
     if (enemy.kind === 'snatcher' && !enemy.unmasked) {
       enemy.wanderTimer = (enemy.wanderTimer || 3.0) - dt;
       if (enemy.wanderTimer <= 0) {
@@ -9629,13 +10362,15 @@ function updateEnemies(dt) {
       }
       const wx = Math.sin(enemy.wanderAngle);
       const wz = Math.cos(enemy.wanderAngle);
-      const nextEx = enemy.rig.root.position.x + wx * (enemy.speed * 0.6) * dt;
-      const nextEz = enemy.rig.root.position.z + wz * (enemy.speed * 0.6) * dt;
-      const entersRunway = (typeof islands !== 'undefined' && islands && islands.isAirportRunway && islands.isAirportRunway(nextEx, nextEz)) ||
-        (typeof city !== 'undefined' && city && city.isAirportRunway && city.isAirportRunway(nextEx, nextEz));
+      const nextEx = ePos.x + wx * (enemy.speed * 0.6) * dt;
+      const nextEz = ePos.z + wz * (enemy.speed * 0.6) * dt;
+      const entersRunway = (nextEx < -850 && nextEz > 840) && (
+        (typeof islands !== 'undefined' && islands && islands.isAirportRunway && islands.isAirportRunway(nextEx, nextEz)) ||
+        (typeof city !== 'undefined' && city && city.isAirportRunway && city.isAirportRunway(nextEx, nextEz))
+      );
       if (!entersRunway && (!city || city.canMoveTo(nextEx, nextEz, 0.4, 0))) {
-        enemy.rig.root.position.x = nextEx;
-        enemy.rig.root.position.z = nextEz;
+        ePos.x = nextEx;
+        ePos.z = nextEz;
       } else {
         enemy.wanderAngle = (enemy.wanderAngle || 0) + Math.PI * 0.75;
         enemy.wanderTimer = 1.0;
@@ -9650,27 +10385,28 @@ function updateEnemies(dt) {
       enemy.rig.rightCalfPivot.rotation.x = Math.max(0, legSwing * 0.4);
       enemy.rig.leftArmPivot.rotation.set(-legSwing * 0.4, 0, 0.08);
       enemy.rig.rightArmPivot.rotation.set(legSwing * 0.4, 0, -0.08);
-      return;
+      continue;
     }
 
-    // AI Chasing, Footwork & Punch Attacks (Enemies CANNOT pursue into or attack inside Peace Sanctuary, or across different deck floors)
+    // AI Chasing, Footwork & Punch Attacks
     if (!enemy.isStaggered) {
       const aggroLimit = enemy.aggroDist || 45;
       const isMoving = !targetInPeace && !isDifferentFloor && distToTarget > 1.35 && distToTarget < aggroLimit;
 
       if (isMoving) {
-        const dir = tpos.clone().sub(enemy.rig.root.position).normalize();
-        const nextEx = enemy.rig.root.position.x + dir.x * enemy.speed * dt;
-        const nextEz = enemy.rig.root.position.z + dir.z * enemy.speed * dt;
+        const cdx = tpos.x - ePos.x;
+        const cdz = tpos.z - ePos.z;
+        const cLen = Math.hypot(cdx, cdz) || 1;
+        const nextEx = ePos.x + (cdx / cLen) * enemy.speed * dt;
+        const nextEz = ePos.z + (cdz / cLen) * enemy.speed * dt;
         const nextDist = Math.hypot(nextEx - tpos.x, nextEz - tpos.z);
         if (nextDist >= 1.35) {
-          if (!city || city.canMoveTo(nextEx, nextEz, 0.45, enemy.rig.root.position.y)) {
-            enemy.rig.root.position.x = nextEx;
-            enemy.rig.root.position.z = nextEz;
+          if (!city || city.canMoveTo(nextEx, nextEz, 0.45, ePos.y)) {
+            ePos.x = nextEx;
+            ePos.z = nextEz;
           }
         }
 
-        // Human walk cycle animation
         enemy.walkPhase += dt * enemy.speed * 3.8;
         const legSwing = Math.sin(enemy.walkPhase) * 0.6;
         enemy.rig.leftLegPivot.rotation.x = legSwing;
@@ -9681,46 +10417,41 @@ function updateEnemies(dt) {
         enemy.rig.torsoPivot.position.y = 0.98 + Math.abs(Math.sin(enemy.walkPhase * 2)) * 0.04;
         enemy.rig.torsoPivot.rotation.y = Math.sin(enemy.walkPhase) * 0.12;
       } else {
-        // Boxer bounce / guard
         enemy.rig.leftLegPivot.rotation.x = 0.1;
         enemy.rig.leftCalfPivot.rotation.x = 0;
         enemy.rig.rightLegPivot.rotation.x = -0.15;
         enemy.rig.rightCalfPivot.rotation.x = 0.1;
-        enemy.rig.torsoPivot.position.y = 0.98 + Math.sin(Date.now() * 0.005) * 0.02;
+        enemy.rig.torsoPivot.position.y = 0.98 + Math.sin(nowMs * 0.005) * 0.02;
 
-        // If this is a mission guard and player has disengaged far away, patrol back toward the mission box
         if (enemy.isMissionGuard && enemy.guardAnchor && distToTarget >= aggroLimit) {
-          const dAnchor = Math.hypot(enemy.guardAnchor.x - enemy.rig.root.position.x, enemy.guardAnchor.z - enemy.rig.root.position.z);
+          const dAnchor = Math.hypot(enemy.guardAnchor.x - ePos.x, enemy.guardAnchor.z - ePos.z);
           if (dAnchor > 6.0) {
-            const gdx = (enemy.guardAnchor.x - enemy.rig.root.position.x) / dAnchor;
-            const gdz = (enemy.guardAnchor.z - enemy.rig.root.position.z) / dAnchor;
-            const gx = enemy.rig.root.position.x + gdx * (enemy.speed * 0.6) * dt;
-            const gz = enemy.rig.root.position.z + gdz * (enemy.speed * 0.6) * dt;
-            if (!city || city.canMoveTo(gx, gz, 0.45, enemy.rig.root.position.y)) {
-              enemy.rig.root.position.x = gx;
-              enemy.rig.root.position.z = gz;
+            const gdx = (enemy.guardAnchor.x - ePos.x) / dAnchor;
+            const gdz = (enemy.guardAnchor.z - ePos.z) / dAnchor;
+            const gx = ePos.x + gdx * (enemy.speed * 0.6) * dt;
+            const gz = ePos.z + gdz * (enemy.speed * 0.6) * dt;
+            if (!city || city.canMoveTo(gx, gz, 0.45, ePos.y)) {
+              ePos.x = gx;
+              ePos.z = gz;
             }
             enemy.rig.root.rotation.y = Math.atan2(gdx, gdz);
           }
         }
       }
 
-      // Keep enemy body from clipping inside player camera/body (only when on same floor!)
-      // (horizontal distance: tpos is at eye height, so the old 3D check could never fire)
-      const flatToTarget = Math.hypot(enemy.rig.root.position.x - tpos.x, enemy.rig.root.position.z - tpos.z);
+      const flatToTarget = Math.hypot(ePos.x - tpos.x, ePos.z - tpos.z);
       if (!isDifferentFloor && flatToTarget < 1.10 && flatToTarget > 0.05) {
         const overlap = 1.10 - flatToTarget;
-        const pushX = (enemy.rig.root.position.x - tpos.x) / flatToTarget;
-        const pushZ = (enemy.rig.root.position.z - tpos.z) / flatToTarget;
-        const sepX = enemy.rig.root.position.x + pushX * overlap;
-        const sepZ = enemy.rig.root.position.z + pushZ * overlap;
-        if (!city || city.canMoveTo(sepX, sepZ, 0.45, enemy.rig.root.position.y)) {
-          enemy.rig.root.position.x = sepX;
-          enemy.rig.root.position.z = sepZ;
+        const pushX = (ePos.x - tpos.x) / flatToTarget;
+        const pushZ = (ePos.z - tpos.z) / flatToTarget;
+        const sepX = ePos.x + pushX * overlap;
+        const sepZ = ePos.z + pushZ * overlap;
+        if (!city || city.canMoveTo(sepX, sepZ, 0.45, ePos.y)) {
+          ePos.x = sepX;
+          ePos.z = sepZ;
         }
       }
 
-      // Punch Attack / Boxer Guard Animation
       if (enemy.isPunching) {
         enemy.attackProg += dt * 3.2;
         const punchReach = Math.sin(enemy.attackProg * Math.PI);
@@ -9739,12 +10470,11 @@ function updateEnemies(dt) {
           enemy.rig.rightForearmPivot.rotation.x = -0.8;
         }
 
-        // Deal damage at peak extension (strictly blocked if player is in Peace Sanctuary or different floor)
         if (enemy.attackProg >= 0.5 && !enemy.punchHasDealtDamage) {
           enemy.punchHasDealtDamage = true;
           if (distToTarget <= 2.4 && !targetInPeace && !isDifferentFloor) {
-            if (tgt.remoteId) {
-              if (window.multiplayer) window.multiplayer.sendEnemyDamage(tgt.remoteId, enemy.damage);
+            if (tgtRemoteId) {
+              if (window.multiplayer) window.multiplayer.sendEnemyDamage(tgtRemoteId, enemy.damage);
             } else {
               damagePlayer(enemy.damage);
               audio.playImpact('punch');
@@ -9757,14 +10487,12 @@ function updateEnemies(dt) {
           enemy.attackProg = 0;
         }
       } else {
-        // Guard stance
-        const sway = Math.sin(Date.now() * 0.004) * 0.08;
+        const sway = Math.sin(nowMs * 0.004) * 0.08;
         enemy.rig.leftArmPivot.rotation.set(-1.15 + sway, 0.3, 0.15);
         enemy.rig.leftForearmPivot.rotation.set(-0.85, 0, 0);
         enemy.rig.rightArmPivot.rotation.set(-1.25 - sway, -0.3, -0.15);
         enemy.rig.rightForearmPivot.rotation.set(-0.85, 0, 0);
 
-        // Within attack range -> trigger a punch (strictly blocked if player is in Peace Sanctuary or different floor)
         if (distToTarget <= 2.2 && !targetInPeace && !isDifferentFloor) {
           enemy.attackTimer -= dt;
           if (enemy.attackTimer <= 0) {
@@ -9778,21 +10506,14 @@ function updateEnemies(dt) {
         }
       }
     }
-  });
+  }
 
-  // Mutual enemy-enemy physical body blocking (sentry guards & crowd spacing)
+  // Mutual enemy-enemy physical body blocking across pre-filtered near-player list only
   const minSep = 1.25;
-  for (let i = 0; i < enemies.length; i++) {
-    const e1 = enemies[i];
-    if (e1.isDead || e1.isKnockedOut || !e1.rig || !e1.rig.root || e1.isRemoteMirror) continue;
-    const p1 = e1.rig.root.position;
-    if (Math.abs(p1.x - player.pos.x) > 95 || Math.abs(p1.z - player.pos.z) > 95) continue;
-
-    for (let j = i + 1; j < enemies.length; j++) {
-      const e2 = enemies[j];
-      if (e2.isDead || e2.isKnockedOut || !e2.rig || !e2.rig.root || e2.isRemoteMirror) continue;
-      const p2 = e2.rig.root.position;
-
+  for (let i = 0; i < _sepNearEnemies.length; i++) {
+    const p1 = _sepNearEnemies[i].rig.root.position;
+    for (let j = i + 1; j < _sepNearEnemies.length; j++) {
+      const p2 = _sepNearEnemies[j].rig.root.position;
       const sepDx = p2.x - p1.x;
       if (sepDx >= minSep || sepDx <= -minSep) continue;
       const sepDz = p2.z - p1.z;
@@ -9815,13 +10536,14 @@ function updateEnemies(dt) {
     }
   }
 
-  // Glory Kill Prompt Visibility
+  // Glory Kill Prompt Visibility (cached + dirty-checked)
   state.gloryTarget = nearestStaggered;
-  const gPrompt = document.getElementById('glory-kill-prompt');
-  if (state.gloryTarget) {
-    gPrompt.classList.add('active');
-  } else {
-    gPrompt.classList.remove('active');
+  if (!_gloryPromptEl) _gloryPromptEl = document.getElementById('glory-kill-prompt');
+  const gloryActive = !!state.gloryTarget;
+  if (_gloryPromptEl && _lastGloryActive !== gloryActive) {
+    _lastGloryActive = gloryActive;
+    if (gloryActive) _gloryPromptEl.classList.add('active');
+    else _gloryPromptEl.classList.remove('active');
   }
 }
 
@@ -9902,6 +10624,9 @@ function damagePlayer(dmg) {
 
 function playerDeath() {
   state.isDead = true;
+  state.pendingMeleeAttack = null;
+  state.pendingMeleeTimer = 0;
+  state.pendingSlamImpact = null;
   showAnnouncement("💀 FALLEN IN DEFENSE OF TORONTO! 💀");
   if (document.pointerLockElement) document.exitPointerLock();
   const overlay = document.getElementById('menu-overlay');
@@ -9946,6 +10671,7 @@ function updatePickups(dt) {
 }
 
 function updateParticles(dt) {
+  updateShockwaves(dt);
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i];
     p.life -= dt;
@@ -9953,21 +10679,73 @@ function updateParticles(dt) {
     p.mesh.position.x += p.vx * dt;
     p.mesh.position.y += p.vy * dt;
     p.mesh.position.z += p.vz * dt;
+    if (p.mesh.rotation) {
+      p.mesh.rotation.x += p.rx * dt;
+      p.mesh.rotation.y += p.ry * dt;
+    }
 
-    if (p.mesh.position.y < 0.1) {
-      p.mesh.position.y = 0.1;
+    const fy = (p.floorY !== undefined) ? p.floorY : 0.1;
+    if (p.mesh.position.y < fy) {
+      p.mesh.position.y = fy;
       p.vx *= 0.5;
       p.vz *= 0.5;
     }
 
     if (p.life <= 0) {
-      scene.remove(p.mesh);
+      p.mesh.visible = false;
       particles.splice(i, 1);
+      if (_debrisPool.length < MAX_ACTIVE_PARTICLES) _debrisPool.push(p);
+      else scene.remove(p.mesh);
+    } else if (p.life < 0.22) {
+      const s = Math.max(0.05, p.life / 0.22);
+      p.mesh.scale.set(s, s, s);
     }
   }
 }
 
 function updateCombatTimers(dt) {
+  if (state.pendingMeleeAttack && state.pendingMeleeTimer > 0) {
+    state.pendingMeleeTimer -= dt;
+    if (state.pendingMeleeTimer <= 0) {
+      const pendingAtk = state.pendingMeleeAttack;
+      state.pendingMeleeAttack = null;
+      state.pendingMeleeTimer = 0;
+      checkMeleeHits(pendingAtk);
+    }
+  }
+
+  if (state.pendingSlamImpact && player.isGrounded) {
+    const atk = state.pendingSlamImpact;
+    state.pendingSlamImpact = null;
+    audio.playImpact('slam');
+    triggerScreenShake(28);
+    triggerSlamFlash();
+    createMeteorShockwave(player.pos.x, player.pos.z, player.pos.y - EYE_HEIGHT);
+    spawnDebris(player.pos.x, player.pos.y - EYE_HEIGHT + 0.5, player.pos.z, 0xffaa00, 40, 11);
+
+    for (let i = 0; i < enemies.length; i++) {
+      const enemy = enemies[i];
+      if (enemy.isDead) continue;
+      const dist = enemy.sprite.position.distanceTo(player.pos);
+      if (dist <= atk.range) {
+        const dmg = state.isBerserk ? atk.damage * 2.5 : atk.damage;
+        hitEnemy(enemy, dmg, atk.knockback * 1.6, 'slam');
+      }
+    }
+
+    for (let i = 0; i < crates.length; i++) {
+      const crate = crates[i];
+      if (crate.destroyed) continue;
+      const dist = crate.mesh.position.distanceTo(player.pos);
+      if (dist <= atk.range) damageCrate(crate, 300);
+    }
+
+    if (missionState.active && missionState.state === 'active' && missionState.boxObj) {
+      const dist = Math.hypot(missionState.pos.x - player.pos.x, missionState.pos.z - player.pos.z);
+      if (dist <= atk.range + 3.0) completeMission();
+    }
+  }
+
   if (state.attackTimer > 0) {
     state.attackTimer -= dt;
     state.attackProgress = 1 - (state.attackTimer / state.attackDuration);
@@ -9981,8 +10759,10 @@ function updateCombatTimers(dt) {
     state.comboTimer -= dt;
     if (state.comboTimer <= 0) {
       state.comboCount = 0;
-      document.getElementById('combo-title').innerText = 'COMBO';
-      document.getElementById('combo-count').innerText = 'x0';
+      const comboTitle = document.getElementById('combo-title');
+      if (comboTitle) comboTitle.innerText = 'COMBO';
+      const comboCount = document.getElementById('combo-count');
+      if (comboCount) comboCount.innerText = 'x0';
     }
   }
 
@@ -10007,7 +10787,11 @@ function updateCombatTimers(dt) {
     const cfg = DIFFICULTY_CONFIGS[state.difficulty || 'medium'] || DIFFICULTY_CONFIGS.medium;
     if (state.spawnTimer >= cfg.spawnInterval) {
       state.spawnTimer = 0;
-      const aliveCount = enemies.filter(e => !e.isDead && e.kind !== 'civilian' && !e.isIslandCitizen).length;
+      let aliveCount = 0;
+      for (let i = 0; i < enemies.length; i++) {
+        const e = enemies[i];
+        if (!e.isDead && e.kind !== 'civilian' && !e.isIslandCitizen) aliveCount++;
+      }
       if (aliveCount < cfg.targetEnemies) {
         spawnSingleReinforcement();
       }
@@ -10057,6 +10841,10 @@ function resetGame() {
   state.health = 100;
   state.armor = 50;
   state.isDead = false;
+  state.isUnderground = false;
+  state.pendingMeleeAttack = null;
+  state.pendingMeleeTimer = 0;
+  state.pendingSlamImpact = null;
   if (state.isBerserk) {
     state.isBerserk = false;
     state.berserkTimer = 0;
@@ -10080,7 +10868,7 @@ function resetGame() {
     player.pos.set(0, 1.7, 0);
   }
   state.onIsland = false;
-  if (scene.fog) scene.fog.density = getMainlandFogDensity();
+  syncSceneFog();
   if (window.multiplayer && window.multiplayer.role === 'guest' && !window.multiplayer.friendlyFire) {
     const host = window.multiplayer.remotePlayers.get(window.multiplayer.hostId) || window.multiplayer.remotePlayers.values().next().value;
     if (host) syncSpawnNearHost(host);
@@ -10098,8 +10886,19 @@ function resetGame() {
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
+  const pr = Math.min(window.devicePixelRatio || 1, 2.0);
+  renderer.setPixelRatio(pr);
   renderer.setSize(window.innerWidth, window.innerHeight);
-  if (composer) composer.setSize(window.innerWidth, window.innerHeight);
+  if (composer) {
+    composer.setPixelRatio(pr);
+    composer.setSize(window.innerWidth, window.innerHeight);
+  }
+  if (bloomPass) {
+    bloomPass.setSize(
+      Math.max(1, Math.floor(window.innerWidth * 0.5)),
+      Math.max(1, Math.floor(window.innerHeight * 0.5))
+    );
+  }
 });
 
 // Difficulty Selection Event Listeners
@@ -10162,12 +10961,12 @@ function syncSpawnNearHost(hostPlayer) {
   player.isGrounded = true;
   state.onIsland = spot.onIsland;
   state.isUnderground = spot.y < -4;
-  if (scene.fog) scene.fog.density = spot.onIsland ? 0.00065 : getMainlandFogDensity();
+  syncSceneFog();
   const faceYaw = Math.atan2(player.pos.x - hostPlayer.currentPos.x, player.pos.z - hostPlayer.currentPos.z);
   player.yaw = faceYaw;
   camera.rotation.order = 'YXZ';
   camera.rotation.y = faceYaw;
-  if (spot.onIsland) populateCentreIslandCitizens();
+  if (spot.onIsland) ensureIslandCitizensPopulated();
   if (typeof showAnnouncement === 'function') {
     showAnnouncement(`🤝 SPAWNED BESIDE ${String(hostPlayer.name || 'SQUADMATE').toUpperCase()}!`, 2400);
   }
@@ -10204,7 +11003,8 @@ function rallyToSquadMate() {
   player.isGrounded = true;
   state.onIsland = spot.onIsland;
   state.isUnderground = spot.y < -4;
-  if (scene.fog) scene.fog.density = spot.onIsland ? 0.00065 : getMainlandFogDensity();
+  syncSceneFog();
+  if (spot.onIsland) ensureIslandCitizensPopulated();
   const faceYaw = Math.atan2(player.pos.x - target.currentPos.x, player.pos.z - target.currentPos.z);
   player.yaw = faceYaw;
   camera.rotation.order = 'YXZ';
@@ -10226,26 +11026,43 @@ function launchSquadFlare() {
   return false;
 }
 
+const _squadHudCache = {
+  inited: false,
+  hud: null,
+  rosterEl: null,
+  pinsLayer: null,
+  lastRosterHtml: '',
+  pinPool: new Map()
+};
+
 function updateSquadTrackingHUD() {
   if (typeof document === 'undefined' || !document.getElementById) return;
-  const hud = document.getElementById('squad-hud');
-  const rosterEl = document.getElementById('squad-roster-list');
-  const pinsLayer = document.getElementById('squad-pins-layer');
+  if (!_squadHudCache.inited) {
+    _squadHudCache.inited = true;
+    _squadHudCache.hud = document.getElementById('squad-hud');
+    _squadHudCache.rosterEl = document.getElementById('squad-roster-list');
+    _squadHudCache.pinsLayer = document.getElementById('squad-pins-layer');
+  }
+  const c = _squadHudCache;
   const mp = window.multiplayer;
   const squad = (mp && mp.squadSummary) ? mp.squadSummary() : [];
 
   if (!squad.length || !state.inGame) {
-    if (hud && !hud.classList.contains('hidden')) hud.classList.add('hidden');
-    if (pinsLayer && pinsLayer.innerHTML) pinsLayer.innerHTML = '';
+    if (c.hud && !c.hud.classList.contains('hidden')) c.hud.classList.add('hidden');
+    c.pinPool.forEach(entry => {
+      if (entry.visible) {
+        entry.visible = false;
+        entry.el.style.display = 'none';
+      }
+    });
     return;
   }
-  if (hud && hud.classList.contains('hidden')) hud.classList.remove('hidden');
+  if (c.hud && c.hud.classList.contains('hidden')) c.hud.classList.remove('hidden');
 
   const W = window.innerWidth || 1280;
   const H = window.innerHeight || 720;
   const cy = Math.cos(player.yaw), sy = Math.sin(player.yaw);
   const cp = Math.cos(player.pitch), sp = Math.sin(player.pitch);
-  // Camera orthonormal basis (right, up, forward = -Z rotated by yaw/pitch)
   const rx = cy, ry = 0, rz = -sy;
   const fx = -sy * cp, fy = sp, fz = -cy * cp;
   const ux = sy * sp, uy = cp, uz = cy * sp;
@@ -10253,7 +11070,8 @@ function updateSquadTrackingHUD() {
   const tanHalfX = tanHalfY * (camera.aspect || (W / Math.max(1, H)));
 
   let rosterHTML = '';
-  let pinsHTML = '';
+  const activePinKeys = new Set();
+
   for (let i = 0; i < squad.length; i++) {
     const m = squad[i];
     const dist = Math.round(Math.hypot(m.x - player.pos.x, m.z - player.pos.z));
@@ -10261,8 +11079,7 @@ function updateSquadTrackingHUD() {
     const col = m.colorHex || '#38bdf8';
     rosterHTML += `<div class="squad-member-row"><span class="squad-member-dot" style="background:${col}"></span><span class="squad-member-name">${safeName}${m.isHost ? ' 👑' : ''}</span><span class="squad-member-dist">${dist}m</span></div>`;
 
-    if (m.health <= 0 || !pinsLayer) continue;
-    // Project point above squadmate's helmet cleanly using camera basis
+    if (m.health <= 0 || !c.pinsLayer) continue;
     const dx = m.x - camera.position.x;
     const dy = (m.y + 2.75) - camera.position.y;
     const dz = m.z - camera.position.z;
@@ -10283,6 +11100,7 @@ function updateSquadTrackingHUD() {
       sy2 = H * 0.5 - camY * 1000;
     }
 
+    let px, py, deg = 0;
     if (offScreen) {
       const vx = (camZ > 0.35 ? (sx - W * 0.5) : camX);
       const vy = (camZ > 0.35 ? (sy2 - H * 0.5) : -camY);
@@ -10290,16 +11108,91 @@ function updateSquadTrackingHUD() {
       const nx = vx / vLen, ny = vy / vLen;
       const halfW = W * 0.5 - 64, halfH = H * 0.5 - 78;
       const tScale = Math.min(halfW / Math.max(0.01, Math.abs(nx)), halfH / Math.max(0.01, Math.abs(ny)));
-      const edgeX = Math.round(W * 0.5 + nx * tScale);
-      const edgeY = Math.round(H * 0.5 + ny * tScale);
-      const deg = Math.round(Math.atan2(ny, nx) * 180 / Math.PI) + 90;
-      pinsHTML += `<div class="squad-hud-pin offscreen" style="left:${edgeX}px;top:${edgeY}px;border-color:${col};"><span class="squad-pin-arrow" style="color:${col};transform:rotate(${deg}deg)">▲</span><span>${safeName}</span><span style="color:${col}">${dist}m</span></div>`;
+      px = Math.round(W * 0.5 + nx * tScale);
+      py = Math.round(H * 0.5 + ny * tScale);
+      deg = Math.round(Math.atan2(ny, nx) * 180 / Math.PI) + 90;
     } else if (dist >= 12) {
-      pinsHTML += `<div class="squad-hud-pin" style="left:${Math.round(sx)}px;top:${Math.round(sy2)}px;border-color:${col};"><span style="color:${col}">◆</span><span>${safeName}</span><span style="color:#93c5fd">${dist}m</span></div>`;
+      px = Math.round(sx);
+      py = Math.round(sy2);
+    } else {
+      continue;
+    }
+
+    const pinKey = m.id || safeName || String(i);
+    activePinKeys.add(pinKey);
+    let entry = c.pinPool.get(pinKey);
+    if (!entry && typeof document.createElement === 'function') {
+      const el = document.createElement('div');
+      el.className = 'squad-hud-pin';
+      const iconEl = document.createElement('span');
+      const nameEl = document.createElement('span');
+      const distEl = document.createElement('span');
+      el.appendChild(iconEl);
+      el.appendChild(nameEl);
+      el.appendChild(distEl);
+      c.pinsLayer.appendChild(el);
+      entry = { el, iconEl, nameEl, distEl, visible: true, offScreen: null, deg: null, col: '', name: '', distText: '', distCol: '', tx: NaN, ty: NaN };
+      c.pinPool.set(pinKey, entry);
+    }
+    if (!entry) continue;
+
+    if (!entry.visible) {
+      entry.visible = true;
+      entry.el.style.display = 'flex';
+    }
+    if (entry.offScreen !== offScreen) {
+      entry.offScreen = offScreen;
+      if (offScreen) {
+        entry.el.classList.add('offscreen');
+        entry.iconEl.className = 'squad-pin-arrow';
+        entry.iconEl.innerText = '▲';
+      } else {
+        entry.el.classList.remove('offscreen');
+        entry.iconEl.className = '';
+        entry.iconEl.style.transform = '';
+        entry.iconEl.innerText = '◆';
+      }
+    }
+    if (entry.col !== col) {
+      entry.col = col;
+      entry.el.style.borderColor = col;
+      entry.iconEl.style.color = col;
+    }
+    if (offScreen && entry.deg !== deg) {
+      entry.deg = deg;
+      entry.iconEl.style.transform = `rotate(${deg}deg)`;
+    }
+    if (entry.name !== safeName) {
+      entry.name = safeName;
+      entry.nameEl.innerText = safeName;
+    }
+    const nextDistText = `${dist}m`;
+    const nextDistCol = offScreen ? col : '#93c5fd';
+    if (entry.distText !== nextDistText) {
+      entry.distText = nextDistText;
+      entry.distEl.innerText = nextDistText;
+    }
+    if (entry.distCol !== nextDistCol) {
+      entry.distCol = nextDistCol;
+      entry.distEl.style.color = nextDistCol;
+    }
+    if (entry.tx !== px || entry.ty !== py) {
+      entry.tx = px; entry.ty = py;
+      entry.el.style.transform = `translate3d(${px}px, ${py}px, 0) translate(-50%, -50%)`;
     }
   }
-  if (rosterEl) rosterEl.innerHTML = rosterHTML;
-  if (pinsLayer) pinsLayer.innerHTML = pinsHTML;
+
+  c.pinPool.forEach((entry, key) => {
+    if (!activePinKeys.has(key) && entry.visible) {
+      entry.visible = false;
+      entry.el.style.display = 'none';
+    }
+  });
+
+  if (c.rosterEl && c.lastRosterHtml !== rosterHTML) {
+    c.lastRosterHtml = rosterHTML;
+    c.rosterEl.innerHTML = rosterHTML;
+  }
 }
 
 // Global exports for multiplayer & UI

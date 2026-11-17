@@ -324,8 +324,8 @@ canvas {
 /* Combat & Combo Banner */
 #combat-banner {
   position: absolute;
-  top: 16%;
-  right: 32px;
+  top: 58px;
+  right: 214px;
   text-align: right;
   pointer-events: none;
   z-index: 22;
@@ -384,7 +384,7 @@ canvas {
 
 #announcement {
   position: absolute;
-  top: 13%;
+  top: 172px;
   left: 50%;
   transform: translateX(-50%);
   font-family: 'Chakra Petch', sans-serif;
@@ -531,6 +531,8 @@ canvas {
 #hud-face-canvas {
   width: 68px;
   height: 68px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
 /* Weapon status */
@@ -641,10 +643,16 @@ canvas {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  /* scanlines toned down from 0.18: at full strength they darken and cheapen the whole image */
-  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.05) 50%);
+  /* Subtle scanlines at night only; disabled in day & telescope for maximum 3D sharpness */
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.025) 50%);
   background-size: 100% 4px;
   z-index: 11;
+  transition: opacity 0.25s ease;
+}
+
+body.day-mode #crt-overlay,
+body.telescope-mode #crt-overlay {
+  opacity: 0;
 }
 
 /* MODAL / MENU */
@@ -872,7 +880,7 @@ kbd {
   left: 18px;
   min-width: 250px;
   max-width: 320px;
-  background: rgba(11, 14, 20, 0.90);
+  background: rgba(11, 14, 20, 0.92);
   border: 1px solid rgba(56, 189, 248, 0.40);
   border-left: 4px solid #ef4444;
   border-radius: 12px;
@@ -881,7 +889,6 @@ kbd {
   flex-direction: column;
   gap: 3px;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.75), 0 0 16px rgba(239, 68, 68, 0.25);
-  backdrop-filter: blur(10px);
   z-index: 25;
   pointer-events: none;
   user-select: none;
@@ -991,7 +998,7 @@ kbd {
   top: 56px;
   right: 18px;
   width: 182px;
-  background: rgba(11, 14, 20, 0.90);
+  background: rgba(11, 14, 20, 0.92);
   border: 1px solid rgba(56, 189, 248, 0.40);
   border-radius: 12px;
   padding: 8px 10px;
@@ -1000,7 +1007,6 @@ kbd {
   align-items: center;
   gap: 5px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65), 0 0 16px rgba(0, 240, 255, 0.12);
-  backdrop-filter: blur(10px);
   z-index: 25;
   pointer-events: none;
   user-select: none;
@@ -1379,7 +1385,7 @@ kbd {
 
 #elevator-hud {
   position: absolute;
-  top: 76px;
+  top: 122px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 150;
@@ -1563,17 +1569,17 @@ kbd {
 /* Sky Showdown Mini-Game HUD */
 #sky-showdown-hud {
   position: absolute;
-  top: 76px;
-  right: 24px;
+  top: 164px;
+  left: 18px;
   z-index: 150;
   display: flex;
   flex-direction: column;
-  min-width: 280px;
+  min-width: 260px;
+  max-width: 320px;
   padding: 12px 16px;
-  background: linear-gradient(135deg, rgba(69, 10, 10, 0.9), rgba(24, 24, 27, 0.94));
+  background: linear-gradient(135deg, rgba(69, 10, 10, 0.92), rgba(24, 24, 27, 0.95));
   border: 1.5px solid #ef4444;
   border-radius: 12px;
-  backdrop-filter: blur(10px);
   box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
   color: #fff;
   pointer-events: none;
@@ -2176,11 +2182,11 @@ body.telescope-mode #crosshair-wrapper {
 /* Holographic AI Pilot Banner */
 .ai-pilot-banner {
   position: absolute;
-  top: 76px;
+  top: 78px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 95;
-  background: rgba(10, 15, 26, 0.92);
+  background: rgba(10, 15, 26, 0.94);
   border: 1.5px solid #00f0ff;
   border-radius: 8px;
   padding: 8px 18px;
@@ -2189,9 +2195,12 @@ body.telescope-mode #crosshair-wrapper {
   align-items: center;
   gap: 3px;
   box-shadow: 0 0 25px rgba(0, 240, 255, 0.4), inset 0 0 12px rgba(0, 240, 255, 0.15);
-  backdrop-filter: blur(8px);
   pointer-events: none;
   animation: ai-slide-down 0.25s ease-out;
+}
+
+.ai-mode-pill {
+  pointer-events: auto;
 }
 
 .ai-pilot-banner.hidden {
@@ -2262,15 +2271,14 @@ body.telescope-mode #crosshair-wrapper {
 
 #squad-hud {
   position: absolute;
-  top: 292px;
-  right: 16px;
-  width: 210px;
+  top: 302px;
+  right: 18px;
+  width: 182px;
   z-index: 25;
-  background: rgba(8, 12, 22, 0.84);
+  background: rgba(8, 12, 22, 0.90);
   border: 1px solid rgba(56, 189, 248, 0.35);
   border-radius: 10px;
   padding: 7px 9px;
-  backdrop-filter: blur(8px);
   pointer-events: none;
   font-family: 'Chakra Petch', sans-serif;
 }
@@ -2335,7 +2343,10 @@ body.telescope-mode #crosshair-wrapper {
 }
 .squad-hud-pin {
   position: absolute;
+  left: 0;
+  top: 0;
   transform: translate(-50%, -50%);
+  will-change: transform;
   display: flex;
   align-items: center;
   gap: 5px;

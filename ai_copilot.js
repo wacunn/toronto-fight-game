@@ -49,13 +49,13 @@
   }
 
   // ------------------------------------------------------------------ network
-  function conv3x3(inp, H, W, Cin, w, b, Cout, stride) {
+  function conv3x3Into(inp, H, W, Cin, w, b, Cout, stride, out) {
     // NHWC input (single image), HWIO kernel, symmetric padding 1, ReLU
     const Ho = Math.floor((H + 2 - 3) / stride) + 1, Wo = Math.floor((W + 2 - 3) / stride) + 1;
-    const out = new Float32Array(Ho * Wo * Cout);
+    const dst = out || new Float32Array(Ho * Wo * Cout);
     for (let oy = 0; oy < Ho; oy++) for (let ox = 0; ox < Wo; ox++) {
       const ob = (oy * Wo + ox) * Cout;
-      for (let co = 0; co < Cout; co++) out[ob + co] = b[co];
+      for (let co = 0; co < Cout; co++) dst[ob + co] = b[co];
       for (let ky = 0; ky < 3; ky++) {
         const iy = oy * stride + ky - 1;
         if (iy < 0 || iy >= H) continue;
@@ -67,17 +67,21 @@
             const v = inp[ib + ci];
             if (v === 0) continue;
             const kr = kb + ci * Cout;
-            for (let co = 0; co < Cout; co++) out[ob + co] += v * w[kr + co];
+            for (let co = 0; co < Cout; co++) dst[ob + co] += v * w[kr + co];
           }
         }
       }
-      for (let co = 0; co < Cout; co++) if (out[ob + co] < 0) out[ob + co] = 0;
+      for (let co = 0; co < Cout; co++) if (dst[ob + co] < 0) dst[ob + co] = 0;
     }
-    return { out, H: Ho, W: Wo };
+    return { out: dst, H: Ho, W: Wo };
   }
-  function dense(x, W, b, nin, nout, relu) {
-    const y = new Float32Array(nout);
-    for (let o = 0; o < nout; o++) y[o] = b[o];
+  function conv3x3(inp, H, W, Cin, w, b, Cout, stride) {
+    return conv3x3Into(inp, H, W, Cin, w, b, Cout, stride, null);
+  }
+  function denseInto(x, W, b, nin, nout, relu, out) {
+    const y = out || new Float32Array(nout);
+    if (b) { for (let o = 0; o < nout; o++) y[o] = b[o]; }
+    else { y.fill(0); }
     for (let i = 0; i < nin; i++) {
       const v = x[i];
       if (v === 0) continue;
@@ -86,6 +90,9 @@
     }
     if (relu) for (let o = 0; o < nout; o++) if (y[o] < 0) y[o] = 0;
     return y;
+  }
+  function dense(x, W, b, nin, nout, relu) {
+    return denseInto(x, W, b, nin, nout, relu, null);
   }
   const sig = x => 1 / (1 + Math.exp(-x));
 
@@ -101,28 +108,42 @@
       this.Hd = this.shape['lstm.wh'][0];
       this.pi1 = this.shape['pi1.w'][1];
       this.nAct = this.shape['pi2.w'][1];
+      const P = this.spec.patch;
+      const H1 = P, H2 = Math.floor((H1 + 2 - 3) / 2) + 1, H3 = Math.floor((H2 + 2 - 3) / 2) + 1;
+      this._h1 = H1; this._h2 = H2; this._h3 = H3;
+      this._c1 = new Float32Array(H1 * H1 * this.C[0]);
+      this._c2 = new Float32Array(H2 * H2 * this.C[1]);
+      this._c3 = new Float32Array(H3 * H3 * this.C[2]);
+      this._pe = new Float32Array(this.enc);
+      this._ve = new Float32Array(this.enc);
+      this._cat = new Float32Array(2 * this.enc);
+      this._x = new Float32Array(this.fdOut);
+      this._z = new Float32Array(4 * this.Hd);
+      this._zh = new Float32Array(4 * this.Hd);
+      this._p1 = new Float32Array(this.pi1);
+      this._logits = new Float32Array(this.nAct);
       this.reset();
     }
     reset() { this.h = new Float32Array(this.Hd); this.c = new Float32Array(this.Hd); }
     step(patch, vec) {
       const t = this.t, Hd = this.Hd;
       const C = this.C, P = this.spec.patch;
-      let a = conv3x3(patch, P, P, 1, t['c1.w'], t['c1.b'], C[0], 1);
-      a = conv3x3(a.out, a.H, a.W, C[0], t['c2.w'], t['c2.b'], C[1], 2);
-      a = conv3x3(a.out, a.H, a.W, C[1], t['c3.w'], t['c3.b'], C[2], 2);
-      const pe = dense(a.out, t['pd.w'], t['pd.b'], a.out.length, this.enc, true);
-      const ve = dense(vec, t['vd.w'], t['vd.b'], vec.length, this.enc, true);
-      const cat = new Float32Array(2 * this.enc); cat.set(pe, 0); cat.set(ve, this.enc);
-      const x = dense(cat, t['fd.w'], t['fd.b'], 2 * this.enc, this.fdOut, true);
-      const z = dense(x, t['lstm.wx'], t['lstm.b'], this.fdOut, 4 * Hd, false);
-      const zh = dense(this.h, t['lstm.wh'], new Float32Array(4 * Hd), Hd, 4 * Hd, false);
+      conv3x3Into(patch, P, P, 1, t['c1.w'], t['c1.b'], C[0], 1, this._c1);
+      conv3x3Into(this._c1, this._h1, this._h1, C[0], t['c2.w'], t['c2.b'], C[1], 2, this._c2);
+      conv3x3Into(this._c2, this._h2, this._h2, C[1], t['c3.w'], t['c3.b'], C[2], 2, this._c3);
+      denseInto(this._c3, t['pd.w'], t['pd.b'], this._c3.length, this.enc, true, this._pe);
+      denseInto(vec, t['vd.w'], t['vd.b'], vec.length, this.enc, true, this._ve);
+      this._cat.set(this._pe, 0); this._cat.set(this._ve, this.enc);
+      denseInto(this._cat, t['fd.w'], t['fd.b'], 2 * this.enc, this.fdOut, true, this._x);
+      const z = denseInto(this._x, t['lstm.wx'], t['lstm.b'], this.fdOut, 4 * Hd, false, this._z);
+      const zh = denseInto(this.h, t['lstm.wh'], null, Hd, 4 * Hd, false, this._zh);
       for (let i = 0; i < 4 * Hd; i++) z[i] += zh[i];
       for (let i = 0; i < Hd; i++) {
         this.c[i] = sig(z[Hd + i]) * this.c[i] + sig(z[i]) * Math.tanh(z[2 * Hd + i]);
         this.h[i] = sig(z[3 * Hd + i]) * Math.tanh(this.c[i]);
       }
-      const p1 = dense(this.h, t['pi1.w'], t['pi1.b'], Hd, this.pi1, true);
-      return dense(p1, t['pi2.w'], t['pi2.b'], this.pi1, this.nAct, false);
+      denseInto(this.h, t['pi1.w'], t['pi1.b'], Hd, this.pi1, true, this._p1);
+      return denseInto(this._p1, t['pi2.w'], t['pi2.b'], this.pi1, this.nAct, false, this._logits);
     }
   }
 
@@ -140,22 +161,23 @@
   const WHISKER_ANGLES = [-Math.PI / 2, -Math.PI / 4, -0.35, 0.0, 0.35, Math.PI / 4, Math.PI / 2, Math.PI];
   const WHISKER_RANGE = 8.0;
 
-  function computeWhiskers(G, px, pz, yaw, traffic) {
-    const [f, r] = fwdRight(yaw);
-    const out = new Float32Array(8);
-    const steps = [0.8, 1.6, 2.4, 3.2, 4.0, 4.8, 5.6, 6.4, 7.2, 8.0];
+  const WHISKER_STEPS = [0.8, 1.6, 2.4, 3.2, 4.0, 4.8, 5.6, 6.4, 7.2, 8.0];
+  function computeWhiskers(G, px, pz, yaw, traffic, out) {
+    const sy = Math.sin(yaw), cy = Math.cos(yaw);
+    const fx = -sy, fz = -cy, rx = cy, rz = -sy;
+    const dst = out || new Float32Array(8);
     const cars = (traffic && traffic.cars) || [];
     const streetcars = (traffic && traffic.streetcars) || [];
 
     for (let k = 0; k < 8; k++) {
       const a = WHISKER_ANGLES[k];
       const ca = Math.cos(a), sa = Math.sin(a);
-      const dx = ca * f[0] + sa * r[0], dz = ca * f[1] + sa * r[1];
+      const dx = ca * fx + sa * rx, dz = ca * fz + sa * rz;
       let dMin = WHISKER_RANGE;
 
       // 1. Static barriers from city grid (building walls, lamp posts, fences, trench cuts)
-      for (let s = 0; s < steps.length; s++) {
-        const dist = steps[s];
+      for (let s = 0; s < WHISKER_STEPS.length; s++) {
+        const dist = WHISKER_STEPS[s];
         if (blocked(G, px + dx * dist, pz + dz * dist)) {
           dMin = dist;
           break;
@@ -186,77 +208,108 @@
         }
       }
 
-      out[k] = dMin / WHISKER_RANGE;
+      dst[k] = dMin / WHISKER_RANGE;
     }
-    return out;
+    return dst;
   }
 
-  function buildObservation(ctx) {
+  function buildObservation(ctx, out) {
     const { G, spec, px, pz, yaw, st, goal, peace, people, prevAct, isFighter, traffic } = ctx;
     const P = spec.patch, cell = spec.patch_cell, row0 = spec.patch_row0;
-    const [f, r] = fwdRight(yaw);
-    const patch = new Float32Array(P * P);
+    const sy = Math.sin(yaw), cy = Math.cos(yaw);
+    const fx = -sy, fz = -cy, rx = cy, rz = -sy;
+    const patchLen = P * P;
+    const patch = (out && out.patch && out.patch.length === patchLen) ? out.patch : new Float32Array(patchLen);
+    if (out) out.patch = patch;
     for (let i = 0; i < P; i++) {
       const ahead = (row0 - i) * cell;
       for (let j = 0; j < P; j++) {
         const right = (j - (P - 1) / 2) * cell;
-        patch[i * P + j] = blocked(G, px + ahead * f[0] + right * r[0], pz + ahead * f[1] + right * r[1]) ? 1 : 0;
+        patch[i * P + j] = blocked(G, px + ahead * fx + right * rx, pz + ahead * fz + right * rz) ? 1 : 0;
       }
     }
-    const v = [];
+    const isV3 = spec.obs_version >= 3 || spec.vec_dim === 121;
+    const nFeats = (spec.npc_feats === 13 || spec.vec_dim === 111) ? 13 : 10;
+    const dims = spec.act_dims;
+    const expectedVecLen = 8 + (isV3 ? 2 : 0) + 4 + 3 + 4 + dims[0] + dims[1] + dims[2] + (isV3 ? 8 : 0) + spec.k_obs * nFeats;
+    const vec = (out && out.vec && out.vec.length === expectedVecLen) ? out.vec : new Float32Array(expectedVecLen);
+    if (out) out.vec = vec;
+    let vi = 0;
     const inPeace = (px - peace.x) ** 2 + (pz - peace.z) ** 2 <= peace.radius ** 2;
     // 0..7: Proprioception (8)
-    v.push(st.health / 100, st.armor / 50, st.rage / 100, st.isBerserk ? 1 : 0, Math.max(0, st.berserkTimer || 0) / 16,
-      Math.max(0, st.attackTimer || 0) / spec.kick_cooldown, inPeace ? 1 : 0, 1);
+    vec[vi++] = st.health / 100; vec[vi++] = st.armor / 50; vec[vi++] = st.rage / 100;
+    vec[vi++] = st.isBerserk ? 1 : 0; vec[vi++] = Math.max(0, st.berserkTimer || 0) / 16;
+    vec[vi++] = Math.max(0, st.attackTimer || 0) / spec.kick_cooldown; vec[vi++] = inPeace ? 1 : 0; vec[vi++] = 1;
 
-    const isV3 = spec.obs_version >= 3 || spec.vec_dim === 121;
     if (isV3) {
       // 8..9: Goal mode one-hot: [m_crate, m_fight] (2)
-      v.push(isFighter ? 0 : 1, isFighter ? 1 : 0);
+      vec[vi++] = isFighter ? 0 : 1;
+      vec[vi++] = isFighter ? 1 : 0;
     }
 
-    let [s, c, d] = rangeBearing(px, pz, yaw, goal.x, goal.z);
-    v.push(s, c, Math.log1p(d) / 7.5, Math.min(d, 10) / 10);
-    [s, c, d] = rangeBearing(px, pz, yaw, peace.x, peace.z);
-    v.push(s, c, Math.log1p(d) / 7.5);
+    let dx = goal.x - px, dz = goal.z - pz;
+    let a = dx * fx + dz * fz, b = dx * rx + dz * rz;
+    let ang = Math.atan2(b, a), d = Math.hypot(a, b);
+    vec[vi++] = Math.sin(ang); vec[vi++] = Math.cos(ang); vec[vi++] = Math.log1p(d) / 7.5; vec[vi++] = Math.min(d, 10) / 10;
+
+    dx = peace.x - px; dz = peace.z - pz;
+    a = dx * fx + dz * fz; b = dx * rx + dz * rz;
+    ang = Math.atan2(b, a); d = Math.hypot(a, b);
+    vec[vi++] = Math.sin(ang); vec[vi++] = Math.cos(ang); vec[vi++] = Math.log1p(d) / 7.5;
+
     const di = DIFF_IDX[st.difficulty || 'medium'] ?? 1;
-    for (let k = 0; k < 4; k++) v.push(k === di ? 1 : 0);
-    const dims = spec.act_dims;
-    for (let a = 0; a < 3; a++) for (let k = 0; k < dims[a]; k++) v.push(prevAct[a] === k ? 1 : 0);
+    for (let k = 0; k < 4; k++) vec[vi++] = (k === di ? 1 : 0);
+    for (let act = 0; act < 3; act++) for (let k = 0; k < dims[act]; k++) vec[vi++] = (prevAct[act] === k ? 1 : 0);
 
     if (isV3) {
       // 35..42: 8-beam whisker rangefinders (8)
-      const wRays = computeWhiskers(G, px, pz, yaw, traffic);
-      for (let k = 0; k < 8; k++) v.push(wRays[k]);
+      const wBuf = (out && out.whiskers) ? out.whiskers : (out ? (out.whiskers = new Float32Array(8)) : null);
+      const wRays = computeWhiskers(G, px, pz, yaw, traffic, wBuf);
+      for (let k = 0; k < 8; k++) vec[vi++] = wRays[k];
     }
     // nearest people within 40 m
-    const R = spec.npc_range, cand = [];
-    for (const p of people) {
-      const dx = p.x - px, dz = p.z - pz, dist = Math.hypot(dx, dz);
-      if (dist < R) cand.push({ p, dist, ahead: dx * f[0] + dz * f[1], right: dx * r[0] + dz * r[1] });
+    const R = spec.npc_range;
+    const cand = out ? (out.cand || (out.cand = [])) : [];
+    const candPool = out ? (out.candPool || (out.candPool = [])) : null;
+    cand.length = 0;
+    for (let idx = 0; idx < people.length; idx++) {
+      const p = people[idx];
+      const pdx = p.x - px, pdz = p.z - pz;
+      if (Math.abs(pdx) >= R || Math.abs(pdz) >= R) continue;
+      const dist = Math.hypot(pdx, pdz);
+      if (dist < R) {
+        const ahead = pdx * fx + pdz * fz, right = pdx * rx + pdz * rz;
+        if (candPool) {
+          let entry = candPool[cand.length];
+          if (!entry) { entry = { p: null, dist: 0, ahead: 0, right: 0 }; candPool.push(entry); }
+          entry.p = p; entry.dist = dist; entry.ahead = ahead; entry.right = right;
+          cand.push(entry);
+        } else {
+          cand.push({ p, dist, ahead, right });
+        }
+      }
     }
-    cand.sort((a, b) => a.dist - b.dist);
-    const nFeats = (spec.npc_feats === 13 || spec.vec_dim === 111) ? 13 : 10;
+    cand.sort((x, y) => x.dist - y.dist);
     for (let k = 0; k < spec.k_obs; k++) {
       const q = cand[k];
-      if (!q) { for (let m = 0; m < nFeats; m++) v.push(0); continue; }
+      if (!q) { for (let m = 0; m < nFeats; m++) vec[vi++] = 0; continue; }
       const p = q.p;
       const looksCiv = p.kind === 'civilian' || (p.kind === 'snatcher' && !p.unmasked);
-      v.push(1, q.ahead / R, q.right / R, q.dist / R, looksCiv ? 1 : 0, p.kind === 'robot' ? 1 : 0,
-        (p.kind === 'snatcher' && p.unmasked) ? 1 : 0, p.hp / p.maxHp, p.staggered ? 1 : 0, p.punching ? 1 : 0);
+      vec[vi++] = 1; vec[vi++] = q.ahead / R; vec[vi++] = q.right / R; vec[vi++] = q.dist / R;
+      vec[vi++] = looksCiv ? 1 : 0; vec[vi++] = p.kind === 'robot' ? 1 : 0;
+      vec[vi++] = (p.kind === 'snatcher' && p.unmasked) ? 1 : 0;
+      vec[vi++] = p.hp / p.maxHp; vec[vi++] = p.staggered ? 1 : 0; vec[vi++] = p.punching ? 1 : 0;
       if (nFeats === 13) {
         const cosN = q.ahead / Math.max(q.dist, 1e-4);
         const isFacing = cosN > 0.50;
         const jabRange = spec.jab_range || 3.5;
         const kickRange = spec.kick_range || 4.2;
-        v.push(
-          Math.min(q.dist, 6.0) / 6.0,
-          isFacing && q.dist <= jabRange ? 1 : 0,
-          isFacing && q.dist <= kickRange ? 1 : 0
-        );
+        vec[vi++] = Math.min(q.dist, 6.0) / 6.0;
+        vec[vi++] = (isFacing && q.dist <= jabRange) ? 1 : 0;
+        vec[vi++] = (isFacing && q.dist <= kickRange) ? 1 : 0;
       }
     }
-    return { patch, vec: Float32Array.from(v) };
+    return { patch, vec };
   }
 
   function argmax(a, lo, hi) { let b = lo; for (let i = lo + 1; i < hi; i++) if (a[i] > a[b]) b = i; return b - lo; }
@@ -291,6 +344,9 @@
       this.aiIntentText = 'IDLE';
       this.stuckTimer = 0;
       this.lastPos = null;
+      this._obsOut = {};
+      this._peoplePool = [];
+      this._peopleArr = [];
       this.init();
     }
 
@@ -476,8 +532,8 @@
         <div class="ai-pilot-indicator">
           <span class="ai-pulse-dot"></span>
           <span class="ai-title">AI</span>
-          <span id="ai-persona-pill" class="ai-mode-pill" style="cursor:pointer;background:rgba(0,0,0,0.5);border:1px solid #38bdf8;color:#7dd3fc;padding:3px 8px;border-radius:4px;margin-left:8px;font-size:11px;font-weight:700;text-transform:uppercase;"></span>
-          <span id="ai-mode-pill" class="ai-mode-pill" style="cursor:pointer;background:rgba(0,0,0,0.5);border:1px solid #10b981;color:#6ee7b7;padding:3px 8px;border-radius:4px;margin-left:8px;font-size:11px;font-weight:700;text-transform:uppercase;"></span>
+          <span id="ai-persona-pill" class="ai-mode-pill" style="pointer-events:auto;cursor:pointer;background:rgba(0,0,0,0.5);border:1px solid #38bdf8;color:#7dd3fc;padding:3px 8px;border-radius:4px;margin-left:8px;font-size:11px;font-weight:700;text-transform:uppercase;"></span>
+          <span id="ai-mode-pill" class="ai-mode-pill" style="pointer-events:auto;cursor:pointer;background:rgba(0,0,0,0.5);border:1px solid #10b981;color:#6ee7b7;padding:3px 8px;border-radius:4px;margin-left:8px;font-size:11px;font-weight:700;text-transform:uppercase;"></span>
         </div>
         <div id="ai-intent-status" class="ai-intent-sub" style="display:none;"></div>`;
       document.body.appendChild(banner);
@@ -546,20 +602,24 @@
           bestDist = dBox;
         }
       }
-      // 2. Target hostile enemies within combat range (aim for torso/chest ~1.1m)
+      // 2. Hostile enemies within combat range (aim for torso/chest ~1.1m)
       if (enemies && enemies.length) {
-        for (const e of enemies) {
+        const px = player.pos.x, py = player.pos.y, pz = player.pos.z;
+        const sy = Math.sin(player.yaw), cy = Math.cos(player.yaw);
+        const f0 = -sy, f1 = -cy;
+        for (let ei = 0; ei < enemies.length; ei++) {
+          const e = enemies[ei];
           if (!e || e.isDead || e.isKnockedOut || !e.rig) continue;
           if (e.isCivilian || e.kind === 'civilian') continue; // only aim at hostiles
           const p = e.rig.root.position;
-          const de = Math.hypot(p.x - player.pos.x, p.z - player.pos.z);
-          if (de < bestDist) {
+          const dx = p.x - px, dz = p.z - pz;
+          if (dx > bestDist || dx < -bestDist || dz > bestDist || dz < -bestDist) continue;
+          const de = Math.hypot(dx, dz);
+          if (de < bestDist && de > 0.01) {
             // Check if roughly in front of player (within 90 deg forward cone)
-            const toEx = (p.x - player.pos.x) / de;
-            const toEz = (p.z - player.pos.z) / de;
-            const dot = toEx * f[0] + toEz * f[1];
+            const dot = (dx * f0 + dz * f1) / de;
             if (dot > 0.3) {
-              const dy = (p.y + 1.1) - (player.pos.y + 1.7);
+              const dy = (p.y + 1.1) - (py + 1.7);
               desiredPitch = Math.atan2(dy, de);
               bestDist = de;
             }
@@ -587,14 +647,26 @@
       return { x: peace.x, z: peace.z, mission: false };
     }
 
-    collectPeople(enemies, playerY) {
-      const out = [];
-      for (const e of enemies || []) {
+    collectPeople(enemies, playerY, px, pz, maxRange) {
+      const out = this._peopleArr;
+      out.length = 0;
+      const list = enemies || [];
+      const hasBound = (maxRange !== undefined && px !== undefined && pz !== undefined);
+      for (let i = 0; i < list.length; i++) {
+        const e = list[i];
         if (!e || e.isDead || e.isKnockedOut || !e.rig) continue;
         if (!!e.isDeckEnemy !== (playerY > 50)) continue;
         const p = e.rig.root.position;
-        out.push({ x: p.x, z: p.z, kind: e.kind, unmasked: !!e.unmasked, hp: e.hp, maxHp: e.maxHp || 1,
-          staggered: !!e.isStaggered, punching: !!e.isPunching, ref: e });
+        if (hasBound && (Math.abs(p.x - px) > maxRange || Math.abs(p.z - pz) > maxRange)) continue;
+        let slot = this._peoplePool[out.length];
+        if (!slot) {
+          slot = { x: 0, z: 0, kind: '', unmasked: false, hp: 0, maxHp: 1, staggered: false, punching: false, ref: null };
+          this._peoplePool.push(slot);
+        }
+        slot.x = p.x; slot.z = p.z; slot.kind = e.kind; slot.unmasked = !!e.unmasked;
+        slot.hp = e.hp; slot.maxHp = e.maxHp || 1; slot.staggered = !!e.isStaggered;
+        slot.punching = !!e.isPunching; slot.ref = e;
+        out.push(slot);
       }
       return out;
     }
@@ -602,7 +674,7 @@
     neuralDecision(player, state, city, enemies, traffic, missionState) {
       const G = grid();
       const peace = (city && city.peaceZone) || G.peace;
-      const people = this.collectPeople(enemies, player.pos.y);
+      const people = this.collectPeople(enemies, player.pos.y, player.pos.x, player.pos.z, 50);
       let goal;
       if (this.persona === 'fighter') {
         let best = null, bd = 1e9;
@@ -650,7 +722,7 @@
       const gk = goal.mission ? `m:${Math.round(goal.x / 10)}:${Math.round(goal.z / 10)}` : (goal.targetRef ? 'enemy' : 'peace');
       if (gk !== this.lastGoalKey) { this.lastGoalKey = gk; this.resetMemory(); }
       const obs = buildObservation({ G, spec: this.policy.spec, px: player.pos.x, pz: player.pos.z, yaw: player.yaw,
-        st: state, goal, peace, people, prevAct: this.prevAct, isFighter: (this.persona === 'fighter'), traffic });
+        st: state, goal, peace, people, prevAct: this.prevAct, isFighter: (this.persona === 'fighter'), traffic }, this._obsOut);
       const logits = this.policy.step(obs.patch, obs.vec);
       const d = this.policy.spec.act_dims;
       const pick = (lo, hi) => this.sampleTemp > 0 ? sampleSoftmax(logits, lo, hi, this.sampleTemp) : argmax(logits, lo, hi);
@@ -720,7 +792,7 @@
 
       // 1. Hostile threats
       let best = null, bd = 1e9;
-      for (const p of this.collectPeople(enemies, py)) {
+      for (const p of this.collectPeople(enemies, py, px, pz, 45)) {
         const threat = p.kind === 'robot' || (p.kind === 'snatcher' && p.unmasked);
         if (!threat) continue;
         const d = Math.hypot(p.x - px, p.z - pz);

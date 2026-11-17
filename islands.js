@@ -330,7 +330,7 @@
     }
 
     // ------------------------------------------------------------------------
-    // Materials
+    // Materials & Shared Geometry / Batching Helpers
     // ------------------------------------------------------------------------
     const woodMat = new THREE.MeshStandardMaterial({ color: 0x7a5230, roughness: 0.8 });
     const darkWoodMat = new THREE.MeshStandardMaterial({ color: 0x4a2c14, roughness: 0.85 });
@@ -345,6 +345,122 @@
     const metalMat = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.3, metalness: 0.8 });
     const glassMat = new THREE.MeshStandardMaterial({ color: 0x7fb8d4, roughness: 0.1, metalness: 0.6, opacity: 0.65, transparent: true });
     const lampGlowMat = new THREE.MeshBasicMaterial({ color: 0xffd58a, fog: false });
+    const warmWinGlowMat = new THREE.MeshStandardMaterial({ color: 0xfef08a, emissive: 0xfef08a, emissiveIntensity: 0.95, roughness: 0.25 });
+    const termGlowMat = new THREE.MeshStandardMaterial({ color: 0xfef3c7, emissive: 0xfef3c7, emissiveIntensity: 0.9, roughness: 0.3 });
+    const clkMat = new THREE.MeshStandardMaterial({ color: 0xfef9c3, emissive: 0xfde047, emissiveIntensity: 0.8, roughness: 0.35, side: THREE.DoubleSide });
+    const cabinWinMat = new THREE.MeshStandardMaterial({ color: 0xbae6fd, emissive: 0x7dd3fc, emissiveIntensity: 0.6, roughness: 0.15 });
+    const beaconBeamMat = new THREE.MeshBasicMaterial({ color: 0xfef08a, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false, fog: false });
+
+    const _m4 = new THREE.Matrix4();
+    const _q = new THREE.Quaternion();
+    const _e = new THREE.Euler();
+    const _v = new THREE.Vector3();
+    const _sc = new THREE.Vector3();
+    const _col = new THREE.Color();
+    const _up = new THREE.Vector3(0, 1, 0);
+
+    const unitBoxGeo = new THREE.BoxGeometry(1, 1, 1);
+    const unitCylGeo = new THREE.CylinderGeometry(1, 1, 1, 8);
+    const unitSphereGeo = new THREE.SphereGeometry(1, 8, 6);
+
+    function addInstMesh(parent, geo, mat, entries, opts) {
+      if (!entries || !entries.length) return null;
+      const im = new THREE.InstancedMesh(geo, mat, entries.length);
+      let hasCol = false;
+      for (let i = 0; i < entries.length; i++) {
+        const it = entries[i];
+        _e.set(it.rx || 0, it.ry || 0, it.rz || 0, it.order || 'XYZ');
+        _q.setFromEuler(_e);
+        _v.set(it.x || 0, it.y || 0, it.z || 0);
+        _sc.set(it.sx !== undefined ? it.sx : 1, it.sy !== undefined ? it.sy : 1, it.sz !== undefined ? it.sz : 1);
+        _m4.compose(_v, _q, _sc);
+        im.setMatrixAt(i, _m4);
+        if (it.col !== undefined) {
+          hasCol = true;
+          im.setColorAt(i, _col.setHex(it.col));
+        }
+      }
+      if (im.instanceMatrix) im.instanceMatrix.needsUpdate = true;
+      if (hasCol && im.instanceColor) im.instanceColor.needsUpdate = true;
+      if (opts) {
+        if (opts.castShadow) im.castShadow = true;
+        if (opts.receiveShadow) im.receiveShadow = true;
+      }
+      parent.add(im);
+      return im;
+    }
+
+    // Merge static untextured meshes in a group by shared material (safely no-ops in mock environments)
+    function mergeGroupByMaterial(grp, opts) {
+      try {
+        if (!grp || typeof grp.updateMatrixWorld !== 'function') return;
+        grp.updateMatrixWorld(true);
+        if (!grp.matrixWorld || !grp.matrixWorld.elements) return;
+        const buckets = new Map();
+        const mergedNodes = [];
+        function walkMerge(node, isRoot) {
+          if (!node || (!isRoot && node.userData && node.userData.noMerge)) return;
+          if (node.isMesh && !node.isInstancedMesh && node.geometry && node.material && !Array.isArray(node.material) && !node.material.map) {
+            const g = node.geometry.index ? node.geometry.toNonIndexed() : node.geometry.clone();
+            g.applyMatrix4(node.matrixWorld);
+            let list = buckets.get(node.material);
+            if (!list) { list = []; buckets.set(node.material, list); }
+            list.push(g);
+            mergedNodes.push(node);
+          }
+          if (node.children) {
+            for (let i = 0; i < node.children.length; i++) walkMerge(node.children[i], false);
+          }
+        }
+        walkMerge(grp, true);
+        if (!buckets.size) return;
+        for (let i = 0; i < mergedNodes.length; i++) {
+          const n = mergedNodes[i];
+          if (n.parent) n.parent.remove(n);
+        }
+        const invParent = new THREE.Matrix4();
+        const hasInv = typeof invParent.copy === 'function' && typeof invParent.invert === 'function';
+        if (hasInv) invParent.copy(grp.matrixWorld).invert();
+        buckets.forEach((geos, mat) => {
+          let totalVerts = 0;
+          let allHaveUv = true;
+          for (let i = 0; i < geos.length; i++) {
+            if (hasInv) geos[i].applyMatrix4(invParent);
+            const pos = geos[i].getAttribute('position');
+            const uv = geos[i].getAttribute('uv');
+            if (!pos) continue;
+            totalVerts += pos.count;
+            if (!uv || uv.array.length !== pos.count * 2) allHaveUv = false;
+          }
+          if (totalVerts === 0) return;
+          const mergedPos = new Float32Array(totalVerts * 3);
+          const mergedNor = new Float32Array(totalVerts * 3);
+          const mergedUv = allHaveUv ? new Float32Array(totalVerts * 2) : null;
+          let offset = 0;
+          let uvOff = 0;
+          for (let i = 0; i < geos.length; i++) {
+            const pos = geos[i].getAttribute('position');
+            const nor = geos[i].getAttribute('normal');
+            const uv = geos[i].getAttribute('uv');
+            if (!pos) { geos[i].dispose(); continue; }
+            mergedPos.set(pos.array, offset);
+            if (nor && nor.array.length === pos.array.length) mergedNor.set(nor.array, offset);
+            if (mergedUv && uv) mergedUv.set(uv.array, uvOff);
+            offset += pos.count * 3;
+            uvOff += pos.count * 2;
+            geos[i].dispose();
+          }
+          const mergedGeo = new THREE.BufferGeometry();
+          mergedGeo.setAttribute('position', new THREE.BufferAttribute(mergedPos, 3));
+          mergedGeo.setAttribute('normal', new THREE.BufferAttribute(mergedNor, 3));
+          if (mergedUv) mergedGeo.setAttribute('uv', new THREE.BufferAttribute(mergedUv, 2));
+          const mergedMesh = new THREE.Mesh(mergedGeo, mat);
+          if (opts && opts.castShadow) mergedMesh.castShadow = true;
+          if (opts && opts.receiveShadow) mergedMesh.receiveShadow = true;
+          grp.add(mergedMesh);
+        });
+      } catch (e) { /* safe fallback in headless mock environments */ }
+    }
 
     // Counter-clockwise-from-above mesh builder with vertex colors
     function Mesher() {
@@ -540,13 +656,20 @@
     const circOb = (x, z, r) => obAdd({ c: [x, z, r] });
 
     function blocked(x, z, rad) {
-      const list = obGrid.get(Math.floor(x / OB_CELL) + ',' + Math.floor(z / OB_CELL));
-      if (!list) return false;
-      for (const o of list) {
-        if (o.c) {
-          if (Math.hypot(x - o.c[0], z - o.c[1]) < o.c[2] + rad) return true;
-        } else if (x > o.r[0] - rad && x < o.r[1] + rad && z > o.r[2] - rad && z < o.r[3] + rad) {
-          return true;
+      const i0 = Math.floor((x - rad) / OB_CELL), i1 = Math.floor((x + rad) / OB_CELL);
+      const j0 = Math.floor((z - rad) / OB_CELL), j1 = Math.floor((z + rad) / OB_CELL);
+      for (let i = i0; i <= i1; i++) {
+        for (let j = j0; j <= j1; j++) {
+          const list = obGrid.get(i + ',' + j);
+          if (!list) continue;
+          for (let k = 0; k < list.length; k++) {
+            const o = list[k];
+            if (o.c) {
+              if (Math.hypot(x - o.c[0], z - o.c[1]) < o.c[2] + rad) return true;
+            } else if (x > o.r[0] - rad && x < o.r[1] + rad && z > o.r[2] - rad && z < o.r[3] + rad) {
+              return true;
+            }
+          }
         }
       }
       return false;
@@ -589,39 +712,35 @@
       { name: 'Gibraltar-Hanlan Bridge', x0: -566, z0: Z(200), x1: -614, z1: Z(164), w: 6.5, archH: 2.3, yBase: 0.55 }
     ];
 
-    bridges.forEach(b => {
-      b.len = Math.hypot(b.x1 - b.x0, b.z1 - b.z0);
-      b.fx = (b.x1 - b.x0) / b.len;
-      b.fz = (b.z1 - b.z0) / b.len;
-      const bg = new THREE.Group();
-      const segs = 16, rotY = Math.atan2(b.fx, b.fz);
-      for (let i = 0; i < segs; i++) {
-        const t = (i + 0.5) / segs, y = b.yBase + Math.sin(t * Math.PI) * b.archH;
-        const px = b.x0 + (b.x1 - b.x0) * t, pz = b.z0 + (b.z1 - b.z0) * t;
-        const slope = Math.cos(t * Math.PI) * Math.PI * b.archH / b.len;
-        const plank = new THREE.Mesh(new THREE.BoxGeometry(b.w, 0.35, b.len / segs + 0.25), woodMat);
-        plank.position.set(px, y, pz);
-        plank.rotation.set(-Math.atan(slope), rotY, 0, 'YXZ');
-        bg.add(plank);
-        [-1, 1].forEach(sd => {
-          const ox = Math.cos(rotY) * sd * (b.w / 2 - 0.15), oz = -Math.sin(rotY) * sd * (b.w / 2 - 0.15);
-          const post = new THREE.Mesh(new THREE.BoxGeometry(0.22, 1.1, 0.22), darkWoodMat);
-          post.position.set(px + ox, y + 0.7, pz + oz);
-          bg.add(post);
-          const rail = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, b.len / segs + 0.3), darkWoodMat);
-          rail.position.set(px + ox, y + 1.22, pz + oz);
-          rail.rotation.set(-Math.atan(slope), rotY, 0, 'YXZ');
-          bg.add(rail);
+    {
+      const brPlanks = [], brPosts = [], brRails = [], brAbuts = [];
+      bridges.forEach(b => {
+        b.len = Math.hypot(b.x1 - b.x0, b.z1 - b.z0);
+        b.fx = (b.x1 - b.x0) / b.len;
+        b.fz = (b.z1 - b.z0) / b.len;
+        const segs = 16, rotY = Math.atan2(b.fx, b.fz);
+        const segD = b.len / segs;
+        for (let i = 0; i < segs; i++) {
+          const t = (i + 0.5) / segs, y = b.yBase + Math.sin(t * Math.PI) * b.archH;
+          const px = b.x0 + (b.x1 - b.x0) * t, pz = b.z0 + (b.z1 - b.z0) * t;
+          const slope = Math.cos(t * Math.PI) * Math.PI * b.archH / b.len;
+          const pitch = -Math.atan(slope);
+          brPlanks.push({ x: px, y, z: pz, rx: pitch, ry: rotY, order: 'YXZ', sx: b.w, sy: 0.35, sz: segD + 0.25 });
+          [-1, 1].forEach(sd => {
+            const ox = Math.cos(rotY) * sd * (b.w / 2 - 0.15), oz = -Math.sin(rotY) * sd * (b.w / 2 - 0.15);
+            brPosts.push({ x: px + ox, y: y + 0.7, z: pz + oz, sx: 0.22, sy: 1.1, sz: 0.22 });
+            brRails.push({ x: px + ox, y: y + 1.22, z: pz + oz, rx: pitch, ry: rotY, order: 'YXZ', sx: 0.14, sy: 0.14, sz: segD + 0.3 });
+          });
+        }
+        [[b.x0, b.z0], [b.x1, b.z1]].forEach(([ax, az]) => {
+          brAbuts.push({ x: ax, y: 0.2, z: az, ry: rotY, sx: b.w + 1.2, sy: 1.1, sz: 3.0 });
         });
-      }
-      [[b.x0, b.z0], [b.x1, b.z1]].forEach(([ax, az]) => {
-        const abut = new THREE.Mesh(new THREE.BoxGeometry(b.w + 1.2, 1.1, 3.0), stoneMat);
-        abut.position.set(ax, 0.2, az);
-        abut.rotation.y = rotY;
-        bg.add(abut);
       });
-      islandsGroup.add(bg);
-    });
+      addInstMesh(islandsGroup, unitBoxGeo, woodMat, brPlanks, { receiveShadow: true });
+      addInstMesh(islandsGroup, unitBoxGeo, darkWoodMat, brPosts);
+      addInstMesh(islandsGroup, unitBoxGeo, darkWoodMat, brRails);
+      addInstMesh(islandsGroup, unitBoxGeo, stoneMat, brAbuts);
+    }
 
     function getIslandBridgeAt(x, z, pad) {
       for (const b of bridges) {
@@ -635,7 +754,7 @@
     }
 
     // ------------------------------------------------------------------------
-    // Piers and Docks
+    // Piers and Docks + Centre Island Pier Railings, Benches, Lamps & Lifebuoys
     // ------------------------------------------------------------------------
     const PIERS = [
       { name: 'Centre Island Pier', r: [-6, 6, Z(470), Z(590)], y: 0.55 },
@@ -645,19 +764,75 @@
       { name: 'Billy Bishop Airport Ferry Dock', r: [-1075, -1045, Z(-352), Z(-302)], y: 0.55 }
     ];
 
-    PIERS.forEach(p => {
-      const w = p.r[1] - p.r[0], d = p.r[3] - p.r[2];
-      const deck = new THREE.Mesh(new THREE.BoxGeometry(w, 0.4, d), woodMat);
-      deck.position.set((p.r[0] + p.r[1]) / 2, p.y - 0.2, (p.r[2] + p.r[3]) / 2);
-      islandsGroup.add(deck);
-      for (let pz = p.r[2] + 2; pz < p.r[3]; pz += 6) {
-        [p.r[0] + 0.6, p.r[1] - 0.6].forEach(px => {
-          const pile = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 3, 6), darkWoodMat);
-          pile.position.set(px, -0.9, pz);
-          islandsGroup.add(pile);
-        });
+    {
+      const pierDecks = [], pierPilings = [];
+      PIERS.forEach(p => {
+        const w = p.r[1] - p.r[0], d = p.r[3] - p.r[2];
+        pierDecks.push({ x: (p.r[0] + p.r[1]) / 2, y: p.y - 0.2, z: (p.r[2] + p.r[3]) / 2, sx: w, sy: 0.4, sz: d });
+        for (let pz = p.r[2] + 2; pz < p.r[3]; pz += 6) {
+          [p.r[0] + 0.6, p.r[1] - 0.6].forEach(px => {
+            pierPilings.push({ x: px, y: -0.9, z: pz, sx: 0.25, sy: 3.0, sz: 0.25 });
+          });
+        }
+      });
+      addInstMesh(islandsGroup, unitBoxGeo, woodMat, pierDecks, { receiveShadow: true });
+      addInstMesh(islandsGroup, unitCylGeo, darkWoodMat, pierPilings);
+
+      // Centre Island Pier: timber railings (x=+-5.8 directly under perched seagulls!), benches, Victorian lamps & lifebuoys
+      const cp = PIERS[0];
+      const railLen = cp.r[3] - cp.r[2] - 2;
+      const railMidZ = (cp.r[2] + cp.r[3]) / 2 + 0.4;
+      const pRailWood = [], pRailDark = [], pPierStone = [], pLampPosts = [], pLampGlobes = [], pBuoys = [];
+      [-5.8, 5.8].forEach(rx => {
+        pRailDark.push({ x: rx, y: 1.46, z: railMidZ, sx: 0.18, sy: 0.12, sz: railLen });
+        pRailDark.push({ x: rx, y: 1.0, z: railMidZ, sx: 0.12, sy: 0.08, sz: railLen });
+        for (let rz = cp.r[2] + 2; rz <= cp.r[3] - 1; rz += 4) {
+          pRailDark.push({ x: rx, y: 1.0, z: rz, sx: 0.18, sy: 1.05, sz: 0.18 });
+        }
+      });
+      // South pier head cross railing, concrete wave-break bumper & mooring cleats
+      pRailDark.push({ x: 0, y: 1.46, z: cp.r[3] - 0.5, sx: 11.75, sy: 0.12, sz: 0.18 });
+      pRailDark.push({ x: 0, y: 1.0, z: cp.r[3] - 0.5, sx: 11.75, sy: 0.08, sz: 0.12 });
+      for (let rx = -5.8; rx <= 5.81; rx += 2.9) {
+        pRailDark.push({ x: rx, y: 1.0, z: cp.r[3] - 0.5, sx: 0.18, sy: 1.05, sz: 0.18 });
       }
-    });
+      pPierStone.push({ x: 0, y: 0.45, z: cp.r[3] + 0.35, sx: 12.6, sy: 0.65, sz: 0.9 });
+      [-4.2, 4.2].forEach(cx => pPierStone.push({ x: cx, y: 0.65, z: cp.r[3] - 1.2, sx: 0.45, sy: 0.28, sz: 0.28 }));
+      rectOb(-6.1, -5.65, cp.r[2] + 2, cp.r[3]);
+      rectOb(5.65, 6.1, cp.r[2] + 2, cp.r[3]);
+
+      // Pier benches facing Lake Ontario (center x=-3.8..3.8 remains wide open!)
+      [Z(500), Z(550)].forEach(bz => {
+        [-4.6, 4.6].forEach(bx => {
+          pRailWood.push({ x: bx, y: 0.98, z: bz, sx: 0.58, sy: 0.1, sz: 2.2 });
+          pRailWood.push({ x: bx + (bx > 0 ? 0.25 : -0.25), y: 1.28, z: bz, sx: 0.08, sy: 0.45, sz: 2.2 });
+          pRailDark.push({ x: bx, y: 0.75, z: bz - 0.9, sx: 0.5, sy: 0.4, sz: 0.12 });
+          pRailDark.push({ x: bx, y: 0.75, z: bz + 0.9, sx: 0.5, sy: 0.4, sz: 0.12 });
+          circOb(bx, bz, 0.75);
+        });
+      });
+
+      // 6 Victorian black pier lamps + 4 red-and-white lifebuoy ring boxes
+      [Z(485), Z(530), Z(575)].forEach(lz => {
+        [-5.45, 5.45].forEach(lx => {
+          pLampPosts.push({ x: lx, y: 2.4, z: lz, sx: 0.1, sy: 3.7, sz: 0.1 });
+          pLampGlobes.push({ x: lx, y: 4.35, z: lz, sx: 0.28, sy: 0.34, sz: 0.28 });
+        });
+      });
+      [Z(515), Z(565)].forEach(bz => {
+        [-5.65, 5.65].forEach(bx => {
+          pPierStone.push({ x: bx, y: 1.32, z: bz, sx: 0.14, sy: 0.75, sz: 0.75 });
+          pBuoys.push({ x: bx + (bx > 0 ? -0.1 : 0.1), y: 1.32, z: bz, ry: Math.PI / 2, sx: 1, sy: 1, sz: 1 });
+        });
+      });
+
+      addInstMesh(islandsGroup, unitBoxGeo, woodMat, pRailWood);
+      addInstMesh(islandsGroup, unitBoxGeo, darkWoodMat, pRailDark);
+      addInstMesh(islandsGroup, unitBoxGeo, stoneMat, pPierStone);
+      addInstMesh(islandsGroup, unitCylGeo, new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.5, metalness: 0.5 }), pLampPosts);
+      addInstMesh(islandsGroup, unitSphereGeo, lampGlowMat, pLampGlobes);
+      addInstMesh(islandsGroup, new THREE.TorusGeometry(0.28, 0.08, 8, 14), new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.4 }), pBuoys);
+    }
 
     function pierAt(x, z) {
       for (const p of PIERS) {
@@ -775,8 +950,8 @@
       });
       islandsGroup.add(trunkMesh);
 
-      // Broadleaf crowns (Cottonwood, Silver Maple, Oak): two overlapping blobs per tree
-      const roundGeo = new THREE.DodecahedronGeometry(1, 1);
+      // Broadleaf crowns (Cottonwood, Silver Maple, Oak): two overlapping blobs per tree (detail=0 for 4x fewer triangles)
+      const roundGeo = new THREE.DodecahedronGeometry(1, 0);
       const roundMesh = new THREE.InstancedMesh(roundGeo, new THREE.MeshLambertMaterial({ color: 0xffffff }), trees.round.length * 2);
       const greens = [0x2f6b2a, 0x3d7d2f, 0x497f34, 0x2b5e2c, 0x5b8a3a, 0x376e35];
       const autumn = [0xc9852b, 0xb8572a, 0xd9a23a, 0x9c6b2a];
@@ -1211,13 +1386,24 @@
       patioDeck.position.set(65, GROUND_Y + 0.18, Z(80));
       conGrp.add(patioDeck);
 
-      // Perimeter wooden railing around patio
-      const patioRail = new THREE.Mesh(
-        new THREE.BoxGeometry(22.2, 1.0, 0.15),
-        darkWoodMat
-      );
-      patioRail.position.set(65, GROUND_Y + 0.7, Z(92));
+      // Full perimeter wooden railing around BBQ patio (leaving NW entry gap clear from path)
+      const patioRail = new THREE.Mesh(new THREE.BoxGeometry(22.0, 0.14, 0.18), darkWoodMat);
+      patioRail.position.set(65, GROUND_Y + 1.05, Z(92));
       conGrp.add(patioRail);
+      const patioRailE = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.14, 24.0), darkWoodMat);
+      patioRailE.position.set(75.9, GROUND_Y + 1.05, Z(80));
+      conGrp.add(patioRailE);
+      const patioRailW = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.14, 15.0), darkWoodMat);
+      patioRailW.position.set(54.1, GROUND_Y + 1.05, Z(84.5));
+      conGrp.add(patioRailW);
+      const patioRailN = new THREE.Mesh(new THREE.BoxGeometry(4.0, 0.14, 0.18), darkWoodMat);
+      patioRailN.position.set(74.0, GROUND_Y + 1.05, Z(68.0));
+      conGrp.add(patioRailN);
+      const patioBalusters = [];
+      for (let bx = 54.5; bx <= 75.5; bx += 0.9) patioBalusters.push({ x: bx, y: GROUND_Y + 0.65, z: Z(92), sx: 0.08, sy: 0.72, sz: 0.08 });
+      for (let bz = Z(68.5); bz <= Z(91.5); bz += 0.9) patioBalusters.push({ x: 75.9, y: GROUND_Y + 0.65, z: bz, sx: 0.08, sy: 0.72, sz: 0.08 });
+      for (let bz = Z(77.5); bz <= Z(91.5); bz += 0.9) patioBalusters.push({ x: 54.1, y: GROUND_Y + 0.65, z: bz, sx: 0.08, sy: 0.72, sz: 0.08 });
+      addInstMesh(conGrp, unitBoxGeo, darkWoodMat, patioBalusters);
 
       // Outdoor bar counter on patio
       const barCounter = new THREE.Mesh(new THREE.BoxGeometry(6.0, 1.1, 1.4), darkWoodMat);
@@ -1252,15 +1438,26 @@
         });
       });
 
-      // Overhead pergola with festive string lights
+      // Overhead pergola rafters with festive string lights
+      const pergolaRafters = [], stringBulbs = [];
       [-9, 9].forEach(px => {
         [Z(73), Z(91)].forEach(pz => {
           const post = new THREE.Mesh(new THREE.BoxGeometry(0.3, 3.2, 0.3), darkWoodMat);
           post.position.set(65 + px, GROUND_Y + 1.6, pz);
           conGrp.add(post);
         });
+        pergolaRafters.push({ x: 65 + px, y: GROUND_Y + 3.2, z: Z(82), sx: 0.24, sy: 0.24, sz: 18.6 });
       });
+      for (let pz = Z(73); pz <= Z(91); pz += 3.0) {
+        pergolaRafters.push({ x: 65, y: GROUND_Y + 3.35, z: pz, sx: 18.8, sy: 0.18, sz: 0.18 });
+        for (let bx = -7.5; bx <= 7.5; bx += 3.0) {
+          stringBulbs.push({ x: 65 + bx, y: GROUND_Y + 3.18, z: pz, sx: 0.11, sy: 0.11, sz: 0.11 });
+        }
+      }
+      addInstMesh(conGrp, unitBoxGeo, darkWoodMat, pergolaRafters);
+      addInstMesh(conGrp, unitSphereGeo, lampGlowMat, stringBulbs);
 
+      mergeGroupByMaterial(conGrp);
       islandsGroup.add(conGrp);
     }
 
@@ -1275,6 +1472,10 @@
       const avg = new THREE.Group();
       const flowerCols = [0xef4444, 0xfacc15, 0xa855f7, 0xf472b6, 0xffffff, 0xfb923c, 0x3b82f6];
       const blooms = [];
+      const stoneBedEntries = [];
+      const gardenBenchEntries = [];
+      const poolPadEntries = [];
+      const poolBloomEntries = [];
 
       // 1. North Island Promenade & Avenue of the Islands Flowerbeds (aligned parallel to curving paths)
       function placeAlignedBedsAlongPath(pts, pathW, spacing, startPad, endPad, seedBase) {
@@ -1315,10 +1516,7 @@
               ) {
                 return;
               }
-              const bed = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.45, 8.0), stoneMat);
-              bed.position.set(fx, GROUND_Y + 0.1, fz);
-              bed.rotation.y = ang;
-              avg.add(bed);
+              stoneBedEntries.push({ x: fx, y: GROUND_Y + 0.1, z: fz, ry: ang, sx: 2.8, sy: 0.45, sz: 8.0 });
               flowerBeds.push({ x: fx, z: fz, rot: ang, tx, tz, w: 2.8, d: 8.0 });
               circOb(fx - tx * 2.4, fz - tz * 2.4, 1.45);
               circOb(fx, fz, 1.45);
@@ -1382,15 +1580,14 @@
         new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.82, fog: false })
       );
       fountainSpray.position.set(0, GROUND_Y + 6.8, fz);
+      fountainSpray.userData.noMerge = true;
       avg.add(fountainSpray);
 
-      // 8 perimeter arched water streams spouting inward
+      // 8 perimeter arched water streams spouting inward (shared material)
+      const streamMat = new THREE.MeshBasicMaterial({ color: 0xbae6fd, transparent: true, opacity: 0.75, fog: false });
       for (let j = 0; j < 8; j++) {
         const ang = (j / 8) * Math.PI * 2;
-        const stream = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.08, 0.16, 4.2, 6),
-          new THREE.MeshBasicMaterial({ color: 0xbae6fd, transparent: true, opacity: 0.75, fog: false })
-        );
+        const stream = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.16, 4.2, 6), streamMat);
         const sx = Math.cos(ang) * 6.5, sz = Math.sin(ang) * 6.5;
         stream.position.set(sx, GROUND_Y + 2.2, fz + sz);
         stream.rotation.x = -Math.sin(ang) * 0.45;
@@ -1402,10 +1599,7 @@
       for (let k = 0; k < 4; k++) {
         const ba = (k / 4) * Math.PI * 2 + Math.PI / 4;
         const bx = Math.cos(ba) * 12.8, bz = Math.sin(ba) * 12.8;
-        const bch = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.45, 0.8), darkWoodMat);
-        bch.position.set(bx, GROUND_Y + 0.45, fz + bz);
-        bch.rotation.y = -ba + Math.PI / 2;
-        avg.add(bch);
+        gardenBenchEntries.push({ x: bx, y: GROUND_Y + 0.45, z: fz + bz, ry: -ba + Math.PI / 2, sx: 2.4, sy: 0.45, sz: 0.8 });
 
         const urn = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.35, 0.9, 10), stoneMat);
         const ux = Math.cos(ba + 0.35) * 13.2, uz = Math.sin(ba + 0.35) * 13.2;
@@ -1417,79 +1611,60 @@
 
       // 3. Grand Formal Gardens & Sunken Reflecting Pools (Water areas in the ground, z = Z(345) to Z(415))
       // Symmetrically placed to the WEST (x = -26) and EAST (x = +26) of Avenue of the Island!
+      const poolWaterMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.12, metalness: 0.5, transparent: true, opacity: 0.88 });
+      const poolFloorMat = new THREE.MeshStandardMaterial({ color: 0x0c4a6e, roughness: 0.8 });
+      const poolSprayMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75, fog: false });
+      const poolPadMat = new THREE.MeshLambertMaterial({ color: 0x15803d });
+      const poolBloomMat = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false });
+
       [-26, 26].forEach((poolX, pIdx) => {
         const pZ0 = Z(345), pZ1 = Z(415), pLen = pZ1 - pZ0, pW = 14;
         const pMidZ = (pZ0 + pZ1) / 2;
 
         // Cut limestone coping rim enclosing the pool
         const copingT = 0.8;
-        // North & South rim caps
         [-pLen / 2, pLen / 2].forEach(oz => {
-          const cap = new THREE.Mesh(new THREE.BoxGeometry(pW + copingT * 2, 0.35, copingT), stoneMat);
-          cap.position.set(poolX, GROUND_Y + 0.16, pMidZ + oz);
-          avg.add(cap);
+          stoneBedEntries.push({ x: poolX, y: GROUND_Y + 0.16, z: pMidZ + oz, sx: pW + copingT * 2, sy: 0.35, sz: copingT });
         });
-        // East & West rim sides
         [-pW / 2, pW / 2].forEach(ox => {
-          const side = new THREE.Mesh(new THREE.BoxGeometry(copingT, 0.35, pLen), stoneMat);
-          side.position.set(poolX + ox, GROUND_Y + 0.16, pMidZ);
-          avg.add(side);
+          stoneBedEntries.push({ x: poolX + ox, y: GROUND_Y + 0.16, z: pMidZ, sx: copingT, sy: 0.35, sz: pLen });
         });
 
         // Sunken reflecting pool water surface
-        const poolWater = new THREE.Mesh(
-          new THREE.PlaneGeometry(pW - 0.2, pLen - 0.2),
-          new THREE.MeshStandardMaterial({
-            color: 0x0284c7,
-            roughness: 0.12,
-            metalness: 0.5,
-            transparent: true,
-            opacity: 0.88
-          })
-        );
+        const poolWater = new THREE.Mesh(new THREE.PlaneGeometry(pW - 0.2, pLen - 0.2), poolWaterMat);
         poolWater.rotation.x = -Math.PI / 2;
         poolWater.position.set(poolX, GROUND_Y + 0.06, pMidZ);
         avg.add(poolWater);
 
         // Submerged pool floor (dark aquamarine stone tiling)
-        const poolFloor = new THREE.Mesh(
-          new THREE.PlaneGeometry(pW, pLen),
-          new THREE.MeshStandardMaterial({ color: 0x0c4a6e, roughness: 0.8 })
-        );
+        const poolFloor = new THREE.Mesh(new THREE.PlaneGeometry(pW, pLen), poolFloorMat);
         poolFloor.rotation.x = -Math.PI / 2;
         poolFloor.position.set(poolX, GROUND_Y - 0.8, pMidZ);
         avg.add(poolFloor);
 
         // 3 stone bubbler fountain pedestals spaced along each pool's centerline
-        [-24, 0, 24].forEach((oz, jetIdx) => {
+        [-24, 0, 24].forEach((oz) => {
           const ped = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 0.8, 0.6, 12), stoneMat);
           ped.position.set(poolX, GROUND_Y - 0.1, pMidZ + oz);
           avg.add(ped);
 
-          const spray = new THREE.Mesh(
-            new THREE.ConeGeometry(0.35, 2.4, 8, 1, true),
-            new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75, fog: false })
-          );
+          const spray = new THREE.Mesh(new THREE.ConeGeometry(0.35, 2.4, 8, 1, true), poolSprayMat);
           spray.position.set(poolX, GROUND_Y + 1.2, pMidZ + oz);
+          spray.userData.noMerge = true;
           avg.add(spray);
           poolJets.push(spray);
         });
 
-        // Floating lily pads & water lilies in the reflecting pools
-        const padMat = new THREE.MeshLambertMaterial({ color: 0x15803d });
-        const padGeo = new THREE.CircleGeometry(0.55, 10);
+        // Floating lily pads & water lilies in the reflecting pools (instanced!)
         for (let l = 0; l < 18; l++) {
           const lox = (rnd() - 0.5) * (pW - 2.8);
           const loz = (rnd() - 0.5) * (pLen - 6.0);
-          const pad = new THREE.Mesh(padGeo, padMat);
-          pad.rotation.x = -Math.PI / 2;
-          pad.position.set(poolX + lox, GROUND_Y + 0.08, pMidZ + loz);
-          avg.add(pad);
-
+          poolPadEntries.push({ x: poolX + lox, y: GROUND_Y + 0.08, z: pMidZ + loz, rx: -Math.PI / 2, sx: 1, sy: 1, sz: 1 });
           if (l % 2 === 0) {
-            const bloom = new THREE.Mesh(new THREE.DodecahedronGeometry(0.18, 0), new THREE.MeshBasicMaterial({ color: (l % 4 === 0) ? 0xf472b6 : 0xffffff, fog: false }));
-            bloom.position.set(poolX + lox, GROUND_Y + 0.22, pMidZ + loz);
-            avg.add(bloom);
+            poolBloomEntries.push({
+              x: poolX + lox, y: GROUND_Y + 0.22, z: pMidZ + loz,
+              col: (l % 4 === 0) ? 0xf472b6 : 0xffffff, sx: 1, sy: 1, sz: 1
+            });
           }
         }
 
@@ -1499,9 +1674,7 @@
           const gardenOuterX = poolX + 16.0;
           for (let gz = pZ0 + 5; gz <= pZ1 - 5; gz += 16) {
             if (nearPath(gardenOuterX, gz, 2.2)) continue;
-            const gBed = new THREE.Mesh(new THREE.BoxGeometry(4.0, 0.35, 11), stoneMat);
-            gBed.position.set(gardenOuterX, GROUND_Y + 0.1, gz);
-            avg.add(gBed);
+            stoneBedEntries.push({ x: gardenOuterX, y: GROUND_Y + 0.1, z: gz, sx: 4.0, sy: 0.35, sz: 11.0 });
             flowerBeds.push({ x: gardenOuterX, z: gz, rot: 0, tx: 0, tz: 1, w: 4.0, d: 11.0 });
             rectOb(gardenOuterX - 2.0, gardenOuterX + 2.0, gz - 5.5, gz + 5.5);
 
@@ -1519,19 +1692,18 @@
 
         // Benches along the garden promenades (parallel to the north-south paths and clear of the x = +/-36 walkways)
         for (let bz = pZ0 + 12; bz <= pZ1 - 12; bz += 22) {
-          // Inner bench facing pool (at x = +/-16.5, between Avenue path and pool rim)
-          const b1 = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.45, 2.0), darkWoodMat);
-          b1.position.set(poolX + (pIdx === 0 ? 9.5 : -9.5), GROUND_Y + 0.45, bz);
-          avg.add(b1);
-          // Outer bench facing pool (at x = +/-38.8, just outside the x = +/-36 promenade)
-          const b2 = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.45, 2.0), darkWoodMat);
-          b2.position.set(poolX + (pIdx === 0 ? -12.8 : 12.8), GROUND_Y + 0.45, bz);
-          avg.add(b2);
+          gardenBenchEntries.push({ x: poolX + (pIdx === 0 ? 9.5 : -9.5), y: GROUND_Y + 0.45, z: bz, sx: 0.7, sy: 0.45, sz: 2.0 });
+          gardenBenchEntries.push({ x: poolX + (pIdx === 0 ? -12.8 : 12.8), y: GROUND_Y + 0.45, z: bz, sx: 0.7, sy: 0.45, sz: 2.0 });
         }
 
         // Deep water obstacle inside pool prevents walking into water
         rectOb(poolX - pW / 2 - 0.4, poolX + pW / 2 + 0.4, pZ0 - 0.4, pZ1 + 0.4);
       });
+
+      addInstMesh(avg, unitBoxGeo, stoneMat, stoneBedEntries);
+      addInstMesh(avg, unitBoxGeo, darkWoodMat, gardenBenchEntries);
+      addInstMesh(avg, new THREE.CircleGeometry(0.55, 10), poolPadMat, poolPadEntries);
+      addInstMesh(avg, new THREE.DodecahedronGeometry(0.18, 0), poolBloomMat, poolBloomEntries);
 
       // 4. Instanced flower blooms for all Avenue & Parterre garden beds
       const m4 = new THREE.Matrix4(), col = new THREE.Color();
@@ -1544,6 +1716,46 @@
       });
       avg.add(flMesh);
 
+      // 5. The Boardwalk Props: Cedar Benches, Toronto Park Bins & Beach Access Steps
+      const bwBenchSeat = [], bwBenchLegs = [], bwBinsBlue = [], bwBinsGrey = [], bwStairs = [];
+      let bwDist = 35;
+      for (let si = 1; si < BOARDWALK.pts.length; si++) {
+        const a = BOARDWALK.pts[si - 1], b = BOARDWALK.pts[si];
+        const segL = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        const tx = (b[0] - a[0]) / segL, tz = (b[1] - a[1]) / segL;
+        const nx = -tz, nz = tx, yaw = Math.atan2(tx, tz);
+        while (bwDist < segL - 25) {
+          const px = a[0] + tx * bwDist, pz = a[1] + tz * bwDist;
+          // North (landward) side bench & waste/recycling pair outside the 5m boardwalk deck
+          const bx = px - nx * 3.8, bz = pz - nz * 3.8;
+          if (landField(bx, bz) > 2.5 && !nearPath(bx, bz, 0.8)) {
+            const by = terrainH(bx, bz);
+            bwBenchSeat.push({ x: bx, y: by + 0.48, z: bz, ry: yaw, sx: 0.65, sy: 0.12, sz: 2.2 });
+            bwBenchLegs.push({ x: bx, y: by + 0.22, z: bz, ry: yaw, sx: 0.55, sy: 0.42, sz: 1.9 });
+            const rx = bx + tx * 2.2, rz = bz + tz * 2.2;
+            const ry2 = terrainH(rx, rz);
+            bwBinsBlue.push({ x: rx, y: ry2 + 0.45, z: rz, ry: yaw, sx: 0.48, sy: 0.9, sz: 0.48 });
+            bwBinsGrey.push({ x: rx + tx * 0.65, y: ry2 + 0.45, z: rz + tz * 0.65, ry: yaw, sx: 0.48, sy: 0.9, sz: 0.48 });
+          }
+          // Beach access wooden steps every ~200m on south (lakeward) side
+          if (bwDist % 180 < 95) {
+            const sx2 = px + nx * 3.1, sz2 = pz + nz * 3.1;
+            if (landField(sx2, sz2) > 1.8) {
+              const sy2 = terrainH(sx2, sz2);
+              bwStairs.push({ x: sx2, y: sy2 + 0.14, z: sz2, ry: yaw, sx: 1.6, sy: 0.2, sz: 2.8 });
+            }
+          }
+          bwDist += 95;
+        }
+        bwDist -= segL;
+      }
+      addInstMesh(avg, unitBoxGeo, woodMat, bwBenchSeat);
+      addInstMesh(avg, unitBoxGeo, darkWoodMat, bwBenchLegs);
+      addInstMesh(avg, unitBoxGeo, woodMat, bwStairs);
+      addInstMesh(avg, unitBoxGeo, new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.6 }), bwBinsBlue);
+      addInstMesh(avg, unitBoxGeo, new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.7 }), bwBinsGrey);
+
+      mergeGroupByMaterial(avg);
       islandsGroup.add(avg);
     }
 
@@ -1559,6 +1771,7 @@
       const mazeGround = new THREE.Mesh(new THREE.BoxGeometry(63, 0.08, 76), dirtMat);
       mazeGround.position.set(hx - 5.5, 0.57, hz);
       mazeGround.receiveShadow = true;
+      mazeGround.userData.noMerge = true;
       hmg.add(mazeGround);
 
       // Entrance Gate Arch & Commemorative Plaque Sign facing east towards West Garden Promenade & Avenue
@@ -1666,6 +1879,7 @@
         });
       });
       hmg.add(bellArbor);
+      mergeGroupByMaterial(hmg);
       islandsGroup.add(hmg);
     }
 
@@ -1677,11 +1891,32 @@
     // - Old-Fashioned Sweet Shoppe & Ice Cream Parlour with striped candy awnings
     // - Carousel Cafe & Bakery with buttercup clapboard, flower boxes & cafe seating
     // - Antique 1907 Dentzel Carousel in 16-sided Victorian rotunda with rotating painted horses
-    // - Giant 26m Ferris Wheel in YZ plane with 12 rotating passenger carts
+    // - Giant 26m Ferris Wheel in YZ plane with 12 upright counter-rotating passenger carts
     // ------------------------------------------------------------------------
     let ferrisWheelMesh = null, carouselTop = null;
+    const ferrisCarts = [];
+    const carouselHorses = [];
     {
       const cvg = new THREE.Group();
+
+      // Centreville Midway Welcome Timber Archway spanning the path at (146, Z(200))
+      [-4.6, 4.6].forEach(az => {
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.28, 4.6, 8), darkWoodMat);
+        post.position.set(146, 2.3, Z(200) + az);
+        cvg.add(post);
+        circOb(146, Z(200) + az, 0.35);
+      });
+      const cvArchBeam = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.45, 10.2), darkWoodMat);
+      cvArchBeam.position.set(146, 4.6, Z(200));
+      cvg.add(cvArchBeam);
+      const cvArchSign = makeSign(
+        ['CENTREVILLE AMUSEMENT PARK', 'EST. 1967 • VICTORIAN VILLAGE & RIDES'],
+        9.4, 1.5,
+        { bg: '#7f1d1d', fg: '#fef08a', borderColor: '#facc15' }
+      );
+      cvArchSign.position.set(146, 5.5, Z(200));
+      cvArchSign.rotation.y = -Math.PI / 2;
+      cvg.add(cvArchSign);
 
       // 1. VICTORIAN TOWN HALL (EST. 1900) at (180, Z(185))
       const thHall = new THREE.Mesh(
@@ -1691,6 +1926,19 @@
       thHall.position.set(180, 3.75, Z(185));
       cvg.add(thHall);
       rectOb(171.5, 188.5, Z(178.5), Z(191.5)); // interior blocks
+
+      // Front portico entrance steps & columns
+      const thPortico = new THREE.Mesh(new THREE.BoxGeometry(5.6, 0.32, 2.2), woodMat);
+      thPortico.position.set(180, GROUND_Y + 0.16, Z(177.9));
+      cvg.add(thPortico);
+      const thPorticoRoof = new THREE.Mesh(new THREE.BoxGeometry(5.8, 0.28, 2.4), new THREE.MeshStandardMaterial({ color: 0x831843, roughness: 0.5 }));
+      thPorticoRoof.position.set(180, 4.1, Z(177.8));
+      cvg.add(thPorticoRoof);
+      [-2.2, 2.2].forEach(px => {
+        const col = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 3.4, 8), stoneMat);
+        col.position.set(180 + px, 2.35, Z(177.2));
+        cvg.add(col);
+      });
 
       // Burgundy mansard trim roof
       const thRoof = new THREE.Mesh(
@@ -1709,14 +1957,28 @@
       towerBase.position.set(180, 11.0, Z(185));
       cvg.add(towerBase);
 
-      // 4 Illuminated Clock Faces
-      const clkGeo = new THREE.CircleGeometry(1.2, 16);
-      const clkMat = new THREE.MeshBasicMaterial({ color: 0xfef9c3, side: THREE.DoubleSide, fog: false });
+      // 4 Illuminated Clock Faces with Dark Bezels & Clock Hands
+      const clkGeo = new THREE.CircleGeometry(1.15, 16);
+      const clkRimGeo = new THREE.TorusGeometry(1.18, 0.08, 6, 16);
+      const clkHandMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.5 });
       [[0, -2.12, 0], [0, 2.12, Math.PI], [-2.12, 0, Math.PI / 2], [2.12, 0, -Math.PI / 2]].forEach(([ox, oz, ry]) => {
         const cFace = new THREE.Mesh(clkGeo, clkMat);
         cFace.position.set(180 + ox, 11.5, Z(185) + oz);
         cFace.rotation.y = ry;
         cvg.add(cFace);
+        const cRim = new THREE.Mesh(clkRimGeo, clkHandMat);
+        cRim.position.set(180 + ox * 1.01, 11.5, Z(185) + oz * 1.01);
+        cRim.rotation.y = ry;
+        cvg.add(cRim);
+        const hHand = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.58, 0.04), clkHandMat);
+        hHand.position.set(180 + ox * 1.02 + Math.sin(ry) * 0.02, 11.7, Z(185) + oz * 1.02 + Math.cos(ry) * 0.02);
+        hHand.rotation.y = ry;
+        cvg.add(hHand);
+        const mHand = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.06, 0.04), clkHandMat);
+        mHand.position.set(180 + ox * 1.025, 11.5, Z(185) + oz * 1.025);
+        mHand.rotation.y = ry;
+        mHand.rotation.z = 0.45;
+        cvg.add(mHand);
       });
 
       // Copper Spire on top of clock tower
@@ -1728,13 +1990,12 @@
       spire.position.set(180, 17.2, Z(185));
       cvg.add(spire);
 
-      // Front porch stairs & banner
       const thSign = makeSign(
         ['CENTREVILLE TOWN HALL', 'ESTABLISHED 1900 • HISTORIC VILLAGE SQUARE'],
         9.5, 1.8,
         { bg: '#831843', fg: '#fef08a', borderColor: '#f472b6' }
       );
-      thSign.position.set(180, 5.2, Z(178.6));
+      thSign.position.set(180, 5.4, Z(178.6));
       cvg.add(thSign);
 
       // 2. CENTREVILLE GENERAL STORE at (150, Z(215))
@@ -1751,10 +2012,14 @@
       gsRoof.position.set(150, 5.8, Z(215));
       cvg.add(gsRoof);
 
-      // Wooden boardwalk veranda porch with rocking chairs & apple barrels
       const gsPorch = new THREE.Mesh(new THREE.BoxGeometry(12.4, 0.3, 3.2), woodMat);
       gsPorch.position.set(150, GROUND_Y + 0.15, Z(208.5));
       cvg.add(gsPorch);
+      [-3.4, 3.4].forEach(wx => {
+        const gWin = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.9, 0.14), warmWinGlowMat);
+        gWin.position.set(150 + wx, 2.2, Z(210.48));
+        cvg.add(gWin);
+      });
 
       [-3.5, 3.5].forEach(ox => {
         const chair = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.9, 0.8), darkWoodMat);
@@ -1783,7 +2048,6 @@
       cvg.add(ssBuilding);
       rectOb(203.5, 216.5, Z(210), Z(220));
 
-      // Steep Victorian gingerbread roof + decorative roof cresting & parlor windows
       const ssRoof = new THREE.Mesh(
         new THREE.ConeGeometry(8.8, 2.8, 4),
         new THREE.MeshStandardMaterial({ color: 0x9d174d, roughness: 0.55 })
@@ -1797,7 +2061,7 @@
       cvg.add(ssPorch);
 
       [-3.6, 3.6].forEach(wx => {
-        const win = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.1, 0.15), new THREE.MeshBasicMaterial({ color: 0xfef08a, fog: false }));
+        const win = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.1, 0.15), warmWinGlowMat);
         win.position.set(210 + wx, 2.3, Z(210.48));
         cvg.add(win);
       });
@@ -1805,13 +2069,19 @@
       ssDoor.position.set(210, 1.5, Z(210.48));
       cvg.add(ssDoor);
 
-      // Candy-striped pink and white scalloped awnings
+      // Candy-striped pink and white awning ribs
       const ssAwning = new THREE.Mesh(
-        new THREE.BoxGeometry(12.4, 0.4, 2.4),
+        new THREE.BoxGeometry(12.4, 0.36, 2.4),
         new THREE.MeshStandardMaterial({ color: 0xf472b6, roughness: 0.3 })
       );
       ssAwning.position.set(210, 3.6, Z(209));
       cvg.add(ssAwning);
+      const ssWhiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.35 });
+      for (let sx = -5.2; sx <= 5.2; sx += 2.08) {
+        const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.39, 2.42), ssWhiteMat);
+        stripe.position.set(210 + sx, 3.6, Z(209));
+        cvg.add(stripe);
+      }
 
       const ssSign = makeSign(
         ['OLD FASHIONED SWEET SHOPPE', 'HAND-SCOOPED ICE CREAM • WAFFLE CONES & FUDGE'],
@@ -1846,7 +2116,7 @@
       cvg.add(ccAwning);
 
       [-3.2, 3.2].forEach(wx => {
-        const win = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.9, 0.15), new THREE.MeshBasicMaterial({ color: 0xfef9c3, fog: false }));
+        const win = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.9, 0.15), warmWinGlowMat);
         win.position.set(150 + wx, 2.1, Z(175.98));
         cvg.add(win);
       });
@@ -1859,7 +2129,18 @@
       ccSign.position.set(150, 4.1, Z(175.8));
       cvg.add(ccSign);
 
-      // 5. GIANT 26M FERRIS WHEEL at (225, Z(225)) facing West along village square
+      // 5. GIANT 26M FERRIS WHEEL at (225, Z(225)) with upright counter-rotating passenger carts & boarding deck
+      const fwDeck = new THREE.Mesh(new THREE.BoxGeometry(7.2, 0.4, 9.0), woodMat);
+      fwDeck.position.set(225, GROUND_Y + 0.2, Z(225));
+      cvg.add(fwDeck);
+      const fwBooth = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.6, 2.2), new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.5 }));
+      fwBooth.position.set(219.5, GROUND_Y + 1.3, Z(220));
+      cvg.add(fwBooth);
+      const fwBoothRoof = new THREE.Mesh(new THREE.ConeGeometry(1.9, 1.0, 4), ssWhiteMat);
+      fwBoothRoof.rotation.y = Math.PI / 4;
+      fwBoothRoof.position.set(219.5, GROUND_Y + 3.0, Z(220));
+      cvg.add(fwBoothRoof);
+
       const fwGrp = new THREE.Group();
       fwGrp.position.set(225, 14.5, Z(225));
 
@@ -1879,6 +2160,7 @@
       });
 
       const wheelWheel = new THREE.Group();
+      wheelWheel.userData.noMerge = true;
       const rOuter = 11.5, rInner = 9.0;
       const rim1 = new THREE.Mesh(new THREE.TorusGeometry(rOuter, 0.22, 8, 36), metalMat);
       rim1.rotation.y = Math.PI / 2;
@@ -1900,28 +2182,44 @@
 
       const nSpokes = 12;
       const cartCols = [0xef4444, 0x3b82f6, 0xfacc15, 0x10b981, 0xa855f7, 0xf97316];
+      const cartMats = cartCols.map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.4 }));
+      const spokeGeo = new THREE.CylinderGeometry(0.1, 0.1, rOuter * 2, 6);
+      const crossGeo = new THREE.CylinderGeometry(0.08, 0.08, 2.6, 6);
+      const cartTubGeo = new THREE.BoxGeometry(1.9, 0.85, 1.5);
+      const cartRoofGeo = new THREE.BoxGeometry(2.05, 0.14, 1.65);
+      const cartRodGeo = new THREE.CylinderGeometry(0.04, 0.04, 1.3, 6);
       for (let i = 0; i < nSpokes; i++) {
         const ang = (i / nSpokes) * Math.PI * 2;
-        const sp1 = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, rOuter * 2, 6), metalMat);
+        const sp1 = new THREE.Mesh(spokeGeo, metalMat);
         sp1.rotation.x = ang;
         sp1.position.x = -1.3;
         wheelWheel.add(sp1);
-        const sp2 = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, rOuter * 2, 6), metalMat);
+        const sp2 = new THREE.Mesh(spokeGeo, metalMat);
         sp2.rotation.x = ang;
         sp2.position.x = 1.3;
         wheelWheel.add(sp2);
 
-        const cross = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 2.6, 6), metalMat);
+        const cross = new THREE.Mesh(crossGeo, metalMat);
         cross.rotation.z = Math.PI / 2;
         cross.position.set(0, Math.sin(ang) * rOuter, Math.cos(ang) * rOuter);
         wheelWheel.add(cross);
 
-        const cart = new THREE.Mesh(
-          new THREE.BoxGeometry(2.0, 1.4, 1.6),
-          new THREE.MeshStandardMaterial({ color: cartCols[i % cartCols.length], roughness: 0.4 })
-        );
-        cart.position.set(0, Math.sin(ang) * rOuter, Math.cos(ang) * rOuter);
-        wheelWheel.add(cart);
+        // Upright suspended passenger gondola (counter-rotated in update!)
+        const cartPivot = new THREE.Group();
+        cartPivot.position.set(0, Math.sin(ang) * rOuter, Math.cos(ang) * rOuter);
+        const tub = new THREE.Mesh(cartTubGeo, cartMats[i % cartMats.length]);
+        tub.position.y = -0.85;
+        cartPivot.add(tub);
+        const cRoof = new THREE.Mesh(cartRoofGeo, ssWhiteMat);
+        cRoof.position.y = 0.2;
+        cartPivot.add(cRoof);
+        [-0.85, 0.85].forEach(rx => {
+          const rod = new THREE.Mesh(cartRodGeo, metalMat);
+          rod.position.set(rx, -0.35, 0);
+          cartPivot.add(rod);
+        });
+        wheelWheel.add(cartPivot);
+        ferrisCarts.push(cartPivot);
       }
       fwGrp.add(wheelWheel);
       ferrisWheelMesh = wheelWheel;
@@ -1938,28 +2236,72 @@
       cvg.add(carCenter);
 
       carouselTop = new THREE.Group();
+      carouselTop.userData.noMerge = true;
       carouselTop.position.set(180, GROUND_Y + 4.8, Z(225));
       const canopy = new THREE.Mesh(
         new THREE.ConeGeometry(9.5, 3.2, 20),
         new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.5 })
       );
       carouselTop.add(canopy);
+      const canopyFrieze = new THREE.Mesh(
+        new THREE.CylinderGeometry(9.5, 9.5, 0.72, 20),
+        new THREE.MeshStandardMaterial({ color: 0x991b1b, roughness: 0.4 })
+      );
+      canopyFrieze.position.y = -1.25;
+      carouselTop.add(canopyFrieze);
+      const carBulbs = [];
+      for (let bi = 0; bi < 16; bi++) {
+        const ba = (bi / 16) * Math.PI * 2;
+        carBulbs.push({ x: Math.cos(ba) * 9.6, y: -1.25, z: Math.sin(ba) * 9.6, sx: 0.14, sy: 0.14, sz: 0.14 });
+      }
+      addInstMesh(carouselTop, unitSphereGeo, lampGlowMat, carBulbs);
 
+      const horseCols = [0xf8fafc, 0x78350f, 0xd97706];
+      const horseMats = horseCols.map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.45 }));
+      const saddleMat = new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.5 });
+      const poleGeo = new THREE.CylinderGeometry(0.08, 0.08, 4.2, 6);
+      const hBodyGeo = new THREE.BoxGeometry(0.46, 0.48, 1.15);
+      const hNeckGeo = new THREE.BoxGeometry(0.24, 0.52, 0.28);
+      const hHeadGeo = new THREE.BoxGeometry(0.22, 0.22, 0.44);
+      const hLegGeo = new THREE.CylinderGeometry(0.05, 0.04, 0.48, 6);
       for (let i = 0; i < 8; i++) {
         const ang = (i / 8) * Math.PI * 2;
-        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 4.2, 6), metalMat);
-        pole.position.set(Math.cos(ang) * 6.5, -2.1, Math.sin(ang) * 6.5);
+        const px = Math.cos(ang) * 6.5, pz = Math.sin(ang) * 6.5;
+        const pole = new THREE.Mesh(poleGeo, metalMat);
+        pole.position.set(px, -2.1, pz);
         carouselTop.add(pole);
-        const horse = new THREE.Mesh(
-          new THREE.BoxGeometry(1.4, 0.8, 0.5),
-          new THREE.MeshStandardMaterial({ color: i % 2 === 0 ? 0xf8fafc : 0x78350f })
-        );
-        horse.position.set(Math.cos(ang) * 6.5, -2.1 + (i % 2) * 0.4, Math.sin(ang) * 6.5);
+
+        const hMat = horseMats[i % horseMats.length];
+        const horse = new THREE.Group();
+        const baseY = -2.2 + (i % 2) * 0.25;
+        horse.position.set(px, baseY, pz);
+        horse.rotation.y = -ang; // tangent facing direction of rotation
+        const hBody = new THREE.Mesh(hBodyGeo, hMat);
+        horse.add(hBody);
+        const hSaddle = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.14, 0.45), saddleMat);
+        hSaddle.position.y = 0.22;
+        horse.add(hSaddle);
+        const hNeck = new THREE.Mesh(hNeckGeo, hMat);
+        hNeck.position.set(0, 0.38, 0.48);
+        hNeck.rotation.x = 0.35;
+        horse.add(hNeck);
+        const hHead = new THREE.Mesh(hHeadGeo, hMat);
+        hHead.position.set(0, 0.62, 0.68);
+        hHead.rotation.x = 0.25;
+        horse.add(hHead);
+        [-0.14, 0.14].forEach(lx => [-0.42, 0.42].forEach(lz => {
+          const leg = new THREE.Mesh(hLegGeo, hMat);
+          leg.position.set(lx, -0.38, lz);
+          leg.rotation.x = lz > 0 ? -0.3 : 0.3;
+          horse.add(leg);
+        }));
         carouselTop.add(horse);
+        carouselHorses.push({ mesh: horse, baseY, phase: i * 1.1 });
       }
       cvg.add(carouselTop);
       circOb(180, Z(225), 9.2);
 
+      mergeGroupByMaterial(cvg);
       islandsGroup.add(cvg);
     }
 
@@ -1968,9 +2310,13 @@
     // Runs on miniature narrow-gauge tracks looping around Centreville, through the woods,
     // and past Far Enough Farm!
     // ------------------------------------------------------------------------
-    let miniTrain = null, miniTrainPuff = null;
+    let miniTrain = null;
+    const miniTrainCars = [];
+    const miniTrainPuffs = [];
+    const _trainOut = { x: 0, z: 0, yaw: 0 };
 
-    function evalTrainTrack(tNorm) {
+    function evalTrainTrack(tNorm, out) {
+      const res = out || _trainOut;
       const n = TRAIN_TRACK.length;
       const f = ((tNorm % 1) + 1) % 1 * n;
       const idx = Math.floor(f);
@@ -1988,7 +2334,10 @@
       const catN = (a, b, c, d) => 0.5 * ((2 * b) + (-a + c) * tN + (2 * a - 5 * b + 4 * c - d) * tN2 + (-a + 3 * b - 3 * c + d) * tN3);
       const nx = catN(p0[0], p1[0], p2[0], p3[0]);
       const nz = catN(p0[1], p1[1], p2[1], p3[1]);
-      return { x, z, yaw: Math.atan2(nx - x, nz - z) };
+      res.x = x;
+      res.z = z;
+      res.yaw = Math.atan2(nx - x, nz - z);
+      return res;
     }
 
     {
@@ -2018,26 +2367,22 @@
       stSign.position.set(160, 4.2, Z(163.4));
       trGrp.add(stSign);
 
-      // Station brass boarding bell
       const bell = new THREE.Mesh(new THREE.ConeGeometry(0.25, 0.35, 8), new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.8, roughness: 0.2 }));
       bell.position.set(155, 2.8, Z(163));
       trGrp.add(bell);
 
-      // 2. RAILWAY TRACKS (Ballast bed, wooden crossties, and dual steel rails)
+      // 2. RAILWAY TRACKS (wooden crossties + dual steel rails)
       const numTies = 140;
       const tieGeo = new THREE.BoxGeometry(1.6, 0.12, 0.25);
       const tieMesh = new THREE.InstancedMesh(tieGeo, darkWoodMat, numTies);
-      const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1), up = new THREE.Vector3(0, 1, 0);
-
       for (let i = 0; i < numTies; i++) {
         const tr = evalTrainTrack(i / numTies);
-        q.setFromAxisAngle(up, tr.yaw);
-        m4.compose(v.set(tr.x, GROUND_Y + 0.06, tr.z), q, one);
-        tieMesh.setMatrixAt(i, m4);
+        _q.setFromAxisAngle(_up, tr.yaw);
+        _m4.compose(_v.set(tr.x, GROUND_Y + 0.06, tr.z), _q, _sc.set(1, 1, 1));
+        tieMesh.setMatrixAt(i, _m4);
       }
       trGrp.add(tieMesh);
 
-      // Dual shiny steel rails
       [-0.55, 0.55].forEach(side => {
         const railCurve = [];
         for (let i = 0; i <= numTies; i++) {
@@ -2051,111 +2396,114 @@
         trGrp.add(railMesh);
       });
 
-      // 3. ANIMATED MINIATURE STEAM TRAIN
+      // 3. ANIMATED MINIATURE STEAM TRAIN (locomotive + tender + 3 articulated coaches on steel wheels)
+      const tBlackMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.3, metalness: 0.7 });
+      const tRedMat = new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.4 });
+      const tWheelGeo = new THREE.CylinderGeometry(0.24, 0.24, 0.08, 10);
+      const tCoachWheelGeo = new THREE.CylinderGeometry(0.18, 0.18, 0.07, 10);
+
       miniTrain = new THREE.Group();
+      miniTrain.userData.noMerge = true;
 
-      // Steam Locomotive
-      const loco = new THREE.Group();
-      // Boiler
-      const boiler = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.55, 0.55, 2.2, 12),
-        new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.3, metalness: 0.7 })
-      );
+      const boiler = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 2.2, 12), tBlackMat);
       boiler.rotation.x = Math.PI / 2;
-      boiler.position.set(0, 0.75, 0.3);
-      loco.add(boiler);
+      boiler.position.set(0, 0.85, 0.35);
+      miniTrain.add(boiler);
 
-      // Driver Cab
-      const cab = new THREE.Mesh(
-        new THREE.BoxGeometry(1.3, 1.4, 1.1),
-        new THREE.MeshStandardMaterial({ color: 0x991b1b, roughness: 0.4 })
-      );
-      cab.position.set(0, 1.1, -0.9);
-      loco.add(cab);
+      const steamDome = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 8), bellBrassMat);
+      steamDome.position.set(0, 1.42, 0.35);
+      miniTrain.add(steamDome);
 
-      // Red Cowcatcher (pilot) at front
-      const cow = new THREE.Mesh(
-        new THREE.ConeGeometry(0.65, 0.7, 4),
-        new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.5 })
-      );
+      const cab = new THREE.Mesh(new THREE.BoxGeometry(1.3, 1.4, 1.1), tRedMat);
+      cab.position.set(0, 1.15, -0.85);
+      miniTrain.add(cab);
+      const cabRoof = new THREE.Mesh(new THREE.BoxGeometry(1.44, 0.12, 1.3), darkWoodMat);
+      cabRoof.position.set(0, 1.88, -0.88);
+      miniTrain.add(cabRoof);
+
+      const cow = new THREE.Mesh(new THREE.ConeGeometry(0.65, 0.7, 4), new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.5 }));
       cow.rotation.x = -Math.PI / 2;
       cow.rotation.y = Math.PI / 4;
-      cow.position.set(0, 0.35, 1.6);
-      loco.add(cow);
+      cow.position.set(0, 0.42, 1.6);
+      miniTrain.add(cow);
 
-      // Smokestack with steam puff
-      const stack = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.1, 0.6, 8), metalMat);
-      stack.position.set(0, 1.45, 1.1);
-      loco.add(stack);
-
-      miniTrainPuff = new THREE.Mesh(
-        new THREE.SphereGeometry(0.28, 8, 8),
-        new THREE.MeshBasicMaterial({ color: 0xf8fafc, transparent: true, opacity: 0.75, fog: false })
-      );
-      miniTrainPuff.position.set(0, 1.85, 1.0);
-      loco.add(miniTrainPuff);
-
-      // Brass Headlamp
-      const lamp = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.16, 0.16, 0.25, 8),
-        new THREE.MeshBasicMaterial({ color: 0xfef08a, fog: false })
-      );
-      lamp.rotation.x = Math.PI / 2;
-      lamp.position.set(0, 1.1, 1.4);
-      loco.add(lamp);
-
-      // Coal Tender
-      const tender = new THREE.Mesh(
-        new THREE.BoxGeometry(1.2, 0.8, 1.3),
-        new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.8 })
-      );
-      tender.position.set(0, 0.65, -2.2);
-      loco.add(tender);
-
-      // 3 Open-air Passenger Coaches
-      [-4.0, -6.0, -8.0].forEach((cz, ci) => {
-        const coach = new THREE.Group();
-        coach.position.set(0, 0, cz);
-
-        // Green carriage body
-        const body = new THREE.Mesh(
-          new THREE.BoxGeometry(1.3, 0.65, 1.7),
-          new THREE.MeshStandardMaterial({ color: ci % 2 === 0 ? 0x15803d : 0xca8a04, roughness: 0.5 })
-        );
-        body.position.y = 0.55;
-        coach.add(body);
-
-        // Canopy roof
-        const cRoof = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.1, 1.8), darkWoodMat);
-        cRoof.position.y = 1.35;
-        coach.add(cRoof);
-
-        // Canopy support posts
-        [-0.6, 0.6].forEach(px => {
-          [-0.75, 0.75].forEach(pz => {
-            const p = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.8, 6), metalMat);
-            p.position.set(px, 0.95, pz);
-            coach.add(p);
-          });
+      // Driving wheels & side rods
+      [-0.56, 0.56].forEach(wx => {
+        [-0.35, 0.35, 1.05].forEach(wz => {
+          const wh = new THREE.Mesh(tWheelGeo, metalMat);
+          wh.rotation.z = Math.PI / 2;
+          wh.position.set(wx, 0.24, wz);
+          miniTrain.add(wh);
         });
-
-        loco.add(coach);
+        const rod = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.07, 1.5), tRedMat);
+        rod.position.set(wx + (wx > 0 ? 0.05 : -0.05), 0.24, 0.35);
+        miniTrain.add(rod);
       });
 
-      miniTrain.add(loco);
+      const stack = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.1, 0.6, 8), metalMat);
+      stack.position.set(0, 1.55, 1.1);
+      miniTrain.add(stack);
+
+      const puffMat = new THREE.MeshBasicMaterial({ color: 0xf8fafc, transparent: true, opacity: 0.72, fog: false });
+      for (let pi = 0; pi < 4; pi++) {
+        const puff = new THREE.Mesh(new THREE.SphereGeometry(0.22 + pi * 0.05, 8, 6), puffMat);
+        puff.position.set(0, 1.9 + pi * 0.35, 1.0 - pi * 0.28);
+        miniTrain.add(puff);
+        miniTrainPuffs.push({ mesh: puff, phase: pi * 1.5 });
+      }
+
+      const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.25, 8), new THREE.MeshBasicMaterial({ color: 0xfef08a, fog: false }));
+      lamp.rotation.x = Math.PI / 2;
+      lamp.position.set(0, 1.18, 1.45);
+      miniTrain.add(lamp);
+
+      const tender = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.8, 1.3), tBlackMat);
+      tender.position.set(0, 0.65, -2.15);
+      miniTrain.add(tender);
+      [-0.55, 0.55].forEach(wx => [-1.8, -2.5].forEach(wz => {
+        const twh = new THREE.Mesh(tCoachWheelGeo, metalMat);
+        twh.rotation.z = Math.PI / 2;
+        twh.position.set(wx, 0.18, wz);
+        miniTrain.add(twh);
+      }));
+      mergeGroupByMaterial(miniTrain);
       trGrp.add(miniTrain);
 
+      // 3 Independent Curve-Tracking Open-Air Passenger Coaches on wheels
+      for (let ci = 0; ci < 3; ci++) {
+        const coach = new THREE.Group();
+        coach.userData.noMerge = true;
+        const body = new THREE.Mesh(
+          new THREE.BoxGeometry(1.3, 0.62, 1.8),
+          new THREE.MeshStandardMaterial({ color: ci % 2 === 0 ? 0x15803d : 0xca8a04, roughness: 0.5 })
+        );
+        body.position.y = 0.58;
+        coach.add(body);
+        const cRoof = new THREE.Mesh(new THREE.BoxGeometry(1.38, 0.1, 1.9), darkWoodMat);
+        cRoof.position.y = 1.42;
+        coach.add(cRoof);
+        [-0.6, 0.6].forEach(px => [-0.75, 0.75].forEach(pz => {
+          const p = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.84, 6), metalMat);
+          p.position.set(px, 0.98, pz);
+          coach.add(p);
+        }));
+        [-0.55, 0.55].forEach(wx => [-0.6, 0.6].forEach(wz => {
+          const cw = new THREE.Mesh(tCoachWheelGeo, metalMat);
+          cw.rotation.z = Math.PI / 2;
+          cw.position.set(wx, 0.18, wz);
+          coach.add(cw);
+        }));
+        mergeGroupByMaterial(coach);
+        trGrp.add(coach);
+        miniTrainCars.push({ mesh: coach, offset: (ci + 1) * 0.0115 });
+      }
+
+      mergeGroupByMaterial(trGrp);
       islandsGroup.add(trGrp);
     }
 
     // ------------------------------------------------------------------------
     // Landmark: Far Enough Farm (Est. 1959)
-    // Located beyond Centreville to the east (x=265..345, z=Z(140..225)):
-    // - Cedar Entrance Archway
-    // - Big Classic Red Barn with gambrel roof, hayloft & golden rooster weather vane
-    // - Farm Silo (white corrugated concrete with galvanized silver dome)
-    // - Vintage Red Farmall Tractor
-    // - Cedar post-and-rail fences & paddocks with sheep, cows, horses, goats & pigs!
     // ------------------------------------------------------------------------
     {
       const farmGrp = new THREE.Group();
@@ -2180,77 +2528,78 @@
       farmSign.rotation.y = -Math.PI / 2;
       farmGrp.add(farmSign);
 
-      // 2. THE BIG RED BARN at (295, Z(185))
+      // 2. THE BIG RED BARN at (295, Z(185)) with extruded gambrel roof & cross-buck doors
       const barnBody = new THREE.Mesh(
         new THREE.BoxGeometry(20.0, 6.5, 13.0),
         new THREE.MeshStandardMaterial({ color: 0x991b1b, roughness: 0.7 })
       );
       barnBody.position.set(295, 3.25, Z(185));
       farmGrp.add(barnBody);
-      rectOb(284, 306, Z(177.5), Z(192.5)); // Barn walls block collision
+      rectOb(284, 306, Z(177.5), Z(192.5));
 
-      // Gambrel Barn Roof (Traditional double-sloped red roof with white fascia)
-      const roofLower = new THREE.Mesh(
-        new THREE.BoxGeometry(20.4, 3.2, 13.4),
-        new THREE.MeshStandardMaterial({ color: 0x7f1d1d, roughness: 0.6 })
-      );
-      roofLower.position.set(295, 7.8, Z(185));
-      farmGrp.add(roofLower);
+      const gambrelShape = new THREE.Shape();
+      gambrelShape.moveTo(-7.1, 0);
+      gambrelShape.lineTo(7.1, 0);
+      gambrelShape.lineTo(4.6, 3.2);
+      gambrelShape.lineTo(0, 5.1);
+      gambrelShape.lineTo(-4.6, 3.2);
+      gambrelShape.closePath();
+      const gambrelGeo = new THREE.ExtrudeGeometry(gambrelShape, { depth: 20.6, bevelEnabled: false });
+      gambrelGeo.translate(0, 0, -10.3);
+      gambrelGeo.rotateY(Math.PI / 2);
+      const gambrelRoof = new THREE.Mesh(gambrelGeo, new THREE.MeshStandardMaterial({ color: 0x7f1d1d, roughness: 0.6 }));
+      gambrelRoof.position.set(295, 6.4, Z(185));
+      farmGrp.add(gambrelRoof);
 
-      const roofUpper = new THREE.Mesh(
-        new THREE.ConeGeometry(9.2, 3.6, 4),
-        new THREE.MeshStandardMaterial({ color: 0x7f1d1d, roughness: 0.6 })
-      );
-      roofUpper.rotation.y = Math.PI / 4;
-      roofUpper.position.set(295, 10.8, Z(185));
-      farmGrp.add(roofUpper);
-
-      // Rooftop Cupola with Golden Rooster Weather Vane
-      const cupola = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.6, 2.0), new THREE.MeshStandardMaterial({ color: 0xf8fafc }));
-      cupola.position.set(295, 12.8, Z(185));
+      const whiteBarnMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.6 });
+      const cupola = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.6, 2.0), whiteBarnMat);
+      cupola.position.set(295, 12.1, Z(185));
       farmGrp.add(cupola);
+      const cupolaCap = new THREE.Mesh(new THREE.ConeGeometry(1.65, 1.1, 4), new THREE.MeshStandardMaterial({ color: 0x7f1d1d, roughness: 0.6 }));
+      cupolaCap.rotation.y = Math.PI / 4;
+      cupolaCap.position.set(295, 13.4, Z(185));
+      farmGrp.add(cupolaCap);
 
-      const vanePole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.6, 6), metalMat);
-      vanePole.position.set(295, 14.0, Z(185));
+      const vanePole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.5, 6), metalMat);
+      vanePole.position.set(295, 14.3, Z(185));
       farmGrp.add(vanePole);
-
       const rooster = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.4, 0.1), new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.8 }));
-      rooster.position.set(295, 14.6, Z(185));
+      rooster.position.set(295, 14.9, Z(185));
       farmGrp.add(rooster);
 
-      // White double barn doors with cross-bucks
-      const doorL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 4.2, 2.5), new THREE.MeshStandardMaterial({ color: 0xf8fafc }));
-      doorL.position.set(284.9, 2.1, Z(183.5));
-      farmGrp.add(doorL);
-      const doorR = new THREE.Mesh(new THREE.BoxGeometry(0.2, 4.2, 2.5), new THREE.MeshStandardMaterial({ color: 0xf8fafc }));
-      doorR.position.set(284.9, 2.1, Z(186.5));
-      farmGrp.add(doorR);
+      // White double barn doors with X cross-buck trim
+      [-1.5, 1.5].forEach(dz => {
+        const door = new THREE.Mesh(new THREE.BoxGeometry(0.2, 4.2, 2.5), whiteBarnMat);
+        door.position.set(284.9, 2.1, Z(185) + dz);
+        farmGrp.add(door);
+        [-0.7, 0.7].forEach(ang => {
+          const xb = new THREE.Mesh(new THREE.BoxGeometry(0.26, 4.4, 0.16), new THREE.MeshStandardMaterial({ color: 0x991b1b }));
+          xb.position.set(284.88, 2.1, Z(185) + dz);
+          xb.rotation.x = ang;
+          farmGrp.add(xb);
+        });
+      });
 
-      // Straw bales stacked near barn entrance
       [-1.2, 0, 1.2].forEach((oz, bi) => {
-        const bale = new THREE.Mesh(
-          new THREE.BoxGeometry(1.4, 0.7, 0.9),
-          new THREE.MeshStandardMaterial({ color: 0xfde047, roughness: 0.9 })
-        );
+        const bale = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.7, 0.9), new THREE.MeshStandardMaterial({ color: 0xfde047, roughness: 0.9 }));
         bale.position.set(283.5, GROUND_Y + 0.35 + (bi === 1 ? 0.7 : 0), Z(180) + oz);
         farmGrp.add(bale);
         circOb(283.5, Z(180) + oz, 0.6);
       });
 
-      // 3. FARM SILO at (312, Z(175))
-      const silo = new THREE.Mesh(
-        new THREE.CylinderGeometry(2.8, 2.8, 13.0, 16),
-        new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.6 })
-      );
+      // 3. FARM SILO at (312, Z(175)) with steel tension hoops
+      const silo = new THREE.Mesh(new THREE.CylinderGeometry(2.8, 2.8, 13.0, 16), new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.6 }));
       silo.position.set(312, 6.5, Z(175));
       farmGrp.add(silo);
-      circOb(312, Z(175), 3.0); // solid silo
+      for (let sy = 2.5; sy <= 11.5; sy += 2.2) {
+        const hoop = new THREE.Mesh(new THREE.TorusGeometry(2.84, 0.05, 6, 16), metalMat);
+        hoop.rotation.x = Math.PI / 2;
+        hoop.position.set(312, sy, Z(175));
+        farmGrp.add(hoop);
+      }
+      circOb(312, Z(175), 3.0);
 
-      // Galvanized metal dome cap
-      const siloDome = new THREE.Mesh(
-        new THREE.SphereGeometry(2.82, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.5),
-        metalMat
-      );
+      const siloDome = new THREE.Mesh(new THREE.SphereGeometry(2.82, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.5), metalMat);
       siloDome.position.set(312, 13.0, Z(175));
       farmGrp.add(siloDome);
 
@@ -2258,13 +2607,9 @@
       const trGrpTractor = new THREE.Group();
       trGrpTractor.position.set(282, GROUND_Y, Z(192));
       trGrpTractor.rotation.y = 0.4;
-
-      // Red chassis and engine hood
       const hood = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.9, 2.4), new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.4 }));
       hood.position.set(0, 0.9, 0.4);
       trGrpTractor.add(hood);
-
-      // Big rear tractor wheels
       const wheelMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.9 });
       [-0.8, 0.8].forEach(wx => {
         const rWheel = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.35, 14), wheelMat);
@@ -2272,193 +2617,178 @@
         rWheel.position.set(wx, 0.9, -0.6);
         trGrpTractor.add(rWheel);
       });
-
-      // Front small steering wheels
       [-0.5, 0.5].forEach(wx => {
         const fWheel = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.22, 10), wheelMat);
         fWheel.rotation.z = Math.PI / 2;
         fWheel.position.set(wx, 0.45, 1.4);
         trGrpTractor.add(fWheel);
       });
-
-      // Vertical exhaust pipe
       const exPipe = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.2, 6), metalMat);
       exPipe.position.set(0.4, 1.7, 0.9);
       trGrpTractor.add(exPipe);
-
       farmGrp.add(trGrpTractor);
       circOb(282, Z(192), 1.5);
 
-      // 5. POST-AND-RAIL FENCES & ANIMAL PADDOCKS
-      // Paddock A: Sheep Pasture at (278, Z(165))
-      // Paddock B: Horse / Pony Corral at (324, Z(200))
-      // Paddock C: Holstein Dairy Cows at (324, Z(160))
-      // Paddock D: Goats & Pigs at (278, Z(205))
+      // 5. POST-AND-RAIL FENCES (instanced!)
       const padFences = [
-        [268, 288, Z(154), Z(176)], // Sheep
-        [312, 336, Z(188), Z(214)], // Horses
-        [312, 336, Z(148), Z(174)], // Cows
-        [268, 288, Z(196), Z(216)]  // Goats & Pigs
+        [268, 288, Z(154), Z(176)],
+        [312, 336, Z(188), Z(214)],
+        [312, 336, Z(148), Z(174)],
+        [268, 288, Z(196), Z(216)]
       ];
-
+      const fPosts = [], fRails = [];
       padFences.forEach(([x0, x1, z0, z1]) => {
-        // Wooden corner posts
         [[x0, z0], [x1, z0], [x0, z1], [x1, z1]].forEach(([px, pz]) => {
-          const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 1.4, 6), darkWoodMat);
-          post.position.set(px, GROUND_Y + 0.7, pz);
-          farmGrp.add(post);
+          fPosts.push({ x: px, y: GROUND_Y + 0.7, z: pz, sx: 0.13, sy: 1.4, sz: 0.13 });
         });
-        // Perimeter rails
         const lenX = x1 - x0, lenZ = z1 - z0;
         [0.4, 0.9].forEach(ry => {
-          const r1 = new THREE.Mesh(new THREE.BoxGeometry(lenX, 0.1, 0.08), woodMat);
-          r1.position.set((x0 + x1) / 2, GROUND_Y + ry, z0);
-          farmGrp.add(r1);
-          const r2 = new THREE.Mesh(new THREE.BoxGeometry(lenX, 0.1, 0.08), woodMat);
-          r2.position.set((x0 + x1) / 2, GROUND_Y + ry, z1);
-          farmGrp.add(r2);
-          const r3 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, lenZ), woodMat);
-          r3.position.set(x0, GROUND_Y + ry, (z0 + z1) / 2);
-          farmGrp.add(r3);
-          const r4 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, lenZ), woodMat);
-          r4.position.set(x1, GROUND_Y + ry, (z0 + z1) / 2);
-          farmGrp.add(r4);
+          fRails.push({ x: (x0 + x1) / 2, y: GROUND_Y + ry, z: z0, sx: lenX, sy: 0.1, sz: 0.08 });
+          fRails.push({ x: (x0 + x1) / 2, y: GROUND_Y + ry, z: z1, sx: lenX, sy: 0.1, sz: 0.08 });
+          fRails.push({ x: x0, y: GROUND_Y + ry, z: (z0 + z1) / 2, sx: 0.08, sy: 0.1, sz: lenZ });
+          fRails.push({ x: x1, y: GROUND_Y + ry, z: (z0 + z1) / 2, sx: 0.08, sy: 0.1, sz: lenZ });
         });
       });
+      addInstMesh(farmGrp, unitCylGeo, darkWoodMat, fPosts);
+      addInstMesh(farmGrp, unitBoxGeo, woodMat, fRails);
 
-      // 6. ANIMALS IN THE PADDOCKS
-      // A. Sheep in Sheep Pasture (fluffy white bodies, black faces & legs)
+      // 6. ANIMALS IN THE PADDOCKS (with proper legs, ears, snouts & tails)
       const sheepMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.9 });
       const sheepFaceMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.8 });
-      [
-        [273, Z(160), 0.5], [280, Z(163), -0.8], [276, Z(170), 1.2], [283, Z(168), 2.1]
-      ].forEach(([sx, sz, srot]) => {
+      [[273, Z(160), 0.5], [280, Z(163), -0.8], [276, Z(170), 1.2], [283, Z(168), 2.1]].forEach(([sx, sz, srot]) => {
         const shp = new THREE.Group();
         shp.position.set(sx, GROUND_Y, sz);
         shp.rotation.y = srot;
-
         const body = new THREE.Mesh(new THREE.SphereGeometry(0.55, 8, 8), sheepMat);
         body.scale.set(1.4, 1.0, 1.0);
         body.position.y = 0.65;
         shp.add(body);
-
         const head = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.4), sheepFaceMat);
         head.position.set(0.85, 0.85, 0);
         shp.add(head);
-
-        [-0.4, 0.4].forEach(lx => {
-          [-0.25, 0.25].forEach(lz => {
-            const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.45, 6), sheepFaceMat);
-            leg.position.set(lx, 0.22, lz);
-            shp.add(leg);
-          });
-        });
-
+        [-0.4, 0.4].forEach(lx => [-0.25, 0.25].forEach(lz => {
+          const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.45, 6), sheepFaceMat);
+          leg.position.set(lx, 0.22, lz);
+          shp.add(leg);
+        }));
         farmGrp.add(shp);
         circOb(sx, sz, 0.7);
       });
 
-      // B. Horses in Horse Corral (chestnut & black horses)
       const horseCols = [0x78350f, 0x1c1917];
-      [
-        [320, Z(196), 0.3, horseCols[0]], [328, Z(206), -1.1, horseCols[1]]
-      ].forEach(([hx, hz, hrot, col]) => {
+      [[320, Z(196), 0.3, horseCols[0]], [328, Z(206), -1.1, horseCols[1]]].forEach(([hx, hz, hrot, col]) => {
         const hrs = new THREE.Group();
         hrs.position.set(hx, GROUND_Y, hz);
         hrs.rotation.y = hrot;
-
         const hMat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.6 });
-        const body = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.9, 0.8), hMat);
-        body.position.y = 1.35;
+        const body = new THREE.Mesh(new THREE.BoxGeometry(1.75, 0.85, 0.76), hMat);
+        body.position.y = 1.32;
         hrs.add(body);
-
-        const neck = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.9, 0.4), hMat);
-        neck.position.set(0.9, 1.8, 0);
-        neck.rotation.z = -0.4;
+        const neck = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.85, 0.34), hMat);
+        neck.position.set(0.85, 1.78, 0);
+        neck.rotation.z = -0.45;
         hrs.add(neck);
-
-        const head = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.4, 0.35), hMat);
-        head.position.set(1.3, 2.1, 0);
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.34, 0.3), hMat);
+        head.position.set(1.22, 2.08, 0);
+        head.rotation.z = -0.25;
         hrs.add(head);
-
-        [-0.6, 0.6].forEach(lx => {
-          [-0.25, 0.25].forEach(lz => {
-            const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.9, 6), hMat);
-            leg.position.set(lx, 0.45, lz);
-            hrs.add(leg);
-          });
-        });
-
+        const tail = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.75, 0.14), sheepFaceMat);
+        tail.position.set(-0.96, 1.15, 0);
+        tail.rotation.z = 0.25;
+        hrs.add(tail);
+        [-0.62, 0.62].forEach(lx => [-0.24, 0.24].forEach(lz => {
+          const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.07, 0.9, 6), hMat);
+          leg.position.set(lx, 0.45, lz);
+          hrs.add(leg);
+        }));
         farmGrp.add(hrs);
         circOb(hx, hz, 1.1);
       });
 
-      // C. Holstein Dairy Cows (black-and-white spotted cows)
       const cowMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.7 });
       const cowSpotMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.7 });
-      [
-        [320, Z(156), 0.6], [328, Z(165), -0.7]
-      ].forEach(([cx, cz, crot]) => {
+      const pigMat = new THREE.MeshStandardMaterial({ color: 0xf472b6, roughness: 0.6 });
+      [[320, Z(156), 0.6], [328, Z(165), -0.7]].forEach(([cx, cz, crot]) => {
         const cw = new THREE.Group();
         cw.position.set(cx, GROUND_Y, cz);
         cw.rotation.y = crot;
-
-        const body = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.1, 0.9), cowMat);
+        const body = new THREE.Mesh(new THREE.BoxGeometry(1.95, 1.05, 0.88), cowMat);
         body.position.y = 1.25;
         cw.add(body);
-
-        const spot = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.92), cowSpotMat);
+        const spot = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.88, 0.91), cowSpotMat);
         spot.position.set(0.2, 1.25, 0);
         cw.add(spot);
-
-        const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.55, 0.5), cowMat);
-        head.position.set(1.3, 1.6, 0);
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.52, 0.46), cowMat);
+        head.position.set(1.25, 1.56, 0);
         cw.add(head);
-
-        [-0.7, 0.7].forEach(lx => {
-          [-0.3, 0.3].forEach(lz => {
-            const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.75, 6), cowSpotMat);
-            leg.position.set(lx, 0.38, lz);
-            cw.add(leg);
-          });
+        const muzzle = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.26, 0.4), pigMat);
+        muzzle.position.set(1.52, 1.46, 0);
+        cw.add(muzzle);
+        [-0.2, 0.2].forEach(hz2 => {
+          const horn = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.22, 6), stoneMat);
+          horn.position.set(1.18, 1.9, hz2);
+          cw.add(horn);
         });
-
+        [-0.7, 0.7].forEach(lx => [-0.3, 0.3].forEach(lz => {
+          const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.08, 0.75, 6), cowSpotMat);
+          leg.position.set(lx, 0.38, lz);
+          cw.add(leg);
+        }));
         farmGrp.add(cw);
         circOb(cx, cz, 1.2);
       });
 
-      // D. Goats & Pigs in Paddock D
-      // Cable spool climbing ramp for goats
       const spool = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 0.8, 10), woodMat);
       spool.position.set(278, GROUND_Y + 0.4, Z(206));
       farmGrp.add(spool);
       circOb(278, Z(206), 1.2);
 
-      // Goat standing on spool
+      // Goat standing on spool (with 4 legs, horns & tail)
       const goatMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.7 });
       const gt = new THREE.Group();
       gt.position.set(278, GROUND_Y + 0.8, Z(206));
-      const gBody = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.55, 0.45), goatMat);
-      gBody.position.y = 0.5;
+      const gBody = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 0.42), goatMat);
+      gBody.position.y = 0.62;
       gt.add(gBody);
-      const gHead = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.3), goatMat);
-      gHead.position.set(0.5, 0.8, 0);
+      const gHead = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.32, 0.28), goatMat);
+      gHead.position.set(0.5, 0.94, 0);
       gt.add(gHead);
+      [-0.1, 0.1].forEach(hz2 => {
+        const gHorn = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.24, 6), darkWoodMat);
+        gHorn.position.set(0.45, 1.18, hz2);
+        gHorn.rotation.z = 0.2;
+        gt.add(gHorn);
+      });
+      [-0.32, 0.32].forEach(lx => [-0.14, 0.14].forEach(lz => {
+        const gLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.04, 0.42, 6), goatMat);
+        gLeg.position.set(lx, 0.21, lz);
+        gt.add(gLeg);
+      }));
       farmGrp.add(gt);
 
-      // Pink Pigs near shelter
-      const pigMat = new THREE.MeshStandardMaterial({ color: 0xf472b6, roughness: 0.6 });
-      [[273, Z(211)], [283, Z(210)]].forEach(([px, pz]) => {
+      // Pink Pigs near shelter (with 4 legs, snout & ears)
+      [[273, Z(211)], [283, Z(210)]].forEach(([px, pz], pi) => {
         const pg = new THREE.Group();
         pg.position.set(px, GROUND_Y, pz);
-        const pBody = new THREE.Mesh(new THREE.SphereGeometry(0.48, 8, 8), pigMat);
-        pBody.scale.set(1.3, 0.9, 0.9);
-        pBody.position.y = 0.42;
+        pg.rotation.y = pi ? -0.9 : 0.7;
+        const pBody = new THREE.Mesh(new THREE.SphereGeometry(0.46, 8, 8), pigMat);
+        pBody.scale.set(1.3, 0.85, 0.88);
+        pBody.position.y = 0.48;
         pg.add(pBody);
+        const snout = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 0.22, 8), pigMat);
+        snout.rotation.z = -Math.PI / 2;
+        snout.position.set(0.62, 0.46, 0);
+        pg.add(snout);
+        [-0.32, 0.32].forEach(lx => [-0.2, 0.2].forEach(lz => {
+          const pLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.28, 6), pigMat);
+          pLeg.position.set(lx, 0.14, lz);
+          pg.add(pLeg);
+        }));
         farmGrp.add(pg);
         circOb(px, pz, 0.6);
       });
 
+      mergeGroupByMaterial(farmGrp);
       islandsGroup.add(farmGrp);
     }
 
@@ -2470,10 +2800,28 @@
     {
       const lhg = new THREE.Group();
       const lx = -480, lz = Z(320);
-      const tower = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 4.2, 24, 6), stoneMat);
+      // Authentic 1808 Queenston limestone octagonal tower (8 sides)
+      const tower = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 4.2, 24, 8), stoneMat);
       tower.position.set(lx, 12.5, lz);
+      tower.rotation.y = Math.PI / 8;
       lhg.add(tower);
       circOb(lx, lz, 4.4); // Solid limestone tower blocks collision!
+
+      // Corbelled stone cornice collar below gallery
+      const cornice = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 2.45, 0.9, 8), stoneMat);
+      cornice.position.set(lx, 24.1, lz);
+      cornice.rotation.y = Math.PI / 8;
+      lhg.add(cornice);
+
+      // 3 staggered slit staircase windows up the limestone shaft
+      [7.5, 13.5, 19.5].forEach((wy, wi) => {
+        const ang = wi * 0.75;
+        const rAtY = 4.2 - (wy / 24) * 1.8 - 0.15;
+        const slit = new THREE.Mesh(new THREE.BoxGeometry(0.42, 1.25, 0.25), warmWinGlowMat);
+        slit.position.set(lx + Math.sin(ang) * rAtY, wy, lz - Math.cos(ang) * rAtY);
+        slit.rotation.y = -ang;
+        lhg.add(slit);
+      });
 
       // Heavy arched wooden door at the north base
       const doorMesh = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.6, 0.3), darkWoodMat);
@@ -2489,38 +2837,40 @@
       doorHandle.position.set(lx + 0.55, 1.3, lz - 4.25);
       lhg.add(doorHandle);
 
-      // Open-air catwalk gallery ring (walkable at y = 25.2m)
+      // Open-air catwalk gallery ring (walkable at y = 25.2m) + vertical balusters
       const catwalkFloor = new THREE.Mesh(new THREE.RingGeometry(2.3, 3.8, 24), darkWoodMat);
       catwalkFloor.rotation.x = -Math.PI / 2;
       catwalkFloor.position.set(lx, 25.2, lz);
       lhg.add(catwalkFloor);
-      // Outer safety railing
       const catwalkRail = new THREE.Mesh(new THREE.TorusGeometry(3.75, 0.08, 6, 24), metalMat);
       catwalkRail.rotation.x = Math.PI / 2;
       catwalkRail.position.set(lx, 26.1, lz);
       lhg.add(catwalkRail);
+      const lhBalusters = [];
+      for (let bi = 0; bi < 16; bi++) {
+        const ba = (bi / 16) * Math.PI * 2;
+        lhBalusters.push({ x: lx + Math.cos(ba) * 3.74, y: 25.65, z: lz + Math.sin(ba) * 3.74, sx: 0.05, sy: 0.9, sz: 0.05 });
+      }
+      addInstMesh(lhg, unitCylGeo, metalMat, lhBalusters);
 
       // Keeper John Paul Radelmüller Ghost (1808-1815)
       radelmuellerGhost = new THREE.Group();
+      radelmuellerGhost.userData.noMerge = true;
       radelmuellerGhost.position.set(lx - 0.6, 25.4, lz - 2.8);
       const ghostMat = new THREE.MeshStandardMaterial({
         color: 0xbae6fd, emissive: 0x38bdf8, emissiveIntensity: 0.65,
         transparent: true, opacity: 0.65, roughness: 0.2
       });
-      // 1812 frock coat
       const gCoat = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.42, 1.15, 8), ghostMat);
       gCoat.position.y = 0.58;
       radelmuellerGhost.add(gCoat);
-      // Spectral head
       const gHead = new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 10), ghostMat);
       gHead.position.y = 1.3;
       radelmuellerGhost.add(gHead);
-      // Keeper's tricorne hat
       const gHat = new THREE.Mesh(new THREE.ConeGeometry(0.38, 0.2, 3), ghostMat);
       gHat.rotation.y = Math.PI / 3;
       gHat.position.y = 1.48;
       radelmuellerGhost.add(gHat);
-      // Glowing antique brass hurricane lantern
       const gLantern = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.25, 8), new THREE.MeshBasicMaterial({ color: 0xfef08a, transparent: true, opacity: 0.85 }));
       gLantern.position.set(0.35, 0.7, 0.15);
       radelmuellerGhost.add(gLantern);
@@ -2534,20 +2884,59 @@
       lantern.position.set(lx, 26.2, lz);
       lhg.add(lantern);
 
+      // Dark iron lantern-room mullions
+      const mullionMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.5, metalness: 0.6 });
+      const lhMullions = [];
+      for (let mi = 0; mi < 12; mi++) {
+        const ma = (mi / 12) * Math.PI * 2;
+        lhMullions.push({ x: lx + Math.cos(ma) * 2.24, y: 26.2, z: lz + Math.sin(ma) * 2.24, sx: 0.07, sy: 2.6, sz: 0.07 });
+      }
+      addInstMesh(lhg, unitBoxGeo, mullionMat, lhMullions);
+
       const cap = new THREE.Mesh(new THREE.ConeGeometry(2.8, 2.4, 12), new THREE.MeshStandardMaterial({ color: 0x2f6b55, roughness: 0.4, metalness: 0.6 }));
       cap.position.set(lx, 28.4, lz);
       lhg.add(cap);
 
       lighthouseBeacon = new THREE.Group();
+      lighthouseBeacon.userData.noMerge = true;
+      const fresnelCore = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 1.35, 8), new THREE.MeshBasicMaterial({ color: 0xfef08a, fog: false }));
+      lighthouseBeacon.add(fresnelCore);
       const beam = new THREE.Mesh(
         new THREE.ConeGeometry(12, 180, 16, 1, true),
-        new THREE.MeshBasicMaterial({ color: 0xfef08a, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false, fog: false })
+        beaconBeamMat
       );
       beam.rotation.x = Math.PI / 2;
       beam.position.z = 90;
       lighthouseBeacon.add(beam);
       lighthouseBeacon.position.set(lx, 26.2, lz);
       lhg.add(lighthouseBeacon);
+
+      // Nearby Historic 1808 Keeper's Cottage (safely east of tower & door at x=-464, z=Z(316))
+      const kc = new THREE.Group();
+      kc.position.set(lx + 16, GROUND_Y, lz - 4);
+      kc.rotation.y = 0.22;
+      const kcWhiteMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.72 });
+      const kcRoofMat = new THREE.MeshStandardMaterial({ color: 0x7f1d1d, roughness: 0.65 });
+      const kcBody = new THREE.Mesh(new THREE.BoxGeometry(7.2, 3.0, 5.4), kcWhiteMat);
+      kcBody.position.y = 1.5;
+      kc.add(kcBody);
+      const kcGable = new THREE.Mesh(new THREE.ConeGeometry(5.1, 2.2, 4), kcRoofMat);
+      kcGable.rotation.y = Math.PI / 4;
+      kcGable.position.y = 4.0;
+      kc.add(kcGable);
+      const kcChimney = new THREE.Mesh(new THREE.BoxGeometry(0.65, 2.2, 0.65), new THREE.MeshStandardMaterial({ color: 0x991b1b, roughness: 0.85 }));
+      kcChimney.position.set(-2.0, 4.2, 0.5);
+      kc.add(kcChimney);
+      [-1.8, 1.8].forEach(wx => {
+        const kw = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.1, 0.12), warmWinGlowMat);
+        kw.position.set(wx, 1.6, -2.72);
+        kc.add(kw);
+      });
+      const kd = new THREE.Mesh(new THREE.BoxGeometry(1.0, 2.0, 0.14), darkWoodMat);
+      kd.position.set(0, 1.0, -2.72);
+      kc.add(kd);
+      lhg.add(kc);
+      rectOb(lx + 12.2, lx + 19.8, lz - 7.0, lz - 1.0);
 
       const lhSign = makeSign(
         ['GIBRALTAR POINT LIGHTHOUSE', 'BUILT 1808 • TORONTO\'S OLDEST LANDMARK'],
@@ -2558,26 +2947,29 @@
       lhSign.rotation.y = Math.PI;
       lhg.add(lhSign);
 
+      mergeGroupByMaterial(lhg);
       islandsGroup.add(lhg);
     }
 
     // ------------------------------------------------------------------------
     // Landmark: Billy Bishop Toronto City Airport (CYTZ)
     // - Porter Airlines De Havilland Dash 8-400 (Q400) Turboprops on Runway & Gates
-    // - Curved-Roof Modern Passenger Terminal & ATC Tower
-    // - Billy Bishop Airport Ferry Slip across the Western Gap
+    // - Curved-Roof Modern Passenger Terminal, Pedestrian Tunnel Pavilion & ATC Tower
+    // - Runway 08/26 Numbers, Touchdown Zone Bars, PAPI Lights & Perimeter Fencing
     // ------------------------------------------------------------------------
     let radarDish = null;
     let windsockCone = null;
     const q400Propellers = [];
     {
       const apg = new THREE.Group();
+      const whiteMarks = [], yellowMarks = [];
+      const rwyLightSockets = [], rwyLightBulbs = [];
+
       // Runway 08/26: 520m asphalt strip + Parallel Taxiway Alpha & Tarmac Apron
       const runway = new THREE.Mesh(new THREE.BoxGeometry(520, 0.1, 44), asphaltMat);
       runway.position.set(-1260, GROUND_Y + 0.05, Z(-170));
       apg.add(runway);
 
-      // Parallel taxiway & terminal apron
       const taxiway = new THREE.Mesh(new THREE.BoxGeometry(440, 0.09, 20), asphaltMat);
       taxiway.position.set(-1220, GROUND_Y + 0.04, Z(-206));
       apg.add(taxiway);
@@ -2585,48 +2977,106 @@
       apron.position.set(-1060, GROUND_Y + 0.04, Z(-215));
       apg.add(apron);
 
-      // Yellow taxiway centerline & edge lines
-      const taxiLine = new THREE.Mesh(new THREE.BoxGeometry(430, 0.11, 0.45), yellowMarkMat);
-      taxiLine.position.set(-1220, GROUND_Y + 0.09, Z(-206));
-      apg.add(taxiLine);
-
+      // Yellow taxiway centerline, link lines & Gate 1/2 apron lead-in markings
+      yellowMarks.push({ x: -1220, y: GROUND_Y + 0.09, z: Z(-206), sx: 430, sy: 0.11, sz: 0.45 });
       [-1440, -1260, -1100, -1020].forEach(tx => {
         const link = new THREE.Mesh(new THREE.BoxGeometry(14, 0.09, 26), asphaltMat);
         link.position.set(tx, GROUND_Y + 0.045, Z(-188));
         apg.add(link);
-        const linkLine = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.11, 26), yellowMarkMat);
-        linkLine.position.set(tx, GROUND_Y + 0.095, Z(-188));
-        apg.add(linkLine);
+        yellowMarks.push({ x: tx, y: GROUND_Y + 0.095, z: Z(-188), sx: 0.45, sy: 0.11, sz: 26 });
+      });
+      [-1094, -1026].forEach(gx => {
+        yellowMarks.push({ x: gx, y: GROUND_Y + 0.095, z: Z(-214), sx: 0.45, sy: 0.11, sz: 24 });
+        yellowMarks.push({ x: gx, y: GROUND_Y + 0.095, z: Z(-222), sx: 3.6, sy: 0.11, sz: 0.45 });
       });
 
+      // White center dashes, threshold bars, aiming points & touchdown zone bars
       for (let rx = -1490; rx <= -1030; rx += 36) {
-        const dash = new THREE.Mesh(new THREE.BoxGeometry(20, 0.12, 1.2), whiteMarkMat);
-        dash.position.set(rx, GROUND_Y + 0.11, Z(-170));
-        apg.add(dash);
+        whiteMarks.push({ x: rx, y: GROUND_Y + 0.11, z: Z(-170), sx: 20, sy: 0.12, sz: 1.2 });
       }
       [-1508, -1012].forEach(tx => {
         for (let s = -16; s <= 16; s += 4) {
-          const thr = new THREE.Mesh(new THREE.BoxGeometry(16, 0.12, 1.8), whiteMarkMat);
-          thr.position.set(tx, GROUND_Y + 0.11, Z(-170) + s);
-          apg.add(thr);
+          whiteMarks.push({ x: tx, y: GROUND_Y + 0.11, z: Z(-170) + s, sx: 16, sy: 0.12, sz: 1.8 });
         }
       });
+      // Aiming points & touchdown zone markings
+      [-1420, -1100].forEach(ax2 => {
+        [-10, 10].forEach(az2 => whiteMarks.push({ x: ax2, y: GROUND_Y + 0.11, z: Z(-170) + az2, sx: 26, sy: 0.12, sz: 3.5 }));
+      });
+      [-1455, -1438, -1082, -1065].forEach(tx => {
+        [-8, -5.5, 5.5, 8].forEach(tz2 => whiteMarks.push({ x: tx, y: GROUND_Y + 0.11, z: Z(-170) + tz2, sx: 10, sy: 0.12, sz: 1.1 }));
+      });
 
-      // Runway edge lights & PAPI approach lights
-      const rwyLightMat = new THREE.MeshBasicMaterial({ color: 0xfef08a, fog: false });
+      // Crisp "08" and "26" painted runway numbers
+      function makeRunwayNumber(label, rx, rotY) {
+        const can = document.createElement('canvas');
+        can.width = 128; can.height = 128;
+        const g = can.getContext('2d');
+        if (g) {
+          g.fillStyle = '#2b2b2e';
+          g.fillRect(0, 0, 128, 128);
+          g.fillStyle = '#f8fafc';
+          g.font = 'bold 84px sans-serif';
+          g.textAlign = 'center';
+          g.textBaseline = 'middle';
+          g.fillText(label, 64, 66);
+        }
+        const m = new THREE.Mesh(
+          new THREE.PlaneGeometry(11, 11),
+          new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(can) })
+        );
+        m.rotation.x = -Math.PI / 2;
+        m.rotation.z = rotY;
+        m.position.set(rx, GROUND_Y + 0.12, Z(-170));
+        apg.add(m);
+      }
+      makeRunwayNumber('08', -1488, -Math.PI / 2);
+      makeRunwayNumber('26', -1032, Math.PI / 2);
+
+      // Low red-and-white seawall blast barriers at runway tips (well clear of takeoff & walk paths)
+      const redBlastMat = new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.6 });
+      const redBlasts = [];
+      [-1532, -988].forEach(bx => {
+        for (let bz = -20; bz <= 20; bz += 8) {
+          redBlasts.push({ x: bx, y: GROUND_Y + 0.35, z: Z(-170) + bz, sx: 0.6, sy: 0.7, sz: 4.0 });
+          whiteMarks.push({ x: bx, y: GROUND_Y + 0.35, z: Z(-170) + bz + 4.0, sx: 0.6, sy: 0.7, sz: 4.0 });
+        }
+      });
+      addInstMesh(apg, unitBoxGeo, whiteMarkMat, whiteMarks);
+      addInstMesh(apg, unitBoxGeo, yellowMarkMat, yellowMarks);
+      addInstMesh(apg, unitBoxGeo, redBlastMat, redBlasts);
+
+      // Runway edge lights, blue taxiway lights & 4-light PAPI approach boxes (instanced!)
+      const rwyLightMat = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false });
+      const lightHousingMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.5 });
       for (let rx = -1510; rx <= -1010; rx += 32) {
         [-22.5, 22.5].forEach(rz => {
-          const rl = new THREE.Mesh(new THREE.SphereGeometry(0.22, 6, 6), rwyLightMat);
-          rl.position.set(rx, GROUND_Y + 0.35, Z(-170) + rz);
-          apg.add(rl);
+          rwyLightSockets.push({ x: rx, y: GROUND_Y + 0.2, z: Z(-170) + rz, sx: 0.12, sy: 0.28, sz: 0.12 });
+          rwyLightBulbs.push({ x: rx, y: GROUND_Y + 0.38, z: Z(-170) + rz, sx: 0.22, sy: 0.22, sz: 0.22, col: 0xfef08a });
         });
       }
+      for (let rx = -1430; rx <= -1010; rx += 34) {
+        [-10.5, 10.5].forEach(tz2 => {
+          rwyLightSockets.push({ x: rx, y: GROUND_Y + 0.18, z: Z(-206) + tz2, sx: 0.1, sy: 0.24, sz: 0.1 });
+          rwyLightBulbs.push({ x: rx, y: GROUND_Y + 0.32, z: Z(-206) + tz2, sx: 0.18, sy: 0.18, sz: 0.18, col: 0x38bdf8 });
+        });
+      }
+      [-1468, -1052].forEach(px => {
+        for (let pi = 0; pi < 4; pi++) {
+          const pz = Z(-170) + 27.5 + pi * 2.2;
+          rwyLightSockets.push({ x: px, y: GROUND_Y + 0.32, z: pz, sx: 0.7, sy: 0.48, sz: 0.9 });
+          rwyLightBulbs.push({ x: px, y: GROUND_Y + 0.42, z: pz, sx: 0.25, sy: 0.25, sz: 0.25, col: pi < 2 ? 0xef4444 : 0xffffff });
+        }
+      });
+      addInstMesh(apg, unitBoxGeo, lightHousingMat, rwyLightSockets);
+      addInstMesh(apg, unitSphereGeo, rwyLightMat, rwyLightBulbs);
 
       // Windsock near Runway 08/26 midpoint
       const wsPole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 5.5, 8), metalMat);
       wsPole.position.set(-1180, GROUND_Y + 2.75, Z(-140));
       apg.add(wsPole);
       windsockCone = new THREE.Group();
+      windsockCone.userData.noMerge = true;
       const wsMatO = new THREE.MeshBasicMaterial({ color: 0xf97316, fog: false });
       const wsMatW = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false });
       for (let wi = 0; wi < 5; wi++) {
@@ -2643,9 +3093,7 @@
       const termSilverMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.28, metalness: 0.72 });
       const termNavyMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.4, metalness: 0.4 });
       const termCedarMat = new THREE.MeshStandardMaterial({ color: 0x9a5b32, roughness: 0.65 });
-      const termGlowMat = new THREE.MeshBasicMaterial({ color: 0xfef3c7, fog: false });
 
-      // Main terminal plinth & warm-lit concourse core
       const termBase = new THREE.Mesh(new THREE.BoxGeometry(88, 0.6, 38), stoneMat);
       termBase.position.set(ax, GROUND_Y + 0.3, az);
       apg.add(termBase);
@@ -2654,24 +3102,21 @@
       termCore.position.set(ax, GROUND_Y + 4.4, az);
       apg.add(termCore);
 
-      // Glowing interior lounge windows visible through glass curtain wall
       const loungeGlow = new THREE.Mesh(new THREE.BoxGeometry(78, 5.8, 28), termGlowMat);
       loungeGlow.position.set(ax, GROUND_Y + 3.8, az);
       apg.add(loungeGlow);
 
-      // Sweeping south & north floor-to-ceiling glass curtain walls
+      const mullions = [];
       [16.2, -16.2].forEach(gz => {
         const glassWall = new THREE.Mesh(new THREE.BoxGeometry(82.4, 7.6, 0.45), glassMat);
         glassWall.position.set(ax, GROUND_Y + 4.4, az + gz);
         apg.add(glassWall);
         for (let mx = -40; mx <= 40; mx += 8) {
-          const mullion = new THREE.Mesh(new THREE.BoxGeometry(0.32, 8.2, 0.7), termNavyMat);
-          mullion.position.set(ax + mx, GROUND_Y + 4.4, az + gz);
-          apg.add(mullion);
+          mullions.push({ x: ax + mx, y: GROUND_Y + 4.4, z: az + gz, sx: 0.32, sy: 8.2, sz: 0.7 });
         }
       });
+      addInstMesh(apg, unitBoxGeo, termNavyMat, mullions);
 
-      // Three signature curved standing-seam metallic barrel-vault roof spans
       [-26, 0, 26].forEach((vx, vi) => {
         const vault = new THREE.Mesh(
           new THREE.CylinderGeometry(14.5, 14.5, 42, 20, 1, false, -Math.PI * 0.34, Math.PI * 0.68),
@@ -2687,7 +3132,6 @@
         apg.add(cedarSoffit);
       });
 
-      // Airside Gate Lounges & Covered Jet-Walkways extending south toward the parked Q400s
       [-34, 34].forEach((gx, gi) => {
         const gateLounge = new THREE.Mesh(new THREE.BoxGeometry(12, 4.6, 16), glassMat);
         gateLounge.position.set(ax + gx, GROUND_Y + 2.6, az + 23);
@@ -2719,19 +3163,38 @@
 
       rectOb(ax - 41, ax + 41, az - 16, az + 16);
 
+      // Billy Bishop Pedestrian Tunnel Island Elevator Pavilion (west of ferry walkway at (-1082, Z(-295)))
+      const tunAtrium = new THREE.Mesh(new THREE.CylinderGeometry(4.6, 4.8, 5.4, 16), glassMat);
+      tunAtrium.position.set(ax - 22, GROUND_Y + 2.7, Z(-295));
+      apg.add(tunAtrium);
+      const tunRoof = new THREE.Mesh(new THREE.CylinderGeometry(5.1, 5.1, 0.5, 16), termSilverMat);
+      tunRoof.position.set(ax - 22, GROUND_Y + 5.6, Z(-295));
+      apg.add(tunRoof);
+      const tunSign = makeSign(['PEDESTRIAN TUNNEL', 'UNDERGROUND MOVING WALKWAY TO MAINLAND'], 8.8, 1.3, { bg: '#0f172a', fg: '#38bdf8', borderColor: '#facc15' });
+      tunSign.position.set(ax - 22, GROUND_Y + 6.5, Z(-290));
+      apg.add(tunSign);
+      circOb(ax - 22, Z(-295), 4.8);
+
       // Covered Glass & Steel Ferry Connector Walkway from Terminal north to Western Gap Ferry Slip
       const walkCanopy = new THREE.Mesh(new THREE.BoxGeometry(9.6, 0.35, 52), termSilverMat);
       walkCanopy.position.set(ax, GROUND_Y + 4.4, Z(-295));
       apg.add(walkCanopy);
+      const walkwayCols = [];
       for (let wz = Z(-318); wz <= Z(-272); wz += 11) {
         [-4.4, 4.4].forEach(wx => {
-          const wp = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 4.4, 8), termNavyMat);
-          wp.position.set(ax + wx, GROUND_Y + 2.2, wz);
-          apg.add(wp);
+          walkwayCols.push({ x: ax + wx, y: GROUND_Y + 2.2, z: wz, sx: 0.16, sy: 4.4, sz: 0.16 });
         });
       }
+      addInstMesh(apg, unitCylGeo, termNavyMat, walkwayCols);
 
-      // Billy Bishop Airport Western Gap Ferry Slip Portal & Signage at (ax, Z(-326))
+      // Western Gap Ferry Slip Fender Dolphins (outer slip pilings at x=+-14.2)
+      const dolphinCols = [];
+      for (let dz = Z(-350); dz <= Z(-306); dz += 14) {
+        [-14.2, 14.2].forEach(dx => dolphinCols.push({ x: ax + dx, y: 0.3, z: dz, sx: 0.42, sy: 2.8, sz: 0.42 }));
+      }
+      addInstMesh(apg, unitCylGeo, darkWoodMat, dolphinCols);
+
+      // Billy Bishop Airport Western Gap Ferry Slip Portal & Signage at (ax, Z(-324))
       const slipArchL = new THREE.Mesh(new THREE.BoxGeometry(0.6, 5.2, 0.6), termNavyMat);
       slipArchL.position.set(ax - 7.5, GROUND_Y + 2.6, Z(-324));
       apg.add(slipArchL);
@@ -2776,53 +3239,41 @@
       circOb(tx, tz, 3.6);
 
       radarDish = new THREE.Group();
+      radarDish.userData.noMerge = true;
       radarDish.add(new THREE.Mesh(new THREE.BoxGeometry(4.2, 1.3, 0.45), metalMat));
       radarDish.position.set(tx, GROUND_Y + 34.4, tz);
       apg.add(radarDish);
 
-      // Billy Bishop Airport Transport Canada Airside Security Perimeter Fence
-      // Separates public terminal / ferry arrival plaza (z < 955) from active airfield / runways (z >= 958)
+      // Billy Bishop Airport Transport Canada Airside Security Perimeter Fence (instanced!)
       const fenceMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.4, metalness: 0.6 });
       const fencePostMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.5, metalness: 0.7 });
       const fenceWireMat = new THREE.MeshBasicMaterial({ color: 0x64748b, wireframe: true });
       const fenceH = 2.4;
+      const fPanelEntries = [], fRailEntries = [], fPostEntries = [];
 
       function buildFenceSegment(x0, z0, x1, z1) {
         const len = Math.hypot(x1 - x0, z1 - z0);
         const ang = Math.atan2(x1 - x0, z1 - z0);
         const midX = (x0 + x1) / 2, midZ = (z0 + z1) / 2;
-
-        const panel = new THREE.Mesh(new THREE.BoxGeometry(0.08, fenceH, len), fenceWireMat);
-        panel.position.set(midX, GROUND_Y + fenceH / 2, midZ);
-        panel.rotation.y = ang;
-        apg.add(panel);
-
-        const topRail = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.08, len), fenceMat);
-        topRail.position.set(midX, GROUND_Y + fenceH, midZ);
-        topRail.rotation.y = ang;
-        apg.add(topRail);
-
+        fPanelEntries.push({ x: midX, y: GROUND_Y + fenceH / 2, z: midZ, ry: ang, sx: 0.08, sy: fenceH, sz: len });
+        fRailEntries.push({ x: midX, y: GROUND_Y + fenceH, z: midZ, ry: ang, sx: 0.12, sy: 0.08, sz: len });
         const nPosts = Math.max(2, Math.floor(len / 6.0));
         for (let pi = 0; pi <= nPosts; pi++) {
           const t = pi / nPosts;
-          const px = x0 + (x1 - x0) * t;
-          const pz = z0 + (z1 - z0) * t;
-          const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, fenceH + 0.3, 8), fencePostMat);
-          post.position.set(px, GROUND_Y + (fenceH + 0.3) / 2, pz);
-          apg.add(post);
+          fPostEntries.push({
+            x: x0 + (x1 - x0) * t, y: GROUND_Y + (fenceH + 0.3) / 2, z: z0 + (z1 - z0) * t,
+            sx: 0.07, sy: fenceH + 0.3, sz: 0.07
+          });
         }
       }
 
-      // 1. West perimeter fence along airside boundary (visual fence with open pilot/player access)
       buildFenceSegment(ax - 42, 955, -1540, 955);
-
-      // 2. East perimeter fence along airside boundary
       buildFenceSegment(ax + 42, 955, -930, 955);
-
-      // 3. Hanlan's Point flank boundary fence (x = -930)
       buildFenceSegment(-930, 955, -930, 1085);
+      addInstMesh(apg, unitBoxGeo, fenceWireMat, fPanelEntries);
+      addInstMesh(apg, unitBoxGeo, fenceMat, fRailEntries);
+      addInstMesh(apg, unitCylGeo, fencePostMat, fPostEntries);
 
-      // Prominent Transport Canada Security Warning Signs mounted on perimeter fence
       [-1085, -1005, -930].forEach((sx, si) => {
         const rSign = makeSign(
           ['RESTRICTED AIRSIDE AREA • KEEP OUT', 'NO CITIZEN ACCESS • ACTIVE RUNWAYS', 'TRANSPORT CANADA SECURITY • CYTZ'],
@@ -2837,7 +3288,7 @@
         apg.add(rSign);
       });
 
-      // Porter Airlines Tail Emblem Texture (Midnight Navy Fin with Iconic White Badge & Masked Raccoon Motif)
+      // Porter Airlines Tail Emblem Texture (shared across all 4 Q400s)
       function makePorterTailTexture() {
         const can = document.createElement('canvas');
         can.width = 256;
@@ -2846,7 +3297,6 @@
         if (g) {
           g.fillStyle = '#0f2557';
           g.fillRect(0, 0, 256, 256);
-          // Crisp white circular badge
           g.fillStyle = '#f8fafc';
           g.beginPath();
           g.arc(128, 128, 86, 0, Math.PI * 2);
@@ -2854,7 +3304,6 @@
           g.strokeStyle = '#94a3b8';
           g.lineWidth = 5;
           g.stroke();
-          // Porter Raccoon silhouette (ears, head, navy bandit mask, white snout, P monogram)
           g.fillStyle = '#0f2557';
           g.beginPath();
           g.arc(92, 78, 22, 0, Math.PI * 2);
@@ -2863,25 +3312,21 @@
           g.beginPath();
           g.arc(128, 126, 52, 0, Math.PI * 2);
           g.fill();
-          // White brow & cheeks
           g.fillStyle = '#f8fafc';
           g.beginPath();
           g.ellipse(104, 118, 20, 12, -0.15, 0, Math.PI * 2);
           g.ellipse(152, 118, 20, 12, 0.15, 0, Math.PI * 2);
           g.fill();
-          // Dark bandit eye mask
           g.fillStyle = '#091533';
           g.beginPath();
           g.ellipse(104, 118, 13, 8, -0.15, 0, Math.PI * 2);
           g.ellipse(152, 118, 13, 8, 0.15, 0, Math.PI * 2);
           g.fill();
-          // Bright eyes
           g.fillStyle = '#ffffff';
           g.beginPath();
           g.arc(106, 117, 3.5, 0, Math.PI * 2);
           g.arc(150, 117, 3.5, 0, Math.PI * 2);
           g.fill();
-          // White muzzle & dark nose
           g.fillStyle = '#f8fafc';
           g.beginPath();
           g.ellipse(128, 146, 22, 15, 0, 0, Math.PI * 2);
@@ -2899,324 +3344,333 @@
       }
 
       const porterTailTex = makePorterTailTexture();
+      const badgeMat = new THREE.MeshBasicMaterial({ map: porterTailTex, side: THREE.DoubleSide });
+      const porterBrandSample = makeSign(['porter', 'DE HAVILLAND Q400 • C-GLQP'], 7.2, 0.95, { bg: '#f8fafc', fg: '#0f2557', borderColor: '#f8fafc', subFg: '#64748b', titleSize: 56, subSize: 22 });
+      const porterBrandMat = porterBrandSample.material;
+      const porterBrandGeo = porterBrandSample.geometry;
+
       const porterWhiteMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.22, metalness: 0.18, side: THREE.DoubleSide });
       const porterNavyMat = new THREE.MeshStandardMaterial({ color: 0x0f2557, roughness: 0.32, metalness: 0.28, side: THREE.DoubleSide });
       const porterGoldMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.35, metalness: 0.65 });
       const radomeMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.35, side: THREE.DoubleSide });
       const cockpitGlassMat = new THREE.MeshStandardMaterial({
-        color: 0x38bdf8,
-        roughness: 0.08,
-        metalness: 0.25,
-        transparent: true,
-        opacity: 0.16,
-        depthWrite: false,
-        side: THREE.DoubleSide
+        color: 0x38bdf8, roughness: 0.08, metalness: 0.25,
+        transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide
       });
       const cabinWinGlassMat = new THREE.MeshBasicMaterial({
-        color: 0xbae6fd,
-        transparent: true,
-        opacity: 0.14,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-        fog: false
+        color: 0xbae6fd, transparent: true, opacity: 0.14, depthWrite: false, side: THREE.DoubleSide, fog: false
       });
-      const cabinWinMat = new THREE.MeshBasicMaterial({ color: 0xbae6fd, fog: false });
       const tireMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.88 });
       const propBladeMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.3, metalness: 0.5 });
+      const seatNavyCloth = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.85, side: THREE.DoubleSide });
+      const seatGreyTrim = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.6, metalness: 0.2, side: THREE.DoubleSide });
+      const cabinCarpetMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.9, side: THREE.DoubleSide });
+      const cockpitPanelMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.55, metalness: 0.35, side: THREE.DoubleSide });
+      const pfdScreenMat = new THREE.MeshBasicMaterial({ color: 0x0284c7, toneMapped: false });
+      const ndScreenMat = new THREE.MeshBasicMaterial({ color: 0x0369a1, toneMapped: false });
+      const eicasScreenMat = new THREE.MeshBasicMaterial({ color: 0x10b981, toneMapped: false });
 
-      // Detailed Porter Airlines De Havilland Canada Dash 8-400 (Q400) Builder
+      // Swept tapered high-wing & T-tail shared geometries for Q400
+      const q400WingGeo = (() => {
+        const sh = new THREE.Shape();
+        sh.moveTo(0, -1.7);
+        sh.lineTo(13.8, -0.5);
+        sh.lineTo(13.8, 1.15);
+        sh.lineTo(0, 1.65);
+        sh.closePath();
+        const g = new THREE.ExtrudeGeometry(sh, { depth: 0.24, bevelEnabled: false });
+        g.rotateX(Math.PI / 2);
+        return g;
+      })();
+      const q400VFinGeo = (() => {
+        const sh = new THREE.Shape();
+        sh.moveTo(-1.4, 0);
+        sh.lineTo(2.4, 0);
+        sh.lineTo(3.9, 6.2);
+        sh.lineTo(1.2, 6.2);
+        sh.closePath();
+        const g = new THREE.ExtrudeGeometry(sh, { depth: 0.3, bevelEnabled: false });
+        g.translate(0, 0, -0.15);
+        g.rotateY(-Math.PI / 2);
+        return g;
+      })();
+      const q400HTailGeo = (() => {
+        const sh = new THREE.Shape();
+        sh.moveTo(0, -1.2);
+        sh.lineTo(4.4, -0.3);
+        sh.lineTo(4.4, 0.95);
+        sh.lineTo(0, 1.15);
+        sh.closePath();
+        const g = new THREE.ExtrudeGeometry(sh, { depth: 0.18, bevelEnabled: false });
+        g.rotateX(Math.PI / 2);
+        return g;
+      })();
+
+      // Detailed Porter Airlines De Havilland Canada Dash 8-400 (Q400) Builder (batched & instanced!)
       function buildPorterDash8Q400(px, pz, rotY, opts) {
         const o = opts || {};
+        const isHero = !!o.isHero;
         const pl = new THREE.Group();
+        pl.userData.noMerge = true;
+        const airframe = new THREE.Group();
         const fuseLen = 25.0, fuseR = 1.62;
 
-        // 1. Stretched Q400 Pressurized Fuselage (local -Z is forward nose, +Z is tail)
-        // Open-ended exterior fuselage or windowed fuselage so Seat 6A & Cockpit have 100% real unobstructed views!
+        // 1. Stretched Q400 Pressurized Fuselage (local -Z forward nose, +Z tail)
         const lowerBelly = new THREE.Mesh(
           new THREE.CylinderGeometry(fuseR, fuseR, fuseLen, 24, 1, true, Math.PI * 0.42, Math.PI * 1.16),
           porterWhiteMat
         );
         lowerBelly.rotation.x = Math.PI / 2;
-        pl.add(lowerBelly);
+        airframe.add(lowerBelly);
 
-        // Upper fuselage crown arch (solid roof overhead from z = -12.5 to +12.5, leaving window band y = 0.14..0.66 open!)
         const upperCrown = new THREE.Mesh(
           new THREE.CylinderGeometry(fuseR, fuseR, fuseLen, 24, 1, true, -Math.PI * 0.36, Math.PI * 0.72),
           porterWhiteMat
         );
         upperCrown.rotation.x = Math.PI / 2;
-        pl.add(upperCrown);
+        airframe.add(upperCrown);
 
-        // Porter navy-blue lower belly & cheatline stripe + gold accent pin-stripe
-        const bellyStripe = new THREE.Mesh(new THREE.BoxGeometry(fuseR * 2.02, 0.52, fuseLen * 0.96), porterNavyMat);
-        bellyStripe.position.set(0, -0.52, 0);
-        pl.add(bellyStripe);
-        const goldStripe = new THREE.Mesh(new THREE.BoxGeometry(fuseR * 2.04, 0.08, fuseLen * 0.96), porterGoldMat);
-        goldStripe.position.set(0, -0.20, 0);
-        pl.add(goldStripe);
+        // Flush curved Porter navy belly & gold pin-stripe cheatline hugging cylinder contour (zero protruding corners!)
+        const bellyArc = new THREE.Mesh(
+          new THREE.CylinderGeometry(fuseR + 0.015, fuseR + 0.015, fuseLen * 0.98, 20, 1, true, Math.PI * 0.65, Math.PI * 0.70),
+          porterNavyMat
+        );
+        bellyArc.rotation.x = Math.PI / 2;
+        airframe.add(bellyArc);
+        [-fuseR + 0.02, fuseR - 0.02].forEach(gx => {
+          const cheat = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.08, fuseLen * 0.96), porterGoldMat);
+          cheat.position.set(gx, -0.18, 0);
+          airframe.add(cheat);
+        });
 
-        // Window Belt Mullions & Clear Cabin Windows (Port & Starboard) so you can genuinely look out the windows!
+        // Window Belt Pillars & Cabin Windows (instanced!)
+        const winPillars = [], winPanes = [];
         for (let wi = -11.8; wi <= 11.8; wi += 0.95) {
           [-fuseR + 0.03, fuseR - 0.03].forEach(wx => {
-            // Vertical fuselage pillar between windows
-            const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.62, 0.36), porterWhiteMat);
-            pillar.position.set(wx, 0.38, wi - 0.47);
-            pl.add(pillar);
-            // Transparent window pane
-            const pane = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.48, 0.56), o.noOb ? cabinWinGlassMat : cabinWinMat);
-            pane.position.set(wx, 0.38, wi);
-            pl.add(pane);
+            winPillars.push({ x: wx, y: 0.38, z: wi - 0.47, sx: 0.08, sy: 0.62, sz: 0.36 });
+            winPanes.push({ x: wx, y: 0.38, z: wi, sx: 0.03, sy: 0.48, sz: 0.56 });
           });
         }
+        addInstMesh(pl, unitBoxGeo, porterWhiteMat, winPillars);
+        addInstMesh(pl, unitBoxGeo, isHero ? cabinWinGlassMat : cabinWinMat, winPanes);
 
-        // Aerodynamic Lower Nose & Weather Radar Radome (-Z forward, kept below y = 0.20 so forward cockpit view is 100% clear!)
-        const lowerNose = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.62, fuseR * 0.92, 3.8, 20, 1, false),
-          porterWhiteMat
-        );
+        // Aerodynamic Lower Nose & Weather Radar Radome (-Z forward, below cockpit eye line)
+        const lowerNose = new THREE.Mesh(new THREE.CylinderGeometry(0.62, fuseR * 0.92, 3.8, 20, 1, false), porterWhiteMat);
         lowerNose.rotation.x = -Math.PI / 2;
         lowerNose.scale.set(1.0, 0.58, 1.0);
         lowerNose.position.set(0, -0.42, -fuseLen / 2 - 1.9);
-        pl.add(lowerNose);
+        airframe.add(lowerNose);
 
         const radome = new THREE.Mesh(new THREE.SphereGeometry(0.64, 16, 12), radomeMat);
         radome.scale.set(0.96, 0.68, 1.50);
         radome.position.set(0, -0.45, -fuseLen / 2 - 3.85);
-        pl.add(radome);
+        airframe.add(radome);
 
-        // Flight Deck Cockpit Canopy Roof, Pillars & Transparent Wraparound Windshields (z = -12.3 to -14.5)
-        // Solid Flight Deck Roof Overhead (with interior ceiling & overhead switches)
+        // Flight Deck Cockpit Canopy Roof, Pillars & Transparent Wraparound Windshields
         const cockpitRoof = new THREE.Mesh(new THREE.BoxGeometry(2.25, 0.14, 2.45), porterWhiteMat);
         cockpitRoof.position.set(0, 1.08, -13.35);
         cockpitRoof.rotation.x = 0.10;
-        pl.add(cockpitRoof);
+        airframe.add(cockpitRoof);
 
         const cockpitCrown = new THREE.Mesh(new THREE.BoxGeometry(1.95, 0.16, 1.95), porterWhiteMat);
         cockpitCrown.position.set(0, 1.20, -13.10);
-        pl.add(cockpitCrown);
+        airframe.add(cockpitCrown);
 
-        // Overhead Pilot Switch Panel on underside of cockpit roof
-        const overheadPanel = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.05, 0.95), radomeMat);
-        overheadPanel.position.set(0, 1.00, -13.25);
-        overheadPanel.rotation.x = 0.10;
-        pl.add(overheadPanel);
-
-        // Front Left & Right Transparent Windshields (sloped from glareshield y=0.22 up to roof y=1.02)
         [-0.48, 0.48].forEach(wx => {
           const fPane = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.84, 0.04), cockpitGlassMat);
           fPane.position.set(wx, 0.62, -14.12);
           fPane.rotation.x = 0.36;
           fPane.rotation.y = wx < 0 ? 0.14 : -0.14;
-          pl.add(fPane);
+          airframe.add(fPane);
         });
 
-        // Side Cockpit Windows (Left Captain & Right First Officer) so pilot can look left/right out the windows
         [-1.08, 1.08].forEach(sx => {
           const sPane = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.78, 1.65), cockpitGlassMat);
           sPane.position.set(sx, 0.60, -13.30);
           sPane.rotation.z = sx < 0 ? -0.12 : 0.12;
-          pl.add(sPane);
-          // Lower cockpit sidewall below window sill
+          airframe.add(sPane);
           const sWall = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.75, 2.15), porterWhiteMat);
           sWall.position.set(sx * 1.04, -0.15, -13.35);
-          pl.add(sWall);
+          airframe.add(sWall);
         });
 
-        // Slim Cockpit Windshield Framing Pillars (Center Post, Left/Right A-Pillars & B-Pillars)
         const centerPost = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.86, 0.06), radomeMat);
         centerPost.position.set(0, 0.62, -14.18);
         centerPost.rotation.x = 0.36;
-        pl.add(centerPost);
+        airframe.add(centerPost);
 
         [-0.96, 0.96].forEach(pxOff => {
           const aPillar = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.86, 0.06), radomeMat);
           aPillar.position.set(pxOff, 0.62, -14.02);
           aPillar.rotation.x = 0.36;
-          pl.add(aPillar);
-
+          airframe.add(aPillar);
           const bPillar = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.84, 0.08), radomeMat);
           bPillar.position.set(pxOff * 1.12, 0.62, -12.55);
-          pl.add(bPillar);
+          airframe.add(bPillar);
         });
 
         // Tapered Rear Tail Cone (+Z aft)
         const tailCone = new THREE.Mesh(new THREE.CylinderGeometry(0.45, fuseR, 5.4, 20), porterNavyMat);
         tailCone.rotation.x = Math.PI / 2;
         tailCone.position.set(0, 0.22, fuseLen / 2 + 2.7);
-        pl.add(tailCone);
+        airframe.add(tailCone);
 
-        // --- Interior Cabin Modeling (Floor, Ceiling Arch, Rows of Navy Leather Seats & Seat 6A Window View) ---
-        const seatNavyCloth = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.85, side: THREE.DoubleSide });
-        const seatGreyTrim = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.6, metalness: 0.2, side: THREE.DoubleSide });
-        const cabinCarpetMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.9, side: THREE.DoubleSide });
+        // --- Full Interior Cabin & Flight Deck ONLY on interactive Hero Q400 (#1) ---
+        if (isHero) {
+          const overheadPanel = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.05, 0.95), radomeMat);
+          overheadPanel.position.set(0, 1.00, -13.25);
+          overheadPanel.rotation.x = 0.10;
+          airframe.add(overheadPanel);
 
-        // Continuous Cabin & Flight Deck Floor (y = -0.52 from cockpit z = -14.2 to rear cabin z = +11.0)
-        const cabinFloor = new THREE.Mesh(new THREE.BoxGeometry(2.65, 0.08, 25.2), cabinCarpetMat);
-        cabinFloor.position.set(0, -0.52, -1.6);
-        pl.add(cabinFloor);
+          const cabinFloor = new THREE.Mesh(new THREE.BoxGeometry(2.65, 0.08, 25.2), cabinCarpetMat);
+          cabinFloor.position.set(0, -0.52, -1.6);
+          airframe.add(cabinFloor);
 
-        // Interior Overhead Ceiling Panel & Luggage Bins (y = 1.18, never blocking windows at y = 0.14..0.66!)
-        const cabinCeiling = new THREE.Mesh(new THREE.BoxGeometry(2.20, 0.06, 24.0), porterWhiteMat);
-        cabinCeiling.position.set(0, 1.24, -1.0);
-        pl.add(cabinCeiling);
+          const cabinCeiling = new THREE.Mesh(new THREE.BoxGeometry(2.20, 0.06, 24.0), porterWhiteMat);
+          cabinCeiling.position.set(0, 1.24, -1.0);
+          airframe.add(cabinCeiling);
 
-        // Rows of 2x2 Porter Airlines Navy Leather Passenger Seats along the cabin
-        for (let rz = -10.4; rz <= 6.8; rz += 0.95) {
-          [-1.08, -0.58, 0.58, 1.08].forEach(sx => {
-            const sBack = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.64, 0.09), seatNavyCloth);
-            sBack.position.set(sx, 0.04, rz - 0.18);
-            sBack.rotation.x = -0.06;
-            pl.add(sBack);
-            const sHead = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.15, 0.10), porterWhiteMat);
-            sHead.position.set(sx, 0.40, rz - 0.19);
-            pl.add(sHead);
-            const sCushion = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.10, 0.42), seatNavyCloth);
-            sCushion.position.set(sx, -0.26, rz);
-            pl.add(sCushion);
+          // 2x2 Cabin Seats instanced into 3 InstancedMeshes (instead of 228 separate meshes!)
+          const seatBacks = [], seatHeads = [], seatCushions = [];
+          for (let rz = -10.4; rz <= 6.8; rz += 0.95) {
+            [-1.08, -0.58, 0.58, 1.08].forEach(sx => {
+              seatBacks.push({ x: sx, y: 0.04, z: rz - 0.18, rx: -0.06, sx: 0.44, sy: 0.64, sz: 0.09 });
+              seatHeads.push({ x: sx, y: 0.40, z: rz - 0.19, sx: 0.32, sy: 0.15, sz: 0.10 });
+              seatCushions.push({ x: sx, y: -0.26, z: rz, sx: 0.44, sy: 0.10, sz: 0.42 });
+            });
+          }
+          addInstMesh(pl, unitBoxGeo, seatNavyCloth, seatBacks);
+          addInstMesh(pl, unitBoxGeo, porterWhiteMat, seatHeads);
+          addInstMesh(pl, unitBoxGeo, seatNavyCloth, seatCushions);
+
+          const trayTable = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.22, 0.02), seatGreyTrim);
+          trayTable.position.set(-1.08, 0.08, -3.88);
+          airframe.add(trayTable);
+          const seat6Armrest = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.06, 0.38), seatGreyTrim);
+          seat6Armrest.position.set(-0.82, -0.10, -2.80);
+          airframe.add(seat6Armrest);
+          const psu = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.05, 0.25), porterWhiteMat);
+          psu.position.set(-1.08, 1.19, -2.80);
+          airframe.add(psu);
+
+          [-0.48, 0.48].forEach(pilotX => {
+            const seatBack = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.68, 0.10), seatNavyCloth);
+            seatBack.position.set(pilotX, 0.08, -12.86);
+            airframe.add(seatBack);
+            const seatHead = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.18, 0.10), seatNavyCloth);
+            seatHead.position.set(pilotX, 0.48, -12.86);
+            airframe.add(seatHead);
+            const seatBase = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.12, 0.44), seatNavyCloth);
+            seatBase.position.set(pilotX, -0.28, -13.08);
+            airframe.add(seatBase);
+          });
+
+          const glareshield = new THREE.Mesh(new THREE.BoxGeometry(1.88, 0.07, 0.42), cockpitPanelMat);
+          glareshield.position.set(0, 0.19, -13.86);
+          airframe.add(glareshield);
+          const mainPanel = new THREE.Mesh(new THREE.BoxGeometry(1.84, 0.42, 0.08), cockpitPanelMat);
+          mainPanel.position.set(0, -0.02, -13.94);
+          mainPanel.rotation.x = -0.18;
+          airframe.add(mainPanel);
+
+          [-0.64, -0.34, 0, 0.34, 0.64].forEach((sx, idx) => {
+            const scrMat = (idx === 2) ? eicasScreenMat : (idx % 2 === 1 ? ndScreenMat : pfdScreenMat);
+            const screen = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.22, 0.02), scrMat);
+            screen.position.set(sx, 0.02, -13.89);
+            screen.rotation.x = -0.18;
+            airframe.add(screen);
+            if (idx === 0 || idx === 4) {
+              const hBar = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.02, 0.025), porterGoldMat);
+              hBar.position.set(sx, 0.02, -13.88);
+              hBar.rotation.x = -0.18;
+              airframe.add(hBar);
+            }
+          });
+
+          const pedestal = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.42, 0.82), cockpitPanelMat);
+          pedestal.position.set(0, -0.28, -13.42);
+          airframe.add(pedestal);
+          [-0.07, 0.07].forEach(lx => {
+            const lever = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.16, 0.03), radomeMat);
+            lever.position.set(lx, 0.0, -13.48);
+            lever.rotation.x = -0.32;
+            airframe.add(lever);
+            const knob = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.04), porterWhiteMat);
+            knob.position.set(lx, 0.08, -13.51);
+            airframe.add(knob);
+          });
+
+          [-0.48, 0.48].forEach(yx => {
+            const col = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.42, 8), seatGreyTrim);
+            col.position.set(yx, -0.24, -13.55);
+            col.rotation.x = -0.22;
+            airframe.add(col);
+            const yokeBar = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.04, 0.04), radomeMat);
+            yokeBar.position.set(yx, -0.02, -13.50);
+            airframe.add(yokeBar);
+            [-0.12, 0.12].forEach(hx => {
+              const horn = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.13, 0.04), radomeMat);
+              horn.position.set(yx + hx, 0.04, -13.50);
+              airframe.add(horn);
+            });
           });
         }
 
-        // Seat 6A armrests & folded tray table on back of Seat 5A
-        const trayTable = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.22, 0.02), seatGreyTrim);
-        trayTable.position.set(-1.08, 0.08, -3.88);
-        pl.add(trayTable);
-
-        const seat6Armrest = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.06, 0.38), seatGreyTrim);
-        seat6Armrest.position.set(-0.82, -0.10, -2.80);
-        pl.add(seat6Armrest);
-
-        // Overhead passenger service unit above Seat 6A
-        const psu = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.05, 0.25), porterWhiteMat);
-        psu.position.set(-1.08, 1.19, -2.80);
-        pl.add(psu);
-
-        // --- Interior Flight Deck Cockpit Modeling (Ergonomic Below-Eye-Level Instrument Console & Controls!) ---
-        // Captain eye is at (-0.48, 0.56, -13.10), so Glareshield top is at y = 0.22 -> clear view out windows + full controls in view!
-        const cockpitPanelMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.55, metalness: 0.35, side: THREE.DoubleSide });
-        const pfdScreenMat = new THREE.MeshBasicMaterial({ color: 0x0284c7, toneMapped: false });
-        const ndScreenMat = new THREE.MeshBasicMaterial({ color: 0x0369a1, toneMapped: false });
-        const eicasScreenMat = new THREE.MeshBasicMaterial({ color: 0x10b981, toneMapped: false });
-
-        // Captain (left) and First Officer (right) Flight Deck Seats (positioned slightly behind eye at z = -12.88)
-        [-0.48, 0.48].forEach(pilotX => {
-          const seatBack = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.68, 0.10), seatNavyCloth);
-          seatBack.position.set(pilotX, 0.08, -12.86);
-          pl.add(seatBack);
-          const seatHead = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.18, 0.10), seatNavyCloth);
-          seatHead.position.set(pilotX, 0.48, -12.86);
-          pl.add(seatHead);
-          const seatBase = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.12, 0.44), seatNavyCloth);
-          seatBase.position.set(pilotX, -0.28, -13.08);
-          pl.add(seatBase);
-        });
-
-        // Glareshield Autopilot Control Panel (top at y = 0.22, well below Captain eye at y = 0.56!)
-        const glareshield = new THREE.Mesh(new THREE.BoxGeometry(1.88, 0.07, 0.42), cockpitPanelMat);
-        glareshield.position.set(0, 0.19, -13.86);
-        pl.add(glareshield);
-
-        // Main Electronic Flight Instrument System (EFIS) Dashboard (y = -0.22 to +0.18, tilted toward pilot)
-        const mainPanel = new THREE.Mesh(new THREE.BoxGeometry(1.84, 0.42, 0.08), cockpitPanelMat);
-        mainPanel.position.set(0, -0.02, -13.94);
-        mainPanel.rotation.x = -0.18;
-        pl.add(mainPanel);
-
-        // 5 Glowing Glass Cockpit Displays (Captain PFD, Captain ND, Center EICAS, FO ND, FO PFD)
-        [-0.64, -0.34, 0, 0.34, 0.64].forEach((sx, idx) => {
-          const scrMat = (idx === 2) ? eicasScreenMat : (idx % 2 === 1 ? ndScreenMat : pfdScreenMat);
-          const screen = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.22, 0.02), scrMat);
-          screen.position.set(sx, 0.02, -13.89);
-          screen.rotation.x = -0.18;
-          pl.add(screen);
-          // Horizon line / artificial horizon bar on PFD screens
-          if (idx === 0 || idx === 4) {
-            const hBar = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.02, 0.025), porterGoldMat);
-            hBar.position.set(sx, 0.02, -13.88);
-            hBar.rotation.x = -0.18;
-            pl.add(hBar);
-          }
-        });
-
-        // Center Throttle Quadrant Pedestal with Power & Condition Levers
-        const pedestal = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.42, 0.82), cockpitPanelMat);
-        pedestal.position.set(0, -0.28, -13.42);
-        pl.add(pedestal);
-
-        [-0.07, 0.07].forEach(lx => {
-          const lever = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.16, 0.03), radomeMat);
-          lever.position.set(lx, 0.0, -13.48);
-          lever.rotation.x = -0.32;
-          pl.add(lever);
-          const knob = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.04), porterWhiteMat);
-          knob.position.set(lx, 0.08, -13.51);
-          pl.add(knob);
-        });
-
-        // Dual W-Shaped Bombardier/De Havilland Flight Control Yokes
-        [-0.48, 0.48].forEach(yx => {
-          const col = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.42, 8), seatGreyTrim);
-          col.position.set(yx, -0.24, -13.55);
-          col.rotation.x = -0.22;
-          pl.add(col);
-          const yokeBar = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.04, 0.04), radomeMat);
-          yokeBar.position.set(yx, -0.02, -13.50);
-          pl.add(yokeBar);
-          [-0.12, 0.12].forEach(hx => {
-            const horn = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.13, 0.04), radomeMat);
-            horn.position.set(yx + hx, 0.04, -13.50);
-            pl.add(horn);
-          });
-        });
-
-        const porterBrandL = makeSign(['porter', 'DE HAVILLAND Q400 • C-GLQP'], 7.2, 0.95, { bg: '#f8fafc', fg: '#0f2557', borderColor: '#f8fafc', subFg: '#64748b', titleSize: 56, subSize: 22 });
+        const porterBrandL = new THREE.Mesh(porterBrandGeo, porterBrandMat);
         porterBrandL.rotation.y = -Math.PI / 2;
         porterBrandL.position.set(-fuseR - 0.04, 0.85, -3.5);
         pl.add(porterBrandL);
-
-        const porterBrandR = makeSign(['porter', 'DE HAVILLAND Q400 • C-GLQP'], 7.2, 0.95, { bg: '#f8fafc', fg: '#0f2557', borderColor: '#f8fafc', subFg: '#64748b', titleSize: 56, subSize: 22 });
+        const porterBrandR = new THREE.Mesh(porterBrandGeo, porterBrandMat);
         porterBrandR.rotation.y = Math.PI / 2;
         porterBrandR.position.set(fuseR + 0.04, 0.85, -3.5);
         pl.add(porterBrandR);
 
-        // 2. High-Mounted Swept Wing & Aerodynamic Wingbox Fairing (Signature Dash-8 High Wing!)
-        const wingBox = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.65, 5.8), porterWhiteMat);
-        wingBox.position.set(0, fuseR - 0.1, -0.5);
-        pl.add(wingBox);
+        // 2. High-Mounted Swept Tapered High Wing & Wingbox Fairing
+        const wingBox = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.62, 5.4), porterWhiteMat);
+        wingBox.position.set(0, fuseR - 0.08, -0.5);
+        airframe.add(wingBox);
 
-        const mainWing = new THREE.Mesh(new THREE.BoxGeometry(28.4, 0.28, 3.1), porterWhiteMat);
-        mainWing.position.set(0, fuseR + 0.08, -0.5);
-        pl.add(mainWing);
+        [-1, 1].forEach(side => {
+          const wing = new THREE.Mesh(q400WingGeo, porterWhiteMat);
+          wing.position.set(side * 0.4, fuseR + 0.14, -0.5);
+          if (side < 0) wing.scale.x = -1;
+          wing.rotation.z = side * 0.03; // subtle positive wing dihedral
+          airframe.add(wing);
 
-        // Navy-blue wingtips & Red/Green navigation strobes
-        [-14.2, 14.2].forEach((wx, side) => {
-          const tip = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.30, 2.8), porterNavyMat);
-          tip.position.set(wx, fuseR + 0.10, -0.5);
-          pl.add(tip);
+          // Flap-track fairings under wing
+          [-3.2, -8.5].forEach(fx => {
+            const ft = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.22, 1.5), porterWhiteMat);
+            ft.position.set(side * Math.abs(fx), fuseR + 0.02, 0.55);
+            airframe.add(ft);
+          });
+
+          const tip = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.26, 1.75), porterNavyMat);
+          tip.position.set(side * 14.3, fuseR + 0.56, 0.35);
+          airframe.add(tip);
           const strobe = new THREE.Mesh(
             new THREE.SphereGeometry(0.18, 8, 8),
-            new THREE.MeshBasicMaterial({ color: side === 0 ? 0xef4444 : 0x22c55e, fog: false })
+            new THREE.MeshBasicMaterial({ color: side < 0 ? 0xef4444 : 0x22c55e, fog: false })
           );
-          strobe.position.set(wx + (side === 0 ? -0.7 : 0.7), fuseR + 0.15, -0.5);
-          pl.add(strobe);
+          strobe.position.set(side * 14.95, fuseR + 0.60, 0.35);
+          airframe.add(strobe);
         });
 
-        // 3. Twin Pratt & Whitney PW150A Turboprop Engine Nacelles & Animated 6-Blade Dowty Propellers
+        // 3. Twin PW150A Turboprop Engine Nacelles & Animated 6-Blade Dowty Propellers
         [-5.2, 5.2].forEach(ex => {
-          const nacelle = new THREE.Mesh(new THREE.CylinderGeometry(0.68, 0.62, 6.4, 16), porterNavyMat);
+          const nacelle = new THREE.Mesh(new THREE.CylinderGeometry(0.68, 0.58, 6.4, 16), porterNavyMat);
           nacelle.rotation.x = Math.PI / 2;
           nacelle.position.set(ex, fuseR - 0.45, -1.6);
-          pl.add(nacelle);
+          airframe.add(nacelle);
 
-          // Silver turbine intake ring & exhaust nozzle
-          const intake = new THREE.Mesh(new THREE.CylinderGeometry(0.58, 0.68, 0.8, 16), metalMat);
+          const intake = new THREE.Mesh(new THREE.CylinderGeometry(0.56, 0.68, 0.8, 16), metalMat);
           intake.rotation.x = Math.PI / 2;
           intake.position.set(ex, fuseR - 0.45, -4.9);
-          pl.add(intake);
+          airframe.add(intake);
 
-          // Rotating 6-blade composite propeller assembly + polished spinner cone
           const propHub = new THREE.Group();
+          propHub.userData.noMerge = true;
           propHub.position.set(ex, fuseR - 0.45, -5.45);
-          const spinner = new THREE.Mesh(new THREE.ConeGeometry(0.46, 1.15, 16), metalMat);
+          const spinner = new THREE.Mesh(new THREE.ConeGeometry(0.46, 1.15, 14), metalMat);
           spinner.rotation.x = -Math.PI / 2;
           spinner.position.z = -0.35;
           propHub.add(spinner);
@@ -3227,7 +3681,7 @@
             bladeGrp.rotation.z = ang;
             const blade = new THREE.Mesh(new THREE.BoxGeometry(0.24, 2.05, 0.05), propBladeMat);
             blade.position.y = 1.1;
-            blade.rotation.y = 0.35; // blade pitch
+            blade.rotation.y = 0.35;
             bladeGrp.add(blade);
             const tipStripe = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.22, 0.06), yellowMarkMat);
             tipStripe.position.y = 2.0;
@@ -3236,75 +3690,80 @@
             propHub.add(bladeGrp);
           }
 
-          // Subtle motion blur disc when spinning fast
           if (o.spinSpeed && o.spinSpeed > 4) {
             const disc = new THREE.Mesh(
-              new THREE.CircleGeometry(2.1, 24),
+              new THREE.CircleGeometry(2.1, 20),
               new THREE.MeshBasicMaterial({ color: 0xcbd5e1, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false })
             );
             propHub.add(disc);
           }
 
+          mergeGroupByMaterial(propHub);
           pl.add(propHub);
           q400Propellers.push({ hub: propHub, speed: o.spinSpeed !== undefined ? o.spinSpeed : 6.0 });
 
-          // Long Main Landing Gear Strut & Dual Tires descending from each nacelle
           const gearStrut = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 2.55, 8), metalMat);
           gearStrut.position.set(ex, -0.15, -0.8);
-          pl.add(gearStrut);
+          airframe.add(gearStrut);
           [-0.28, 0.28].forEach(wo => {
             const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.48, 0.24, 14), tireMat);
             wheel.rotation.z = Math.PI / 2;
             wheel.position.set(ex + wo, -1.42, -0.8);
-            pl.add(wheel);
+            airframe.add(wheel);
           });
         });
 
         // 4. Nose Landing Gear + Taxi/Takeoff LED Headlight
         const noseStrut = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 1.85, 8), metalMat);
         noseStrut.position.set(0, -0.95, -fuseLen / 2 - 0.8);
-        pl.add(noseStrut);
+        airframe.add(noseStrut);
         [-0.20, 0.20].forEach(wo => {
           const nWheel = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.18, 12), tireMat);
           nWheel.rotation.z = Math.PI / 2;
           nWheel.position.set(wo, -1.54, -fuseLen / 2 - 0.8);
-          pl.add(nWheel);
+          airframe.add(nWheel);
         });
         if (o.headlight) {
           const beamLight = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false }));
           beamLight.position.set(0, -0.7, -fuseLen / 2 - 0.95);
-          pl.add(beamLight);
+          airframe.add(beamLight);
         }
 
-        // 5. Tall Iconic T-Tail Vertical Stabilizer with Porter Raccoon Badge & Horizontal Tailplane
-        const vFin = new THREE.Mesh(new THREE.BoxGeometry(0.34, 6.2, 4.4), porterNavyMat);
-        vFin.position.set(0, 3.6, fuseLen / 2 + 2.8);
-        vFin.rotation.x = -0.22; // swept back fin
-        pl.add(vFin);
+        // 5. Swept Tapered T-Tail Vertical Stabilizer, Dorsal Fillet & Swept Horizontal Tailplane
+        const vFin = new THREE.Mesh(q400VFinGeo, porterNavyMat);
+        vFin.position.set(0, 0.9, fuseLen / 2 + 1.1);
+        airframe.add(vFin);
+        const dorsalFillet = new THREE.Mesh(new THREE.BoxGeometry(0.32, 1.1, 3.2), porterNavyMat);
+        dorsalFillet.position.set(0, 1.5, fuseLen / 2 - 0.8);
+        dorsalFillet.rotation.x = 0.35;
+        airframe.add(dorsalFillet);
 
-        // Emblazon Porter Raccoon Badge on both sides of the vertical tail fin
-        const badgeMat = new THREE.MeshBasicMaterial({ map: porterTailTex, side: THREE.DoubleSide });
         [-0.19, 0.19].forEach((bx, bi) => {
-          const badge = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 3.2), badgeMat);
-          badge.position.set(bx, 3.9, fuseLen / 2 + 2.9);
+          const badge = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 3.0), badgeMat);
+          badge.position.set(bx, 4.3, fuseLen / 2 + 3.0);
           badge.rotation.y = bi === 0 ? -Math.PI / 2 : Math.PI / 2;
           pl.add(badge);
         });
 
-        // High T-Tail Horizontal Stabilizer Bullet Fairing & Tailplane
         const bullet = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 3.8, 12), porterNavyMat);
         bullet.rotation.x = Math.PI / 2;
-        bullet.position.set(0, 6.65, fuseLen / 2 + 3.4);
-        pl.add(bullet);
+        bullet.position.set(0, 7.05, fuseLen / 2 + 3.5);
+        airframe.add(bullet);
 
-        const hTail = new THREE.Mesh(new THREE.BoxGeometry(8.8, 0.22, 2.2), porterWhiteMat);
-        hTail.position.set(0, 6.65, fuseLen / 2 + 3.5);
-        pl.add(hTail);
+        [-1, 1].forEach(side => {
+          const hHalf = new THREE.Mesh(q400HTailGeo, porterWhiteMat);
+          hHalf.position.set(0, 7.08, fuseLen / 2 + 3.6);
+          if (side < 0) hHalf.scale.x = -1;
+          airframe.add(hHalf);
+        });
 
-        // Red anti-collision beacon atop the T-tail
         const tailBeacon = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), new THREE.MeshBasicMaterial({ color: 0xef4444, fog: false }));
-        tailBeacon.position.set(0, 6.95, fuseLen / 2 + 3.5);
-        pl.add(tailBeacon);
+        tailBeacon.position.set(0, 7.35, fuseLen / 2 + 3.6);
+        airframe.add(tailBeacon);
+
+        // Merge entire static airframe by material in local coordinates BEFORE world transform!
+        mergeGroupByMaterial(airframe);
+        pl.add(airframe);
 
         pl.position.set(px, GROUND_Y + 1.90, pz);
         pl.rotation.y = rotY;
@@ -3313,14 +3772,15 @@
         return pl;
       }
 
-      // 1. Active Runway 08 Takeoff Aircraft: lined up on Runway 08 at (-1360, Z(-170)) facing East (-Math.PI/2 so -Z nose points +X!)
-      flightPlane = buildPorterDash8Q400(-1360, Z(-170), -Math.PI / 2, { spinSpeed: 22.0, headlight: true, noOb: true });
-      // 2. Runway 26 Holding / Taxiing Q400 at East Taxiway (-1160, Z(-206)) facing West (+Math.PI/2)
+      // 1. Active Runway 08 Takeoff Aircraft (hero Q400 with full interior cabin & cockpit!)
+      flightPlane = buildPorterDash8Q400(-1360, Z(-170), -Math.PI / 2, { spinSpeed: 22.0, headlight: true, noOb: true, isHero: true });
+      // 2. Runway 26 Holding / Taxiing Q400 at East Taxiway
       buildPorterDash8Q400(-1160, Z(-206), Math.PI / 2, { spinSpeed: 12.0, headlight: true });
       // 3 & 4. Two Gate-Parked Porter Q400 Turboprops at Terminal Gates 1 & 2
       buildPorterDash8Q400(ax - 34, az + 50, 0.12, { spinSpeed: 2.8, headlight: false });
       buildPorterDash8Q400(ax + 34, az + 50, -0.12, { spinSpeed: 0.0, headlight: false });
 
+      mergeGroupByMaterial(apg);
       islandsGroup.add(apg);
     }
 
@@ -3330,6 +3790,12 @@
     // ------------------------------------------------------------------------
     {
       const cottGrp = new THREE.Group();
+      const algonquinCottGrp = new THREE.Group();
+      const wardsCottGrp = new THREE.Group();
+      const wardsPropsGrp = new THREE.Group();
+      cottGrp.add(algonquinCottGrp);
+      cottGrp.add(wardsCottGrp);
+      cottGrp.add(wardsPropsGrp);
 
       // 12 Curated Heritage Island Cottage Palettes (Siding, Roof Shingles, Shutters/Door)
       const COTTAGE_STYLES = [
@@ -3354,7 +3820,7 @@
         shutterMat: new THREE.MeshStandardMaterial({ color: st.shutter, roughness: 0.58 })
       }));
 
-      const warmWinGlowMat = new THREE.MeshBasicMaterial({ color: 0xfef08a, fog: false });
+      // Uses top-level day/night warmWinGlowMat
       const chimneyBrickMat = new THREE.MeshStandardMaterial({ color: 0x991b1b, roughness: 0.85 });
       const flowerColors = [0xef4444, 0xec4899, 0xfacc15, 0xa855f7, 0x3b82f6, 0xf97316, 0x14b8a6];
       const flowerMats = flowerColors.map(col => new THREE.MeshBasicMaterial({ color: col }));
@@ -3792,80 +4258,87 @@
         const cy = Math.max(GROUND_Y, terrainH(cDef.x, cDef.z));
         c.position.set(cDef.x, cy, cDef.z);
         c.rotation.y = cDef.rot;
-        cottGrp.add(c);
+        (cDef.x < 750 ? algonquinCottGrp : wardsCottGrp).add(c);
         circOb(cDef.x, cDef.z, Math.max(w, d) * 0.52);
       }
 
       COTTAGES.forEach((cDef, idx) => addUniqueCottage(cDef, idx));
 
-      // Batch all 26 cottages (~3,250 child meshes) by shared material into ~25 merged meshes
-      // to eliminate >3,200 WebGL draw calls per frame while preserving 100% of every architectural & garden detail!
-      try {
-        cottGrp.updateMatrixWorld(true);
-        if (cottGrp.matrixWorld && cottGrp.matrixWorld.elements) {
-          const buckets = new Map();
-          const toRemove = [];
-          cottGrp.children.forEach(cottageRoot => {
-            cottageRoot.traverse(node => {
-              if (node && node.isMesh && node.geometry && node.material && !Array.isArray(node.material)) {
-                let list = buckets.get(node.material);
-                if (!list) { list = []; buckets.set(node.material, list); }
-                const g = node.geometry.index ? node.geometry.toNonIndexed() : node.geometry.clone();
-                g.applyMatrix4(node.matrixWorld);
-                list.push(g);
-              }
-            });
-            toRemove.push(cottageRoot);
-          });
-          if (buckets.size > 0) {
-            toRemove.forEach(r => cottGrp.remove(r));
-            buckets.forEach((geos, mat) => {
-              let totalVerts = 0;
-              for (let i = 0; i < geos.length; i++) {
-                const pos = geos[i].getAttribute('position');
-                if (pos) totalVerts += pos.count;
-              }
-              if (totalVerts === 0) return;
-              const mergedPos = new Float32Array(totalVerts * 3);
-              const mergedNor = new Float32Array(totalVerts * 3);
-              let offset = 0;
-              for (let i = 0; i < geos.length; i++) {
-                const pos = geos[i].getAttribute('position');
-                const nor = geos[i].getAttribute('normal');
-                if (!pos) continue;
-                mergedPos.set(pos.array, offset);
-                if (nor && nor.array.length === pos.array.length) {
-                  mergedNor.set(nor.array, offset);
-                }
-                offset += pos.count * 3;
-              }
-              const mergedGeo = new THREE.BufferGeometry();
-              mergedGeo.setAttribute('position', new THREE.BufferAttribute(mergedPos, 3));
-              mergedGeo.setAttribute('normal', new THREE.BufferAttribute(mergedNor, 3));
-              const mergedMesh = new THREE.Mesh(mergedGeo, mat);
-              mergedMesh.castShadow = true;
-              mergedMesh.receiveShadow = true;
-              cottGrp.add(mergedMesh);
-            });
-          }
-        }
-      } catch (e) { /* fallback to unmerged group in mock environments */ }
+      // Split into Algonquin & Ward's batches so frustum culling & draw calls stay lean
+      mergeGroupByMaterial(algonquinCottGrp, { castShadow: true, receiveShadow: true });
+      mergeGroupByMaterial(wardsCottGrp, { castShadow: true, receiveShadow: true });
 
       // Ward's Island Cafe & Garden Patio at (1050, Z(70))
       const cafe = new THREE.Mesh(new THREE.BoxGeometry(18, 4.2, 12), new THREE.MeshStandardMaterial({ color: 0xfef3c7, roughness: 0.6 }));
       cafe.position.set(1050, 2.65, Z(70));
-      cottGrp.add(cafe);
+      wardsPropsGrp.add(cafe);
       const cafeRoof = new THREE.Mesh(new THREE.ConeGeometry(13.5, 2.8, 4), new THREE.MeshStandardMaterial({ color: 0x065f46, roughness: 0.7 }));
       cafeRoof.rotation.y = Math.PI / 4;
       cafeRoof.position.set(1050, 6.1, Z(70));
-      cottGrp.add(cafeRoof);
+      wardsPropsGrp.add(cafeRoof);
+      const cafeOvenChim = new THREE.Mesh(new THREE.BoxGeometry(1.4, 5.4, 1.4), chimneyBrickMat);
+      cafeOvenChim.position.set(1057, 4.6, Z(72));
+      wardsPropsGrp.add(cafeOvenChim);
       const cafeVeranda = new THREE.Mesh(new THREE.BoxGeometry(18.8, 0.35, 3.6), woodMat);
       cafeVeranda.position.set(1050, GROUND_Y + 0.18, Z(62.4));
-      cottGrp.add(cafeVeranda);
+      wardsPropsGrp.add(cafeVeranda);
       [-6.0, -2.0, 2.0, 6.0].forEach(wx => {
         const cWin = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.8, 0.16), warmWinGlowMat);
         cWin.position.set(1050 + wx, 2.6, Z(63.98));
-        cottGrp.add(cWin);
+        wardsPropsGrp.add(cWin);
+      });
+      // Garden Patio outdoor tables & colourful umbrellas (flanks open, center Withrow Walk clear!)
+      const patioUmbMats = [
+        new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.6 }),
+        new THREE.MeshStandardMaterial({ color: 0x059669, roughness: 0.6 }),
+        new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.6 }),
+        new THREE.MeshStandardMaterial({ color: 0x2563eb, roughness: 0.6 })
+      ];
+      [[1042.5, Z(58.5), 0], [1046.0, Z(59.2), 1], [1054.0, Z(59.2), 2], [1057.5, Z(58.5), 3]].forEach(([tx, tz, ui]) => {
+        const tbl = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 0.08, 10), woodMat);
+        tbl.position.set(tx, GROUND_Y + 0.78, tz);
+        wardsPropsGrp.add(tbl);
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 2.5, 6), metalMat);
+        pole.position.set(tx, GROUND_Y + 1.25, tz);
+        wardsPropsGrp.add(pole);
+        const umb = new THREE.Mesh(new THREE.ConeGeometry(1.45, 0.55, 8), patioUmbMats[ui]);
+        umb.position.set(tx, GROUND_Y + 2.45, tz);
+        wardsPropsGrp.add(umb);
+        [-0.75, 0.75].forEach(cx => {
+          const ch = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.45, 0.45), woodMat);
+          ch.position.set(tx + cx, GROUND_Y + 0.25, tz);
+          wardsPropsGrp.add(ch);
+        });
+        circOb(tx, tz, 0.75);
+      });
+      [-3.4, 3.4].forEach(px => {
+        const planter = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.55, 0.8), woodMat);
+        planter.position.set(1050 + px, GROUND_Y + 0.28, Z(60.6));
+        wardsPropsGrp.add(planter);
+        const shrub = new THREE.Mesh(new THREE.SphereGeometry(0.55, 6, 5), foliageGreenMat);
+        shrub.position.set(1050 + px, GROUND_Y + 0.7, Z(60.6));
+        wardsPropsGrp.add(shrub);
+      });
+      // Bike rack & 3 parked bicycles east of Ward's Cafe
+      const rackBar = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.08, 0.08), metalMat);
+      rackBar.position.set(1061.5, GROUND_Y + 0.7, Z(64.5));
+      wardsPropsGrp.add(rackBar);
+      [-1.5, 1.5].forEach(rx => {
+        const rPost = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.75, 6), metalMat);
+        rPost.position.set(1061.5 + rx, GROUND_Y + 0.38, Z(64.5));
+        wardsPropsGrp.add(rPost);
+      });
+      [-1.0, 0, 1.0].forEach((bx, bi) => {
+        const frameMat = canoeMats[bi % canoeMats.length];
+        [-0.45, 0.45].forEach(wz => {
+          const wh = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.06, 10), metalMat);
+          wh.rotation.z = Math.PI / 2;
+          wh.position.set(1061.5 + bx, GROUND_Y + 0.34, Z(64.5) + wz);
+          wardsPropsGrp.add(wh);
+        });
+        const bkFrame = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.9), frameMat);
+        bkFrame.position.set(1061.5 + bx, GROUND_Y + 0.65, Z(64.5));
+        wardsPropsGrp.add(bkFrame);
       });
       const cafeSign = makeSign(
         ['WARD\'S ISLAND CAFE', 'GARDEN PATIO • ARTISAN BAKERY • WOOD-FIRED PIZZA'],
@@ -3874,32 +4347,91 @@
       );
       cafeSign.position.set(1050, 5.2, Z(63.8));
       cafeSign.rotation.y = Math.PI;
-      cottGrp.add(cafeSign);
+      wardsPropsGrp.add(cafeSign);
       rectOb(1041, 1059, Z(64), Z(76));
+
+      // Ward's & Algonquin painted wooden pedestrian street signposts
+      const stSignGreenMat = new THREE.MeshStandardMaterial({ color: 0x065f46, roughness: 0.5 });
+      [
+        [912, Z(20), 0.2], [976, Z(22), -0.3], [1044, Z(38), 0.8],
+        [518, Z(26), 0.15], [1128, Z(30), 1.4]
+      ].forEach(([sx, sz, srot]) => {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.14, 2.7, 0.14), woodMat);
+        post.position.set(sx, GROUND_Y + 1.35, sz);
+        wardsPropsGrp.add(post);
+        const blade = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.24, 0.08), stSignGreenMat);
+        blade.position.set(sx, GROUND_Y + 2.45, sz);
+        blade.rotation.y = srot;
+        wardsPropsGrp.add(blade);
+      });
+
+      // Toronto Island Fire Station 335 at (858, Z(75)) facing Cibola Avenue
+      const fhx = 858, fhz = Z(75);
+      const fhBrickMat = new THREE.MeshStandardMaterial({ color: 0x991b1b, roughness: 0.8 });
+      const fhDoorMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.4 });
+      const fhBody = new THREE.Mesh(new THREE.BoxGeometry(11, 4.6, 8.2), fhBrickMat);
+      fhBody.position.set(fhx, GROUND_Y + 2.3, fhz);
+      wardsPropsGrp.add(fhBody);
+      const fhParapet = new THREE.Mesh(new THREE.BoxGeometry(11.4, 0.45, 8.6), stoneMat);
+      fhParapet.position.set(fhx, GROUND_Y + 4.75, fhz);
+      wardsPropsGrp.add(fhParapet);
+      [-2.6, 2.6].forEach(dx => {
+        const bayDoor = new THREE.Mesh(new THREE.BoxGeometry(3.4, 3.4, 0.18), fhDoorMat);
+        bayDoor.position.set(fhx + dx, GROUND_Y + 1.75, fhz + 4.12);
+        wardsPropsGrp.add(bayDoor);
+        const bayWin = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.6, 0.22), warmWinGlowMat);
+        bayWin.position.set(fhx + dx, GROUND_Y + 2.6, fhz + 4.13);
+        wardsPropsGrp.add(bayWin);
+      });
+      const hoseTower = new THREE.Mesh(new THREE.BoxGeometry(2.8, 8.8, 2.8), fhBrickMat);
+      hoseTower.position.set(fhx - 3.6, GROUND_Y + 4.4, fhz - 2.2);
+      wardsPropsGrp.add(hoseTower);
+      const hoseCap = new THREE.Mesh(new THREE.ConeGeometry(2.4, 1.4, 4), stoneMat);
+      hoseCap.rotation.y = Math.PI / 4;
+      hoseCap.position.set(fhx - 3.6, GROUND_Y + 9.5, fhz - 2.2);
+      wardsPropsGrp.add(hoseCap);
+      const fireSign = makeSign(
+        ['TORONTO FIRE STATION 335', 'WARD\'S ISLAND EMERGENCY RESPONSE'],
+        10.5, 1.4,
+        { bg: '#7f1d1d', fg: '#fef2f2', borderColor: '#f59e0b' }
+      );
+      fireSign.position.set(fhx, GROUND_Y + 4.15, fhz + 4.25);
+      wardsPropsGrp.add(fireSign);
+      rectOb(fhx - 5.6, fhx + 5.6, fhz - 4.2, fhz + 4.2);
 
       // Ward's Island Ferry Dock Terminal Pavilion & Sign at (1140, Z(-18))
       const wx = 1140, wz = Z(-18);
       const wCanopy = new THREE.Mesh(new THREE.BoxGeometry(18, 0.55, 11), darkWoodMat);
       wCanopy.position.set(wx, 4.2, wz);
-      cottGrp.add(wCanopy);
+      wardsPropsGrp.add(wCanopy);
       const wRoof = new THREE.Mesh(new THREE.ConeGeometry(11.5, 2.4, 4), new THREE.MeshStandardMaterial({ color: 0x1e3a2f, roughness: 0.7 }));
       wRoof.rotation.y = Math.PI / 4;
       wRoof.scale.set(1.25, 1, 0.8);
       wRoof.position.set(wx, 5.6, wz);
-      cottGrp.add(wRoof);
+      wardsPropsGrp.add(wRoof);
       [-7.5, 7.5].forEach(px => [-4.2, 4.2].forEach(pz => {
         const p = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.25, 4.2, 8), darkWoodMat);
         p.position.set(wx + px, 2.1, wz + pz);
-        cottGrp.add(p);
+        wardsPropsGrp.add(p);
         circOb(wx + px, wz + pz, 0.35);
       }));
+      [-5.5, 5.5].forEach(bx => {
+        const wBench = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.45, 0.65), woodMat);
+        wBench.position.set(wx + bx, GROUND_Y + 0.32, wz + 2.8);
+        wardsPropsGrp.add(wBench);
+      });
+      [[1144, Z(15)], [1144, Z(32)]].forEach(([bx, bz]) => {
+        const gapBench = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.48, 2.4), woodMat);
+        gapBench.position.set(bx, GROUND_Y + 0.3, bz);
+        wardsPropsGrp.add(gapBench);
+      });
       const wSignS = makeSign(
         ['WARD\'S ISLAND FERRY DOCK', 'CLICK DESTINATION • MAINLAND / CENTRE / HANLAN\'S [E]'],
         16, 2.2,
         { bg: '#064e3b', fg: '#fef08a', borderColor: '#10b981' }
       );
       wSignS.position.set(wx, 5.0, wz + 5.7);
-      cottGrp.add(wSignS);
+      wardsPropsGrp.add(wSignS);
       const wSignN = makeSign(
         ['WARD\'S ISLAND TERMINAL', 'EAST ISLAND VILLAGE & COTTAGES'],
         15, 2.0,
@@ -3907,13 +4439,14 @@
       );
       wSignN.position.set(wx, 5.0, wz - 5.7);
       wSignN.rotation.y = Math.PI;
-      cottGrp.add(wSignN);
+      wardsPropsGrp.add(wSignN);
 
+      mergeGroupByMaterial(wardsPropsGrp, { castShadow: true });
       islandsGroup.add(cottGrp);
     }
 
     // ------------------------------------------------------------------------
-    // Landmark: Hanlan's Point Terminal, Ned Hanlan Statue, Ball Diamonds
+    // Landmark: Hanlan's Point Terminal, Ned Hanlan Statue, Ball Diamonds & Dunes
     // ------------------------------------------------------------------------
     {
       const hpg = new THREE.Group();
@@ -3933,53 +4466,223 @@
         circOb(hx + o, hz + 32, 0.3);
       });
 
-      const plinth = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.8, 3.2), stoneMat);
-      plinth.position.set(hx + 35, 1.4, hz + 35);
-      hpg.add(plinth);
-      const statue = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 2.4, 8), new THREE.MeshStandardMaterial({ color: 0x6b4423, metalness: 0.8, roughness: 0.3 }));
-      statue.position.set(hx + 35, 3.4, hz + 35);
-      hpg.add(statue);
-      circOb(hx + 35, hz + 35, 2.3);
-
-      // Two baseball diamonds
-      const dirt = new THREE.MeshLambertMaterial({ color: 0xa0704a });
-      [[-800, Z(-25), 0.6], [-760, Z(40), 2.4]].forEach(([dx, dz, rot]) => {
-        const inf = new THREE.Mesh(new THREE.CircleGeometry(20, 24, -Math.PI / 4, Math.PI / 2), dirt);
-        inf.rotation.x = -Math.PI / 2;
-        inf.rotation.z = rot;
-        inf.position.set(dx, GROUND_Y + 0.03, dz);
-        hpg.add(inf);
-        const back = new THREE.Mesh(new THREE.BoxGeometry(10, 3.5, 0.15), new THREE.MeshStandardMaterial({ color: 0x9ca3af, metalness: 0.6, roughness: 0.4, transparent: true, opacity: 0.6 }));
-        back.position.set(dx - Math.sin(rot) * 4, GROUND_Y + 1.75, dz - Math.cos(rot) * 4);
-        back.rotation.y = rot;
-        hpg.add(back);
+      // Hanlan's Point Ferry Dock Timber Waiting Shelter & Benches (safely south of disembark at z=1090)
+      const hpShelterRoof = new THREE.Mesh(new THREE.BoxGeometry(19, 0.45, 7.6), darkWoodMat);
+      hpShelterRoof.position.set(hx, 4.05, hz + 36.2);
+      hpg.add(hpShelterRoof);
+      const hpGable = new THREE.Mesh(new THREE.ConeGeometry(10.8, 2.1, 4), new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.65 }));
+      hpGable.rotation.y = Math.PI / 4;
+      hpGable.scale.set(1.3, 1, 0.6);
+      hpGable.position.set(hx, 5.25, hz + 36.2);
+      hpg.add(hpGable);
+      [-8.5, 8.5].forEach(px => {
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 4.0, 6), darkWoodMat);
+        post.position.set(hx + px, 2.0, hz + 39.6);
+        hpg.add(post);
+        circOb(hx + px, hz + 39.6, 0.32);
+      });
+      [[-5.0, 36.2], [5.0, 36.2], [-10.5, 22], [10.5, 22]].forEach(([bx, bz]) => {
+        const bSeat = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.42, 0.65), woodMat);
+        bSeat.position.set(hx + bx, GROUND_Y + 0.32, hz + bz);
+        hpg.add(bSeat);
       });
 
+      // Articulated Ned Hanlan Bronze Sculling Monument on Stepped Granite Pedestal
+      const plinth = new THREE.Mesh(new THREE.BoxGeometry(3.4, 1.4, 3.4), stoneMat);
+      plinth.position.set(hx + 35, 1.2, hz + 35);
+      hpg.add(plinth);
+      const plinthBase = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.5, 4.2), stoneMat);
+      plinthBase.position.set(hx + 35, 0.45, hz + 35);
+      hpg.add(plinthBase);
+      const plinthCap = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.28, 3.6), stoneMat);
+      plinthCap.position.set(hx + 35, 2.02, hz + 35);
+      hpg.add(plinthCap);
+      const plaqueMat = new THREE.MeshStandardMaterial({ color: 0xb45309, metalness: 0.8, roughness: 0.35 });
+      const plaque = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.65, 0.1), plaqueMat);
+      plaque.position.set(hx + 35, 1.25, hz + 33.28);
+      hpg.add(plaque);
+
+      const bronzeMat = new THREE.MeshStandardMaterial({ color: 0x5c3a21, metalness: 0.78, roughness: 0.32 });
+      const hanlanGrp = new THREE.Group();
+      hanlanGrp.position.set(hx + 35, 2.16, hz + 35);
+      hanlanGrp.rotation.y = Math.PI;
+      [-0.22, 0.22].forEach(lx => {
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.12, 1.25, 8), bronzeMat);
+        leg.position.set(lx, 0.62, 0);
+        hanlanGrp.add(leg);
+      });
+      const hTorso = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.24, 1.05, 8), bronzeMat);
+      hTorso.position.set(0, 1.72, 0);
+      hanlanGrp.add(hTorso);
+      const hHead = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 8), bronzeMat);
+      hHead.position.set(0, 2.42, 0);
+      hanlanGrp.add(hHead);
+      const hCap = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.25, 0.1, 8), bronzeMat);
+      hCap.position.set(0, 2.58, 0.03);
+      hanlanGrp.add(hCap);
+      [-1, 1].forEach(side => {
+        const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.07, 0.75, 6), bronzeMat);
+        arm.position.set(side * 0.34, 1.92, 0.18);
+        arm.rotation.z = side * 0.35;
+        arm.rotation.x = -0.45;
+        hanlanGrp.add(arm);
+        const oarShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 3.6, 6), bronzeMat);
+        oarShaft.position.set(side * 0.22, 1.65, 0.26);
+        oarShaft.rotation.z = side * 0.32;
+        hanlanGrp.add(oarShaft);
+        const oarBlade = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.78, 0.05), bronzeMat);
+        oarBlade.position.set(side * (0.22 - Math.sin(0.32) * 1.6), 1.65 + Math.cos(0.32) * 1.6, 0.26);
+        oarBlade.rotation.z = side * 0.32;
+        hanlanGrp.add(oarBlade);
+      });
+      hpg.add(hanlanGrp);
+      circOb(hx + 35, hz + 35, 2.3);
+
+      // Two Toronto-authentic Baseball Diamonds with turf outfield, chalk foul lines, bases, mound, dugouts & bleachers
+      const dirt = new THREE.MeshLambertMaterial({ color: 0xa0704a });
+      const outfieldGrassMat = new THREE.MeshLambertMaterial({ color: 0x2e7d32 });
+      const chalkMat = new THREE.MeshBasicMaterial({ color: 0xf8fafc });
+      const baseMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 });
+      const dugoutMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.7 });
+      const fenceWireMat = new THREE.MeshStandardMaterial({ color: 0x9ca3af, metalness: 0.6, roughness: 0.4, transparent: true, opacity: 0.6 });
+      [[-800, Z(-25), 0.6], [-760, Z(40), 2.4]].forEach(([dx, dz, rot]) => {
+        const dg = new THREE.Group();
+        dg.position.set(dx, GROUND_Y, dz);
+        dg.rotation.y = rot;
+
+        const turf = new THREE.Mesh(new THREE.CircleGeometry(46, 20, -Math.PI / 4, Math.PI / 2), outfieldGrassMat);
+        turf.rotation.x = -Math.PI / 2;
+        turf.position.y = 0.015;
+        dg.add(turf);
+
+        const inf = new THREE.Mesh(new THREE.CircleGeometry(20, 24, -Math.PI / 4, Math.PI / 2), dirt);
+        inf.rotation.x = -Math.PI / 2;
+        inf.position.y = 0.03;
+        dg.add(inf);
+
+        [-Math.PI / 4, Math.PI / 4].forEach(fa => {
+          const line = new THREE.Mesh(new THREE.BoxGeometry(44, 0.03, 0.22), chalkMat);
+          line.rotation.y = fa;
+          line.position.set(Math.cos(fa) * 22, 0.04, -Math.sin(fa) * 22);
+          dg.add(line);
+        });
+
+        [[0.8, 0], [11.2, 11.2], [22.0, 0], [11.2, -11.2]].forEach(([bx, bz]) => {
+          const bag = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.08, 0.75), baseMat);
+          bag.rotation.y = Math.PI / 4;
+          bag.position.set(bx, 0.06, bz);
+          dg.add(bag);
+        });
+        const mound = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 2.2, 0.35, 12), dirt);
+        mound.position.set(10.5, 0.18, 0);
+        dg.add(mound);
+        const rubber = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.06, 0.85), baseMat);
+        rubber.position.set(10.5, 0.36, 0);
+        dg.add(rubber);
+
+        const back = new THREE.Mesh(new THREE.BoxGeometry(0.18, 3.6, 10), fenceWireMat);
+        back.position.set(-3.2, 1.8, 0);
+        dg.add(back);
+        [-13.5, 13.5].forEach(sd => {
+          const dug = new THREE.Mesh(new THREE.BoxGeometry(7.2, 2.2, 2.4), dugoutMat);
+          dug.position.set(7.0, 1.1, sd);
+          dg.add(dug);
+          for (let ti = 0; ti < 3; ti++) {
+            const plank = new THREE.Mesh(new THREE.BoxGeometry(7.0, 0.16, 0.45), woodMat);
+            plank.position.set(16.5, 0.35 + ti * 0.4, sd + (sd > 0 ? 1 : -1) * (1.5 + ti * 0.6));
+            dg.add(plank);
+          }
+        });
+        hpg.add(dg);
+      });
+
+      // Hanlan's Point Coastal Sand Dunes Fencing, Dune Grass & Beach Sign
+      const duneGrassMat = new THREE.MeshLambertMaterial({ color: 0x84a955 });
+      const dunePostItems = [];
+      const duneTuftItems = [];
+      for (let i = 0; i < 24; i++) {
+        const gx = -900 + (i * 17) % 240;
+        const gz = Z(115 + (i % 5) * 14);
+        const gy = terrainH(gx, gz);
+        dunePostItems.push({ x: gx, y: gy + 0.55, z: gz, sx: 0.1, sy: 1.1, sz: 0.1 });
+        for (let k = 0; k < 3; k++) {
+          duneTuftItems.push({
+            x: gx + (k - 1) * 1.4,
+            y: gy + 0.42,
+            z: gz + ((i + k) % 2 === 0 ? 0.9 : -0.9),
+            ry: k * 0.9,
+            sx: 0.25,
+            sy: 0.85,
+            sz: 0.25
+          });
+        }
+      }
+      addInstMesh(hpg, unitBoxGeo, darkWoodMat, dunePostItems);
+      addInstMesh(hpg, unitBoxGeo, duneGrassMat, duneTuftItems);
+
+      const hanlanBeachSign = makeSign(
+        ['HANLAN\'S POINT BEACH', 'COASTAL DUNES • WESTERN SHORE BOARDWALK'],
+        10, 1.5,
+        { bg: '#0f172a', fg: '#fde68a', borderColor: '#f59e0b' }
+      );
+      hanlanBeachSign.position.set(-865, terrainH(-865, Z(128)) + 2.4, Z(128));
+      hanlanBeachSign.rotation.y = Math.PI / 2;
+      hpg.add(hanlanBeachSign);
+
+      mergeGroupByMaterial(hpg, { castShadow: true });
       islandsGroup.add(hpg);
     }
 
     // ------------------------------------------------------------------------
-    // Beach Details: Lifeguard Stands & Pier Railing
+    // Beach Details: Lifeguard Stands (ladder, backrest, buoy) & Pier Details
     // ------------------------------------------------------------------------
     {
       const bg = new THREE.Group();
+      const lgWhiteMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.5 });
+      const lgRedMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.45 });
+      const lgFlagMat = new THREE.MeshBasicMaterial({ color: 0xdc2626, fog: false });
       [[-200, Z(470)], [200, Z(465)], [700, Z(395)], [1180, Z(175)], [-880, Z(150)]].forEach(([x, z]) => {
         const y = terrainH(x, z);
-        const seat = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.2, 1.2), new THREE.MeshStandardMaterial({ color: 0xffffff }));
+        const seat = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.2, 1.2), lgWhiteMat);
         seat.position.set(x, y + 2.6, z);
         bg.add(seat);
+        const backrest = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.85, 0.14), lgWhiteMat);
+        backrest.position.set(x, y + 3.05, z - 0.54);
+        backrest.rotation.x = -0.15;
+        bg.add(backrest);
+        const footRest = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.12, 0.6), lgWhiteMat);
+        footRest.position.set(x, y + 1.85, z + 0.65);
+        bg.add(footRest);
         [-0.6, 0.6].forEach(o => {
           [-0.5, 0.5].forEach(p => {
-            const l = new THREE.Mesh(new THREE.BoxGeometry(0.12, 2.6, 0.12), new THREE.MeshStandardMaterial({ color: 0xf8fafc }));
+            const l = new THREE.Mesh(new THREE.BoxGeometry(0.12, 2.6, 0.12), lgWhiteMat);
             l.position.set(x + o, y + 1.3, z + p);
             bg.add(l);
           });
         });
-        const flag = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.6, 0.9), new THREE.MeshBasicMaterial({ color: 0xdc2626, fog: false }));
-        flag.position.set(x + 0.7, y + 3.6, z);
+        [-0.4, 0.4].forEach(lx => {
+          const rail = new THREE.Mesh(new THREE.BoxGeometry(0.08, 2.8, 0.08), lgWhiteMat);
+          rail.position.set(x + lx, y + 1.35, z - 0.85);
+          rail.rotation.x = 0.24;
+          bg.add(rail);
+        });
+        for (let r = 0; r < 5; r++) {
+          const rung = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.07, 0.07), lgWhiteMat);
+          rung.position.set(x, y + 0.45 + r * 0.48, z - 1.05 + r * 0.11);
+          bg.add(rung);
+        }
+        const buoy = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.72, 0.24), lgRedMat);
+        buoy.position.set(x - 0.78, y + 2.25, z + 0.1);
+        bg.add(buoy);
+        const flagPole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.4, 6), lgWhiteMat);
+        flagPole.position.set(x + 0.65, y + 3.35, z - 0.48);
+        bg.add(flagPole);
+        const flag = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.6, 0.9), lgFlagMat);
+        flag.position.set(x + 0.7, y + 3.7, z);
         bg.add(flag);
         circOb(x, z, 1.0);
       });
+      mergeGroupByMaterial(bg, { castShadow: true });
       islandsGroup.add(bg);
     }
 
@@ -4149,160 +4852,205 @@
     }
 
     // ------------------------------------------------------------------------
-    // Wildlife: Flocks of Canada Geese grazing on lawns & Seagulls along the pier
+    // Wildlife (Instanced): Flocks of Canada Geese & Seagulls along the pier
     // ------------------------------------------------------------------------
     const grazingGeese = [];
+    let gooseNeckInst = null, gooseHeadInst = null, gooseChinInst = null, gooseBillInst = null;
+    function updateGooseInstances(timeSec) {
+      if (!gooseNeckInst || grazingGeese.length === 0) return;
+      for (let i = 0; i < grazingGeese.length; i++) {
+        const g = grazingGeese[i];
+        const peck = Math.sin(timeSec * g.speed + g.phase) * 0.42;
+        const tilt = -0.28 + peck;
+        const S = 1.25;
+        const ux = -Math.sin(tilt), uy = Math.cos(tilt);
+        const nx = (0.22 + ux * 0.24) * S, ny = (0.45 + uy * 0.24) * S;
+        const hx = (0.22 + ux * 0.50) * S, hy = (0.45 + uy * 0.50) * S;
+        const cosY = Math.cos(g.rotY), sinY = Math.sin(g.rotY);
+
+        _e.set(0, g.rotY, tilt, 'YXZ');
+        _q.setFromEuler(_e);
+        _v.set(g.gx + nx * cosY, g.gy + ny, g.gz - nx * sinY);
+        _sc.set(S, S, S);
+        _m4.compose(_v, _q, _sc);
+        gooseNeckInst.setMatrixAt(i, _m4);
+
+        _e.set(0, g.rotY, 0, 'YXZ');
+        _q.setFromEuler(_e);
+        _v.set(g.gx + hx * cosY, g.gy + hy, g.gz - hx * sinY);
+        _m4.compose(_v, _q, _sc);
+        gooseHeadInst.setMatrixAt(i, _m4);
+
+        _v.set(g.gx + (hx + 0.01) * cosY, g.gy + hy - 0.02 * S, g.gz - (hx + 0.01) * sinY);
+        _m4.compose(_v, _q, _sc);
+        gooseChinInst.setMatrixAt(i, _m4);
+
+        _e.set(0, g.rotY, -Math.PI / 2, 'YXZ');
+        _q.setFromEuler(_e);
+        _v.set(g.gx + (hx + 0.13 * S) * cosY, g.gy + hy - 0.01 * S, g.gz - (hx + 0.13 * S) * sinY);
+        _m4.compose(_v, _q, _sc);
+        gooseBillInst.setMatrixAt(i, _m4);
+      }
+      gooseNeckInst.instanceMatrix.needsUpdate = true;
+      gooseHeadInst.instanceMatrix.needsUpdate = true;
+      gooseChinInst.instanceMatrix.needsUpdate = true;
+      gooseBillInst.instanceMatrix.needsUpdate = true;
+    }
+
     {
       const wg = new THREE.Group();
       const gooseBodyMat = new THREE.MeshStandardMaterial({ color: 0x4a433b, roughness: 0.8 });
       const gooseBlackMat = new THREE.MeshStandardMaterial({ color: 0x171717, roughness: 0.7 });
       const gooseWhiteMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc });
 
-      function makeCanadaGoose() {
-        const g = new THREE.Group();
-        g.scale.setScalar(1.25); // easily visible
-        const body = new THREE.Mesh(new THREE.SphereGeometry(0.32, 10, 8), gooseBodyMat);
-        body.scale.set(1.4, 0.75, 0.85);
-        body.position.y = 0.35;
-        g.add(body);
-        const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.5, 8), gooseBlackMat);
-        neck.position.set(0.32, 0.6, 0);
-        neck.rotation.z = -0.3;
-        g.add(neck);
-        g.neck = neck;
-        const head = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), gooseBlackMat);
-        head.position.set(0.42, 0.85, 0);
-        g.add(head);
-        g.head = head;
-        const chin = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.16), gooseWhiteMat);
-        chin.position.set(0.41, 0.83, 0);
-        g.add(chin);
-        const bill = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.16, 6), gooseBlackMat);
-        bill.rotation.z = -Math.PI / 2;
-        bill.position.set(0.54, 0.84, 0);
-        g.add(bill);
-        return g;
-      }
-
-      // Flocks grazing peacefully on lawns across the islands
       const gooseFlocks = [
-        { cx: 16, cz: Z(25), count: 6, r: 8 }, // Ferry Dock arrival lawn
-        { cx: 32, cz: Z(105), count: 5, r: 8 }, // Near First Bridge & BBQ patio
-        { cx: 0, cz: Z(315), count: 6, r: 10 }, // Near Grand Fountain
-        { cx: 260, cz: Z(150), count: 6, r: 12 }, // Far Enough Farm pasture
-        { cx: -160, cz: Z(325), count: 8, r: 18 }, // Olympic Island Great Lawn
+        { cx: 16, cz: Z(25), count: 6, r: 8 },
+        { cx: 32, cz: Z(105), count: 5, r: 8 },
+        { cx: 0, cz: Z(315), count: 6, r: 10 },
+        { cx: 260, cz: Z(150), count: 6, r: 12 },
+        { cx: -160, cz: Z(325), count: 8, r: 18 },
         { cx: 110, cz: Z(230), count: 6, r: 12 },
         { cx: 580, cz: Z(290), count: 6, r: 14 },
         { cx: -25, cz: Z(430), count: 5, r: 10 }
       ];
 
+      const gooseBodyItems = [];
       gooseFlocks.forEach(flock => {
         for (let i = 0; i < flock.count; i++) {
           const a = rnd() * Math.PI * 2, d = rnd() * flock.r;
           const gx = flock.cx + Math.cos(a) * d, gz = flock.cz + Math.sin(a) * d;
           if (landField(gx, gz) > 2) {
-            const goose = makeCanadaGoose();
-            const y = terrainH(gx, gz);
-            goose.position.set(gx, y, gz);
-            goose.rotation.y = rnd() * Math.PI * 2;
-            wg.add(goose);
-            grazingGeese.push({ obj: goose, phase: rnd() * 6.28, speed: 1.5 + rnd() });
+            const gy = terrainH(gx, gz);
+            const rotY = rnd() * Math.PI * 2;
+            const S = 1.25;
+            gooseBodyItems.push({ x: gx, y: gy + 0.35 * S, z: gz, ry: rotY, sx: 1.4 * S, sy: 0.75 * S, sz: 0.85 * S });
+            grazingGeese.push({ gx, gy, gz, rotY, phase: rnd() * 6.28, speed: 1.5 + rnd() });
           }
         }
       });
 
-      // Seagulls perched along the Centre Island Pier railings
+      const gooseCount = grazingGeese.length;
+      if (gooseCount > 0) {
+        addInstMesh(wg, new THREE.SphereGeometry(0.32, 10, 8), gooseBodyMat, gooseBodyItems);
+        gooseNeckInst = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.06, 0.08, 0.5, 8), gooseBlackMat, gooseCount);
+        gooseHeadInst = new THREE.InstancedMesh(new THREE.SphereGeometry(0.09, 8, 6), gooseBlackMat, gooseCount);
+        gooseChinInst = new THREE.InstancedMesh(new THREE.BoxGeometry(0.08, 0.08, 0.16), gooseWhiteMat, gooseCount);
+        gooseBillInst = new THREE.InstancedMesh(new THREE.ConeGeometry(0.04, 0.16, 6), gooseBlackMat, gooseCount);
+        wg.add(gooseNeckInst);
+        wg.add(gooseHeadInst);
+        wg.add(gooseChinInst);
+        wg.add(gooseBillInst);
+        updateGooseInstances(0);
+      }
+
+      // Seagulls perched along the Centre Island Pier railings (x = ±5.8, y = 1.5)
       const gullWhite = new THREE.MeshBasicMaterial({ color: 0xf1f5f9 });
       const gullGrey = new THREE.MeshBasicMaterial({ color: 0x94a3b8 });
       const gullBeak = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
-      function makeSeagull() {
-        const sg = new THREE.Group();
-        const b = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 6), gullWhite);
-        b.scale.set(1.4, 0.7, 0.8);
-        sg.add(b);
-        const w = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.08, 0.35), gullGrey);
-        w.position.set(-0.05, 0.08, 0);
-        sg.add(w);
-        const bk = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.16, 5), gullBeak);
-        bk.rotation.z = -Math.PI / 2;
-        bk.position.set(0.28, 0.05, 0);
-        sg.add(bk);
-        return sg;
-      }
-
+      const gullBodyItems = [], gullWingItems = [], gullBeakItems = [];
       for (let pz = Z(475); pz <= Z(580); pz += 12) {
         [-5.8, 5.8].forEach(px => {
           if (rnd() < 0.6) {
-            const gull = makeSeagull();
-            gull.position.set(px, 1.5, pz);
-            gull.rotation.y = px > 0 ? -1.2 : 1.2;
-            wg.add(gull);
+            const ry = px > 0 ? -1.2 : 1.2;
+            const c = Math.cos(ry), s = Math.sin(ry);
+            gullBodyItems.push({ x: px, y: 1.5, z: pz, ry, sx: 1.4, sy: 0.7, sz: 0.8 });
+            gullWingItems.push({ x: px - 0.05 * c, y: 1.58, z: pz + 0.05 * s, ry, sx: 0.25, sy: 0.08, sz: 0.35 });
+            gullBeakItems.push({ x: px + 0.28 * c, y: 1.55, z: pz - 0.28 * s, ry, rz: -Math.PI / 2, sx: 1, sy: 1, sz: 1 });
           }
         });
       }
+      addInstMesh(wg, new THREE.SphereGeometry(0.18, 8, 6), gullWhite, gullBodyItems);
+      addInstMesh(wg, unitBoxGeo, gullGrey, gullWingItems);
+      addInstMesh(wg, new THREE.ConeGeometry(0.04, 0.16, 5), gullBeak, gullBeakItems);
       islandsGroup.add(wg);
     }
 
     // ------------------------------------------------------------------------
-    // Wildlife and Boats: Swimming Swans, Moored Canoes, Harbour Ferry
+    // Wildlife and Boats: Instanced Swans, Moored Canoes, IYC Sailboats, Breakwaters & Ferries
     // ------------------------------------------------------------------------
-    function lanePoint(ch, dist) {
+    const _laneOut = { x: 0, z: 0, tx: 1, tz: 0 };
+    function lanePoint(ch, dist, out) {
+      const r = out || _laneOut;
       let acc = 0;
       for (let i = 1; i < ch.pts.length; i++) {
         const a = ch.pts[i - 1], b = ch.pts[i], seg = Math.hypot(b[0] - a[0], b[1] - a[1]);
         if (acc + seg >= dist || i === ch.pts.length - 1) {
-          const t = Math.max(0, Math.min(1, (dist - acc) / seg));
-          const tx = (b[0] - a[0]) / seg, tz = (b[1] - a[1]) / seg;
-          return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, tx, tz];
+          const t = Math.max(0, Math.min(1, (dist - acc) / (seg || 1)));
+          r.x = a[0] + (b[0] - a[0]) * t;
+          r.z = a[1] + (b[1] - a[1]) * t;
+          r.tx = (b[0] - a[0]) / (seg || 1);
+          r.tz = (b[1] - a[1]) / (seg || 1);
+          return r;
         }
         acc += seg;
       }
-      return [ch.pts[0][0], ch.pts[0][1], 1, 0];
+      r.x = ch.pts[0][0]; r.z = ch.pts[0][1]; r.tx = 1; r.tz = 0;
+      return r;
     }
 
     const swimmers = [];
+    let swanBodyInst = null, swanNeckInst = null, swanHeadInst = null, swanBeakInst = null, swanWingInst = null;
+    function updateSwanInstances(timeSec) {
+      if (!swanBodyInst || swimmers.length === 0) return;
+      for (let i = 0; i < swimmers.length; i++) {
+        const sw = swimmers[i];
+        const lp = lanePoint(sw.ch, sw.s, _laneOut);
+        const sx = lp.x - lp.tz * sw.lane;
+        const sz = lp.z + lp.tx * sw.lane;
+        const sy = WATER_Y + Math.sin(timeSec * 1.3 + sw.bob) * 0.04;
+        const dx = lp.tx * sw.dir, dz = lp.tz * sw.dir;
+        const yaw = Math.atan2(-dz, dx);
+        const c = Math.cos(yaw), s = Math.sin(yaw);
+
+        _e.set(0, yaw, 0, 'YXZ');
+        _q.setFromEuler(_e);
+        _v.set(sx, sy, sz);
+        _sc.set(1.4, 0.75, 0.85);
+        _m4.compose(_v, _q, _sc);
+        swanBodyInst.setMatrixAt(i, _m4);
+
+        _v.set(sx - 0.08 * c, sy + 0.14, sz + 0.08 * s);
+        _sc.set(0.55, 0.35, 0.45);
+        _m4.compose(_v, _q, _sc);
+        swanWingInst.setMatrixAt(i, _m4);
+
+        _e.set(0, yaw, -0.35, 'YXZ');
+        _q.setFromEuler(_e);
+        _v.set(sx + 0.4 * c, sy + 0.35, sz - 0.4 * s);
+        _sc.set(1, 1, 1);
+        _m4.compose(_v, _q, _sc);
+        swanNeckInst.setMatrixAt(i, _m4);
+
+        _e.set(0, yaw, 0, 'YXZ');
+        _q.setFromEuler(_e);
+        _v.set(sx + 0.52 * c, sy + 0.68, sz - 0.52 * s);
+        _m4.compose(_v, _q, _sc);
+        swanHeadInst.setMatrixAt(i, _m4);
+
+        _e.set(0, yaw, -Math.PI / 2, 'YXZ');
+        _q.setFromEuler(_e);
+        _v.set(sx + 0.66 * c, sy + 0.65, sz - 0.66 * s);
+        _m4.compose(_v, _q, _sc);
+        swanBeakInst.setMatrixAt(i, _m4);
+      }
+      swanBodyInst.instanceMatrix.needsUpdate = true;
+      swanWingInst.instanceMatrix.needsUpdate = true;
+      swanNeckInst.instanceMatrix.needsUpdate = true;
+      swanHeadInst.instanceMatrix.needsUpdate = true;
+      swanBeakInst.instanceMatrix.needsUpdate = true;
+    }
+
     {
+      const boatGrp = new THREE.Group();
       const white = new THREE.MeshLambertMaterial({ color: 0xffffff });
       const beak = new THREE.MeshLambertMaterial({ color: 0xea580c });
-      function makeSwan() {
-        const sw = new THREE.Group();
-        const body = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 8), white);
-        body.scale.set(1.4, 0.75, 0.85);
-        sw.add(body);
-        const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 0.65, 8), white);
-        neck.position.set(0.4, 0.35, 0);
-        neck.rotation.z = -0.35;
-        sw.add(neck);
-        const head = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), white);
-        head.position.set(0.52, 0.68, 0);
-        sw.add(head);
-        const bk = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.22, 6), beak);
-        bk.position.set(0.66, 0.65, 0);
-        bk.rotation.z = -Math.PI / 2;
-        sw.add(bk);
-        return sw;
-      }
-
-      function makeCanoe(col) {
-        const cn = new THREE.Group();
-        const hull = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.55, 0.8), new THREE.MeshStandardMaterial({ color: col, roughness: 0.6 }));
-        hull.position.y = 0.2;
-        cn.add(hull);
-        const seat = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.08, 0.7), darkWoodMat);
-        seat.position.set(-0.6, 0.35, 0);
-        cn.add(seat);
-        return cn;
-      }
 
       const activeChannels = [CHANNELS[0], CHANNELS[1], CHANNELS[3]];
       activeChannels.forEach((ch, ci) => {
         let total = 0;
         for (let i = 1; i < ch.pts.length; i++) total += Math.hypot(ch.pts[i][0] - ch.pts[i - 1][0], ch.pts[i][1] - ch.pts[i - 1][1]);
         for (let k = 0; k < 3; k++) {
-          const sw = makeSwan();
-          islandsGroup.add(sw);
           swimmers.push({
-            obj: sw,
             ch,
             L: total,
             s: (total / 3) * k + ci * 12,
@@ -4314,34 +5062,145 @@
         }
       });
 
+      const swanCount = swimmers.length;
+      if (swanCount > 0) {
+        swanBodyInst = new THREE.InstancedMesh(new THREE.SphereGeometry(0.45, 10, 7), white, swanCount);
+        swanWingInst = new THREE.InstancedMesh(new THREE.SphereGeometry(0.55, 8, 6), white, swanCount);
+        swanNeckInst = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.08, 0.12, 0.65, 7), white, swanCount);
+        swanHeadInst = new THREE.InstancedMesh(new THREE.SphereGeometry(0.12, 8, 6), white, swanCount);
+        swanBeakInst = new THREE.InstancedMesh(new THREE.ConeGeometry(0.06, 0.22, 6), beak, swanCount);
+        boatGrp.add(swanBodyInst);
+        boatGrp.add(swanWingInst);
+        boatGrp.add(swanNeckInst);
+        boatGrp.add(swanHeadInst);
+        boatGrp.add(swanBeakInst);
+        updateSwanInstances(0);
+      }
+
       // Moored canoes
       [[-60, Z(255), 0.4, 0x15803d], [140, Z(265), -0.3, 0xb91c1c], [260, Z(385), 0.7, 0x1d4ed8]].forEach(([x, z, r, c]) => {
-        const cn = makeCanoe(c);
+        const cn = new THREE.Group();
+        const hull = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.55, 0.8), new THREE.MeshStandardMaterial({ color: c, roughness: 0.6 }));
+        hull.position.y = 0.2;
+        cn.add(hull);
+        const seat = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.08, 0.7), darkWoodMat);
+        seat.position.set(-0.6, 0.35, 0);
+        cn.add(seat);
         cn.position.set(x, WATER_Y, z);
         cn.rotation.y = r;
-        islandsGroup.add(cn);
+        boatGrp.add(cn);
         circOb(x, z, 1.8);
       });
+
+      // Island Yacht Club Moored Sailboats in sheltered bays
+      const sailHullMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.35 });
+      const sailTrimMat = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.4 });
+      const mastAlumMat = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, metalness: 0.75, roughness: 0.3 });
+      [[205, Z(215), 0.4], [248, Z(238), -0.3], [-310, Z(245), 0.8], [565, Z(185), -0.5], [785, Z(145), 0.2]].forEach(([sx, sz, srot]) => {
+        if (landField(sx, sz) > -0.5) return;
+        const sb = new THREE.Group();
+        sb.position.set(sx, WATER_Y, sz);
+        sb.rotation.y = srot;
+        const sbHull = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.1, 8.2), sailHullMat);
+        sbHull.position.y = 0.45;
+        sb.add(sbHull);
+        const sbStripe = new THREE.Mesh(new THREE.BoxGeometry(2.68, 0.24, 8.3), sailTrimMat);
+        sbStripe.position.y = 0.78;
+        sb.add(sbStripe);
+        const sbCabin = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.65, 3.2), sailHullMat);
+        sbCabin.position.set(0, 1.25, 0.4);
+        sb.add(sbCabin);
+        const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 9.5, 6), mastAlumMat);
+        mast.position.set(0, 5.7, 0.6);
+        sb.add(mast);
+        const boom = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.2, 4.2), mastAlumMat);
+        boom.position.set(0, 2.35, -1.4);
+        sb.add(boom);
+        boatGrp.add(sb);
+        circOb(sx, sz, 4.2);
+      });
+
+      // Offshore Granite Armourstone Beach Breakwaters protecting Toronto Island south shore
+      const bwRockGeo = new THREE.DodecahedronGeometry(1.4, 0);
+      const bwRockMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.9 });
+      const bwItems = [];
+      [[-680, Z(315)], [-120, Z(498)], [140, Z(492)], [420, Z(458)]].forEach(([bx, bz]) => {
+        for (let bi = -3; bi <= 3; bi++) {
+          bwItems.push({
+            x: bx + bi * 2.2,
+            y: WATER_Y + 0.35 + (bi % 2) * 0.25,
+            z: bz + Math.sin(bi) * 0.8,
+            ry: bi * 0.8,
+            sx: 1.2 + Math.abs(bi % 2) * 0.35,
+            sy: 0.85,
+            sz: 1.1
+          });
+        }
+      });
+      addInstMesh(boatGrp, bwRockGeo, bwRockMat, bwItems);
+
+      mergeGroupByMaterial(boatGrp, { castShadow: true });
+      islandsGroup.add(boatGrp);
     }
 
-    // Animated Toronto Harbour Ferry (only in standalone island viewer; main game uses city.islandFerry.ferryMesh)
+    // Animated Toronto Harbour Ferry & Marilyn Bell I (only in standalone island viewer; main game uses city.js vessels)
     let ferry = null;
+    let marilynBell = null;
     if (!(typeof window !== 'undefined' && window.buildTorontoCity)) {
       ferry = new THREE.Group();
-      const hull = new THREE.Mesh(new THREE.BoxGeometry(10, 3.2, 36), new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.4 }));
+      const fNavyMat = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.4 });
+      const fWhiteMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.35 });
+      const fRedMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.45 });
+      const hull = new THREE.Mesh(new THREE.BoxGeometry(10.4, 3.0, 34), fNavyMat);
       hull.position.y = 1.2;
       ferry.add(hull);
-      const cabin = new THREE.Mesh(new THREE.BoxGeometry(8.2, 2.8, 22), new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.3 }));
-      cabin.position.set(0, 4.0, -1);
+      [-17, 17].forEach(bz => {
+        const bow = new THREE.Mesh(new THREE.ConeGeometry(5.2, 4.5, 4), fNavyMat);
+        bow.rotation.y = Math.PI / 4;
+        bow.rotation.x = bz > 0 ? Math.PI / 2 : -Math.PI / 2;
+        bow.scale.set(1.2, 1, 0.55);
+        bow.position.set(0, 1.3, bz + (bz > 0 ? 1.8 : -1.8));
+        ferry.add(bow);
+      });
+      const deckStrip = new THREE.Mesh(new THREE.BoxGeometry(10.8, 0.3, 35), fWhiteMat);
+      deckStrip.position.y = 2.7;
+      ferry.add(deckStrip);
+      const cabin = new THREE.Mesh(new THREE.BoxGeometry(8.4, 2.8, 22), fWhiteMat);
+      cabin.position.set(0, 4.1, 0);
       ferry.add(cabin);
-      const bridge = new THREE.Mesh(new THREE.BoxGeometry(7.0, 2.2, 7.0), glassMat);
-      bridge.position.set(0, 6.4, 4);
-      ferry.add(bridge);
-      const funnel = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.9, 3.4, 12), new THREE.MeshStandardMaterial({ color: 0xdc2626 }));
-      funnel.position.set(0, 7.0, -5);
+      const cabinWinBand = new THREE.Mesh(new THREE.BoxGeometry(8.52, 1.0, 19.5), warmWinGlowMat);
+      cabinWinBand.position.set(0, 4.3, 0);
+      ferry.add(cabinWinBand);
+      const upperDeck = new THREE.Mesh(new THREE.BoxGeometry(8.8, 0.25, 22.8), woodMat);
+      upperDeck.position.set(0, 5.6, 0);
+      ferry.add(upperDeck);
+      [-7.5, 7.5].forEach(wz => {
+        const bridge = new THREE.Mesh(new THREE.BoxGeometry(6.8, 2.0, 4.8), glassMat);
+        bridge.position.set(0, 6.7, wz);
+        ferry.add(bridge);
+      });
+      const funnel = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.95, 3.6, 12), fRedMat);
+      funnel.position.set(0, 7.2, 0);
       ferry.add(funnel);
       ferry.position.set(0, WATER_Y, Z(-65));
       islandsGroup.add(ferry);
+
+      // Marilyn Bell I Western Gap Cable Ferry (only when city.js absent)
+      marilynBell = new THREE.Group();
+      const mbHull = new THREE.Mesh(new THREE.BoxGeometry(14, 2.4, 34), fNavyMat);
+      mbHull.position.y = 1.0;
+      marilynBell.add(mbHull);
+      const mbStripe = new THREE.Mesh(new THREE.BoxGeometry(14.3, 0.35, 34.2), fRedMat);
+      mbStripe.position.y = 1.8;
+      marilynBell.add(mbStripe);
+      const mbCabin = new THREE.Mesh(new THREE.BoxGeometry(4.2, 4.0, 12), fWhiteMat);
+      mbCabin.position.set(-4.2, 4.2, 0);
+      marilynBell.add(mbCabin);
+      const mbBridge = new THREE.Mesh(new THREE.BoxGeometry(3.6, 1.8, 4.4), glassMat);
+      mbBridge.position.set(-4.2, 7.0, 0);
+      marilynBell.add(mbBridge);
+      marilynBell.position.set(-1060, WATER_Y, Z(-330));
+      islandsGroup.add(marilynBell);
     }
 
     // ------------------------------------------------------------------------
@@ -4644,7 +5503,7 @@
       if (Math.hypot(x + 480, z - Z(320)) < 45) return 'GIBRALTAR POINT • 1808 LIGHTHOUSE';
       if (Math.hypot(x + 160, z - Z(330)) < 70) return 'OLYMPIC ISLAND';
       if (Math.hypot(x + 780, z - Z(0)) < 85) return 'HANLAN\'S POINT • BALL DIAMONDS';
-      const L = landField(x, z);
+      const L = fastLandField(x, z);
       if (x > -905 && zS(x) - z < 60) {
         if (x < -560) return 'HANLAN\'S BEACH';
         if (x < -280) return 'GIBRALTAR POINT BEACH';
@@ -4661,72 +5520,112 @@
     }
 
     // ------------------------------------------------------------------------
-    // Animation Loop
+    // Animation Loop (Distance-Gated & Zero-Allocation)
     // ------------------------------------------------------------------------
     let tTime = 0, ferryT = 0, miniTrainT = 0;
     function update(dt, playerPos) {
       tTime += dt;
-      if (ferrisWheelMesh) ferrisWheelMesh.rotation.x += dt * 0.22;
-      if (carouselTop) carouselTop.rotation.y += dt * 0.6;
-      if (fountainSpray) fountainSpray.scale.y = 0.95 + Math.sin(tTime * 4.5) * 0.12;
-      if (lighthouseBeacon) lighthouseBeacon.rotation.y += dt * 1.8;
-      if (radelmuellerGhost) {
-        radelmuellerGhost.position.y = 25.4 + Math.sin(tTime * 2.2) * 0.12;
-        radelmuellerGhost.rotation.y = Math.sin(tTime * 0.9) * 0.18;
-      }
-      if (radarDish) radarDish.rotation.y += dt * 3.2;
-      if (windsockCone) windsockCone.rotation.y = Math.sin(tTime * 1.8) * 0.25;
-      q400Propellers.forEach(p => {
-        if (p.hub && p.speed) p.hub.rotation.z += dt * p.speed;
-      });
+      const hasPlayer = !!playerPos;
+      const aboveGround = !hasPlayer || playerPos.y >= -4.0;
 
-      // Miniature Steam Train moving smoothly along track loop
-      if (miniTrain) {
-        miniTrainT = (miniTrainT + dt * 0.016) % 1.0;
-        const tr = evalTrainTrack(miniTrainT);
-        miniTrain.position.set(tr.x, GROUND_Y + 0.12, tr.z);
-        miniTrain.rotation.y = tr.yaw;
-        if (miniTrainPuff) {
-          miniTrainPuff.scale.setScalar(0.85 + Math.sin(tTime * 12.0) * 0.35);
-          miniTrainPuff.position.y = 1.85 + Math.sin(tTime * 8.0) * 0.12;
-        }
-      }
-
-      // Flashing CN Tower & skyscraper obstruction beacons
-      if (cnBeacon) {
+      // Flashing CN Tower & skyscraper obstruction beacons when above ground
+      if (aboveGround && cnBeacon) {
         const flash = (Math.sin(tTime * 3.5) > 0.3) ? 1.0 : 0.12;
         cnBeacon.visible = flash > 0.5;
-        towerBeacons.forEach(b => { b.visible = flash > 0.5; });
+        for (let i = 0; i < towerBeacons.length; i++) towerBeacons[i].visible = flash > 0.5;
       }
 
-      // Bubbler fountain jets in the twin reflecting pools
-      poolJets.forEach((jet, ji) => {
-        jet.scale.y = 0.85 + Math.sin(tTime * 5.0 + ji * 1.4) * 0.3;
-      });
+      // Skip all off-island kinetic updates when player is underground or far north downtown
+      if (hasPlayer && (playerPos.y < -4.0 || playerPos.z < 450)) return;
 
-      // Canada Geese pecking & bobbing
-      grazingGeese.forEach(g => {
-        if (g.obj.neck) {
-          g.obj.neck.rotation.x = Math.sin(tTime * g.speed + g.phase) * 0.35;
+      const flyingHigh = hasPlayer && playerPos.y > 20;
+      const nearCentreville = !hasPlayer || flyingHigh || Math.hypot(playerPos.x - 160, playerPos.z - Z(200)) < 750;
+      const nearGardens = !hasPlayer || flyingHigh || Math.hypot(playerPos.x, playerPos.z - Z(360)) < 650;
+      const nearLighthouse = !hasPlayer || flyingHigh || Math.hypot(playerPos.x + 480, playerPos.z - Z(320)) < 700;
+      const nearAirport = !hasPlayer || flyingHigh || Math.hypot(playerPos.x + 1200, playerPos.z - Z(-160)) < 1100;
+      const nearWild = !hasPlayer || flyingHigh || Math.hypot(playerPos.x, playerPos.z - Z(250)) < 1400;
+
+      if (nearCentreville) {
+        if (ferrisWheelMesh) {
+          ferrisWheelMesh.rotation.x += dt * 0.22;
+          const uprightRot = -ferrisWheelMesh.rotation.x;
+          for (let i = 0; i < ferrisCarts.length; i++) {
+            ferrisCarts[i].rotation.x = uprightRot;
+          }
         }
-      });
+        if (carouselTop) carouselTop.rotation.y += dt * 0.6;
+        for (let i = 0; i < carouselHorses.length; i++) {
+          const ch = carouselHorses[i];
+          ch.mesh.position.y = ch.baseY + Math.sin(tTime * 3.2 + ch.phase) * 0.28;
+        }
+        if (miniTrain) {
+          miniTrainT = (miniTrainT + dt * 0.016) % 1.0;
+          const tr = evalTrainTrack(miniTrainT, _trainOut);
+          miniTrain.position.set(tr.x, GROUND_Y + 0.12, tr.z);
+          miniTrain.rotation.y = tr.yaw;
+          for (let i = 0; i < miniTrainPuffs.length; i++) {
+            const p = miniTrainPuffs[i];
+            const cycle = (tTime * 1.4 + p.phase) % 1.0;
+            p.mesh.position.y = 1.85 + cycle * 1.1;
+            p.mesh.position.z = 1.0 - cycle * 1.05;
+            p.mesh.scale.setScalar(0.55 + cycle * 1.05);
+          }
+          for (let i = 0; i < miniTrainCars.length; i++) {
+            const c = miniTrainCars[i];
+            const cr = evalTrainTrack(miniTrainT - c.offset, _trainOut);
+            c.mesh.position.set(cr.x, GROUND_Y + 0.12, cr.z);
+            c.mesh.rotation.y = cr.yaw;
+          }
+        }
+      }
 
-      // Swimming swans & wildlife
-      swimmers.forEach(sw => {
-        sw.s += sw.dir * sw.speed * dt;
-        if (sw.s < 3) { sw.s = 3; sw.dir = 1; }
-        if (sw.s > sw.L - 3) { sw.s = sw.L - 3; sw.dir = -1; }
-        const [x, z, tx, tz] = lanePoint(sw.ch, sw.s);
-        sw.obj.position.set(x - tz * sw.lane, WATER_Y + Math.sin(tTime * 1.3 + sw.bob) * 0.04, z + tx * sw.lane);
-        sw.obj.rotation.y = Math.atan2(tx * sw.dir, tz * sw.dir);
-      });
+      if (nearGardens) {
+        if (fountainSpray) fountainSpray.scale.y = 0.95 + Math.sin(tTime * 4.5) * 0.12;
+        for (let ji = 0; ji < poolJets.length; ji++) {
+          poolJets[ji].scale.y = 0.85 + Math.sin(tTime * 5.0 + ji * 1.4) * 0.3;
+        }
+      }
 
-      // Ferry: 70 s round trip, docking for 12 s at each end
-      if (ferry) {
+      if (nearLighthouse) {
+        if (lighthouseBeacon) lighthouseBeacon.rotation.y += dt * 1.8;
+        if (radelmuellerGhost) {
+          radelmuellerGhost.position.y = 25.4 + Math.sin(tTime * 2.2) * 0.12;
+          radelmuellerGhost.rotation.y = Math.sin(tTime * 0.9) * 0.18;
+        }
+      }
+
+      if (nearAirport) {
+        if (radarDish) radarDish.rotation.y += dt * 3.2;
+        if (windsockCone) windsockCone.rotation.y = Math.sin(tTime * 1.8) * 0.25;
+        for (let i = 0; i < q400Propellers.length; i++) {
+          const p = q400Propellers[i];
+          if (p.hub && p.speed) p.hub.rotation.z += dt * p.speed;
+        }
+      }
+
+      if (nearWild) {
+        updateGooseInstances(tTime);
+        for (let i = 0; i < swimmers.length; i++) {
+          const sw = swimmers[i];
+          sw.s += sw.dir * sw.speed * dt;
+          if (sw.s < 3) { sw.s = 3; sw.dir = 1; }
+          if (sw.s > sw.L - 3) { sw.s = sw.L - 3; sw.dir = -1; }
+        }
+        updateSwanInstances(tTime);
+      }
+
+      // Standalone Harbour Ferry & Marilyn Bell I (only built when city.js absent)
+      if (ferry || marilynBell) {
         ferryT = (ferryT + dt) % 70;
-        const k = ferryT < 12 ? 0 : ferryT < 35 ? (ferryT - 12) / 23 : ferryT < 47 ? 1 : 1 - (ferryT - 47) / 23;
-        const e = k * k * (3 - 2 * k);
-        ferry.position.set(e * 320, WATER_Y, Z(-65) - e * 480);
+        if (ferry) {
+          const k = ferryT < 12 ? 0 : ferryT < 35 ? (ferryT - 12) / 23 : ferryT < 47 ? 1 : 1 - (ferryT - 47) / 23;
+          const e = k * k * (3 - 2 * k);
+          ferry.position.set(e * 320, WATER_Y, Z(-65) - e * 480);
+        }
+        if (marilynBell) {
+          const mbS = 0.5 - 0.5 * Math.cos((tTime * 0.16) % (Math.PI * 2));
+          marilynBell.position.set(-1060, WATER_Y, Z(-312) - mbS * 68);
+        }
       }
     }
 
@@ -4899,6 +5798,27 @@
       }
       if (lampGlowMat && lampGlowMat.color && typeof lampGlowMat.color.setHex === 'function') {
         lampGlowMat.color.setHex(isDay ? 0xdbeafe : 0xffd58a);
+      }
+      if (warmWinGlowMat) {
+        if (warmWinGlowMat.color && typeof warmWinGlowMat.color.setHex === 'function') warmWinGlowMat.color.setHex(isDay ? 0x64748b : 0xfef08a);
+        if (warmWinGlowMat.emissive && typeof warmWinGlowMat.emissive.setHex === 'function') warmWinGlowMat.emissive.setHex(isDay ? 0x334155 : 0xfef08a);
+        warmWinGlowMat.emissiveIntensity = isDay ? 0.08 : 0.95;
+      }
+      if (termGlowMat) {
+        if (termGlowMat.color && typeof termGlowMat.color.setHex === 'function') termGlowMat.color.setHex(isDay ? 0x94a3b8 : 0xfef3c7);
+        if (termGlowMat.emissive && typeof termGlowMat.emissive.setHex === 'function') termGlowMat.emissive.setHex(isDay ? 0x475569 : 0xfef3c7);
+        termGlowMat.emissiveIntensity = isDay ? 0.12 : 0.9;
+      }
+      if (clkMat) {
+        if (clkMat.color && typeof clkMat.color.setHex === 'function') clkMat.color.setHex(isDay ? 0xf8fafc : 0xfef9c3);
+        clkMat.emissiveIntensity = isDay ? 0.12 : 0.8;
+      }
+      if (cabinWinMat) {
+        if (cabinWinMat.color && typeof cabinWinMat.color.setHex === 'function') cabinWinMat.color.setHex(isDay ? 0x38bdf8 : 0xbae6fd);
+        cabinWinMat.emissiveIntensity = isDay ? 0.08 : 0.6;
+      }
+      if (beaconBeamMat) {
+        beaconBeamMat.opacity = isDay ? 0.04 : 0.22;
       }
     }
 
