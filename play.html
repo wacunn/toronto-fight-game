@@ -4630,12 +4630,20 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     scene.background = new THREE.Color(0x080c14);
     scene.fog = new THREE.FogExp2(0x0c1322, 0.0018);
 
-    const skyMat = new THREE.MeshBasicMaterial({ map: nightSkyTex, side: THREE.BackSide, fog: false, depthWrite: false });
+    const skyMat = new THREE.MeshBasicMaterial({ map: nightSkyTex, side: THREE.BackSide, fog: false, depthWrite: false, depthTest: false });
     const sky = new THREE.Mesh(
-      new THREE.SphereGeometry(4200, 32, 16),
+      new THREE.SphereGeometry(3600, 48, 24),
       skyMat
     );
-    sky.renderOrder = -10;
+    sky.frustumCulled = false;
+    sky.renderOrder = -100;
+    sky.onBeforeRender = function (r, s, cam) {
+      if (cam && cam.position) {
+        this.position.copy(cam.position);
+        this.updateMatrixWorld(true);
+        this.modelViewMatrix.multiplyMatrices(cam.matrixWorldInverse, this.matrixWorld);
+      }
+    };
     scene.add(sky);
 
     // Stars (visible at night)
@@ -4643,29 +4651,52 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     for (let i = 0; i < 1400; i++) {
       const th = hash(i * 1.3) * Math.PI * 2;
       const ph = Math.acos(1 - hash(i * 2.7) * 0.9); // upper hemisphere only
-      starPos.push(3900 * Math.sin(ph) * Math.cos(th), 3900 * Math.cos(ph) + 80, 3900 * Math.sin(ph) * Math.sin(th));
+      starPos.push(3400 * Math.sin(ph) * Math.cos(th), 3400 * Math.cos(ph) + 60, 3400 * Math.sin(ph) * Math.sin(th));
     }
     const starGeo = new THREE.BufferGeometry();
     starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
-    const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xcfd8ff, size: 2.2, sizeAttenuation: false, fog: false, depthWrite: false, transparent: true, opacity: 0.8 }));
+    const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xcfd8ff, size: 2.2, sizeAttenuation: false, fog: false, depthWrite: false, depthTest: false, transparent: true, opacity: 0.8 }));
+    stars.frustumCulled = false;
+    stars.renderOrder = -99;
+    stars.onBeforeRender = function (r, s, cam) {
+      if (cam && cam.position) {
+        this.position.copy(cam.position);
+        this.updateMatrixWorld(true);
+        this.modelViewMatrix.multiplyMatrices(cam.matrixWorldInverse, this.matrixWorld);
+      }
+    };
     scene.add(stars);
 
     // Sun & atmospheric drifting cumulus cloud deck (visible during daytime)
     const SUN_DIR = new THREE.Vector3(0.46, 0.78, 0.42).normalize();
     const daySkyExtras = new THREE.Group();
     const sunDisc = new THREE.Mesh(
-      new THREE.CircleGeometry(105, 24),
+      new THREE.CircleGeometry(96, 24),
       new THREE.MeshBasicMaterial({ color: 0xffeeb8, fog: false, depthWrite: false, toneMapped: true })
     );
-    sunDisc.position.copy(SUN_DIR).multiplyScalar(3600);
-    sunDisc.lookAt(0, 0, 0);
+    sunDisc.frustumCulled = false;
+    sunDisc.onBeforeRender = function (r, s, cam) {
+      if (cam && cam.position) {
+        this.position.copy(cam.position).addScaledVector(SUN_DIR, 3300);
+        this.lookAt(cam.position);
+        this.updateMatrixWorld(true);
+        this.modelViewMatrix.multiplyMatrices(cam.matrixWorldInverse, this.matrixWorld);
+      }
+    };
     daySkyExtras.add(sunDisc);
     const sunHalo = new THREE.Sprite(new THREE.SpriteMaterial({
       map: makeGlowTexture('rgba(255,240,190,0.45)', 'rgba(255,210,120,0.06)'),
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false
     }));
-    sunHalo.scale.set(520, 520, 1);
-    sunHalo.position.copy(SUN_DIR).multiplyScalar(3550);
+    sunHalo.scale.set(480, 480, 1);
+    sunHalo.frustumCulled = false;
+    sunHalo.onBeforeRender = function (r, s, cam) {
+      if (cam && cam.position) {
+        this.position.copy(cam.position).addScaledVector(SUN_DIR, 3250);
+        this.updateMatrixWorld(true);
+        this.modelViewMatrix.multiplyMatrices(cam.matrixWorldInverse, this.matrixWorld);
+      }
+    };
     daySkyExtras.add(sunHalo);
 
     const CLOUD_PUFFS = [];
@@ -21252,10 +21283,13 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         const eastPortBaseMat = new THREE.MeshLambertMaterial({ color: 0x565f6b });
         const eastGroup = new THREE.Group();
 
-        // 1. Landmasses sharing exact Keating Channel (z: 420..480), Don Mouth (x: 1988..2055), and Ship Channel (z: 712..768)
-        const eastBayfrontPortPoly = [
-          [1345, 35], [3020, 35], [3020, 710], [2055, 710], [2065, 580],
-          [2045, 465], [1990, 420], [1395, 420], [1345, 360], [1345, 140]
+        // 1. Landmasses sharing exact Lower Don River (x: 1988..2060), Keating Channel (z: 420..480), Don Mouth, and Ship Channel (z: 712..768)
+        const eastBayfrontWestPoly = [
+          [1345, 35], [1988, 35], [1988, 420], [1395, 420], [1345, 360], [1345, 140]
+        ];
+        const eastBayfrontEastPoly = [
+          [2060, 35], [3020, 35], [3020, 710], [2055, 710], [2065, 580],
+          [2060, 465], [2060, 420]
         ];
         const villiersPoly = [
           [1495, 480], [1945, 478], [1985, 520], [1988, 625], [1955, 705],
@@ -21267,7 +21301,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           [2745, 1855], [2680, 1840], [2570, 1520], [2475, 1210], [2395, 945],
           [2180, 910], [1920, 895], [1815, 840]
         ];
-        addSculptedIsland(eastGroup, eastBayfrontPortPoly, 0.52, -0.9, eastPortBaseMat, eastShoreWallMat, 0);
+        addSculptedIsland(eastGroup, eastBayfrontWestPoly, 0.52, -0.9, eastPortBaseMat, eastShoreWallMat, 0);
+        addSculptedIsland(eastGroup, eastBayfrontEastPoly, 0.52, -0.9, eastPortBaseMat, eastShoreWallMat, 0);
         addSculptedIsland(eastGroup, villiersPoly, 0.58, -0.9, eastMeadowMat, eastShoreWallMat, 0);
         addSculptedIsland(eastGroup, portSouthSpitPoly, 0.56, -0.9, eastMeadowMat, eastShoreWallMat, 0);
 
@@ -21451,36 +21486,379 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         greaterTorontoGroup.add(eastGroup);
       }
 
-      // 8. INSTANCED GREATER TORONTO SKYLINE RING (220 Midtown, Humber Bay & East Bayfront Towers in 1 Draw Call!)
+      // 8. FULL OUTER GREATER TORONTO HORIZON, RAVINES, ARTERIALS & SKYLINE (Ultra Low-Draw-Call Flight & Vista Ring)
       {
+        const OUTER_X_MIN = LAKE_X_MIN, OUTER_X_MAX = LAKE_X_MAX, OUTER_Z_MIN = -4400;
+        const donRiverX = (z) => 2024 + (z < 35 ? (-170 * Math.sin((35 - z) * 0.00095) + (35 - z) * 0.065) : 0);
+        const humberRiverX = (z) => -3450 + (z < 460 ? (-380 * Math.sin(Math.min(1.3, (460 - z) * 0.0012)) - (460 - z) * 0.09) : 0);
+        const donHalfW = (z) => (z > -200 ? 36 : 30);
+        const humberHalfW = (z) => (z > 280 ? 50 : 38);
+        const isInGrenadierPond = (x, z) => (x > -3675 && x < -3565 && z > -460 && z < 140);
+        const isInHighPark = (x, z) => ((x > -3860 && x < -2940 && z > -1160 && z < 260) || Math.hypot(x - (-3450), z - (-680)) < 430);
+        const outerGroundY = (x, z) => {
+          let y = 0;
+          // Davenport Escarpment rising gently around Casa Loma -> St. Clair / Forest Hill / North York
+          if (z < -3050) {
+            const escT = Math.min(1, (-3050 - z) / 420);
+            y += escT * escT * (3 - 2 * escT) * 9.0;
+          }
+          // Carve Don Valley & Humber Valley down cleanly toward water level
+          const dDon = Math.abs(x - donRiverX(z));
+          if (dDon < 220) y *= Math.max(0, Math.min(1, (dDon - 55) / 165));
+          const dHum = Math.abs(x - humberRiverX(z));
+          if (dHum < 220) y *= Math.max(0, Math.min(1, (dHum - 60) / 160));
+          // Scarborough Bluffs chalk cliffs east of R.C. Harris (x: 3620..4250, z: -220..39.5)
+          if (x > 3620 && z > -220 && z <= 40) {
+            const bx = Math.min(1, (x - 3620) / 160);
+            const bt = z > -80 ? Math.max(0, 1 - (z - (-80)) / 118) : Math.max(0, 1 - (-80 - z) / 140);
+            y = Math.max(y, bx * bt * 38.0);
+          }
+          return y;
+        };
+        const outerGroundColor = (x, z) => {
+          const dDon = Math.abs(x - donRiverX(z));
+          const dHum = Math.abs(x - humberRiverX(z));
+          const n = hash(Math.floor((x + 5000) / 140) * 19.3 + Math.floor((z + 5000) / 140) * 37.1);
+          // Sand beaches along Ashbridges / Woodbine / Kew Beach & Humber Bay shoreline
+          if (x > 2960 && x < 3650 && z > -28 && z <= 40) return [0.42, 0.37, 0.25];
+          if (x >= 3620 && z > -200 && z <= 40) return [0.39 - n * 0.05, 0.35 - n * 0.05, 0.27]; // Scarborough Bluffs ochre/chalk
+          if (dDon < 210 || dHum < 210 || isInHighPark(x, z)) return [0.075 + n * 0.03, 0.175 + n * 0.05, 0.08 + n * 0.025];
+          // Rosedale / Nordheimer / Cedarvale greenbelt ravines
+          if ((x > 720 && x < 1850 && z > -3180 && z < -2740) || (x > -1550 && x < -750 && z > -3380 && z < -2980)) {
+            return [0.095 + n * 0.03, 0.19 + n * 0.04, 0.10 + n * 0.025];
+          }
+          // Match downtown sidewalk slate seamlessly (linear RGB equivalent of #6e727b)
+          return [0.14 + n * 0.035, 0.15 + n * 0.035, 0.17 + n * 0.035];
+        };
+
+        // 8A. Continuous Non-Overlapping Outer Ground Skirt + Cut River Valleys (1 merged draw call)
+        const outerGroundGB = new GeoBuilder();
+        const pushOuterPatch = (x0, x1, z0, z1) => {
+          if (x1 - x0 < 0.5 || z1 - z0 < 0.5) return;
+          const xm = (x0 + x1) * 0.5, zm = (z0 + z1) * 0.5;
+          outerGroundGB.color = outerGroundColor(xm, zm);
+          const y00 = outerGroundY(x0, z0), y10 = outerGroundY(x1, z0);
+          const y01 = outerGroundY(x0, z1), y11 = outerGroundY(x1, z1);
+          const sw = outerGroundGB.vert(x0, y01, z1, 0, 1, 0, 0, 0);
+          const se = outerGroundGB.vert(x1, y11, z1, 0, 1, 0, 1, 0);
+          const ne = outerGroundGB.vert(x1, y10, z0, 0, 1, 0, 1, 1);
+          const nw = outerGroundGB.vert(x0, y00, z0, 0, 1, 0, 0, 1);
+          outerGroundGB.quad(sw, se, ne, nw);
+        };
+        const pushBankEast = (xBot, xTop0, xTop1, z0, z1) => { // faces +X, +Y toward river
+          outerGroundGB.color = [0.25, 0.29, 0.26];
+          const y0 = outerGroundY(xTop0, z0), y1 = outerGroundY(xTop1, z1), yB = WATER_Y - 0.25;
+          const a = outerGroundGB.vert(xBot, yB, z1, 0.85, 0.5, 0, 0, 0);
+          const b = outerGroundGB.vert(xBot, yB, z0, 0.85, 0.5, 0, 1, 0);
+          const c = outerGroundGB.vert(xTop0, y0, z0, 0.85, 0.5, 0, 1, 1);
+          const d = outerGroundGB.vert(xTop1, y1, z1, 0.85, 0.5, 0, 0, 1);
+          outerGroundGB.quad(a, b, c, d);
+        };
+        const pushBankWest = (xBot, xTop0, xTop1, z0, z1) => { // faces -X, +Y toward river
+          outerGroundGB.color = [0.25, 0.29, 0.26];
+          const y0 = outerGroundY(xTop0, z0), y1 = outerGroundY(xTop1, z1), yB = WATER_Y - 0.25;
+          const a = outerGroundGB.vert(xBot, yB, z0, -0.85, 0.5, 0, 0, 0);
+          const b = outerGroundGB.vert(xBot, yB, z1, -0.85, 0.5, 0, 1, 0);
+          const c = outerGroundGB.vert(xTop1, y1, z1, -0.85, 0.5, 0, 1, 1);
+          const d = outerGroundGB.vert(xTop0, y0, z0, -0.85, 0.5, 0, 0, 1);
+          outerGroundGB.quad(a, b, c, d);
+        };
+        const emitStripWithCuts = (xMin, xMax, z0, z1) => {
+          const zm = (z0 + z1) * 0.5;
+          const cuts = [];
+          const hx = humberRiverX(zm), hw = humberHalfW(zm);
+          if (hx + hw > xMin && hx - hw < xMax) cuts.push([hx - hw, hx + hw, true]);
+          const dx = donRiverX(zm), dw = donHalfW(zm);
+          if (dx + dw > xMin && dx - dw < xMax) cuts.push([dx - dw, dx + dw, true]);
+          if (zm > -460 && zm < 140 && -3565 > xMin && -3675 < xMax) cuts.push([-3675, -3565, true]);
+          cuts.sort((a, b) => a[0] - b[0]);
+          let cur = xMin;
+          for (const [c0, c1, bank] of cuts) {
+            if (c0 > cur) {
+              for (let x = cur; x < c0 - 0.5; x += 150) pushOuterPatch(x, Math.min(c0, x + 150), z0, z1);
+              if (bank) pushBankEast(c0 + 4, c0, c0, z0, z1);
+            }
+            if (bank && c1 < xMax) pushBankWest(c1 - 4, c1, c1, z0, z1);
+            cur = Math.max(cur, c1);
+          }
+          if (cur < xMax - 0.5) {
+            for (let x = cur; x < xMax - 0.5; x += 150) pushOuterPatch(x, Math.min(xMax, x + 150), z0, z1);
+          }
+        };
+        // North Sheet (z: -4400 .. Z_MIN_EXT)
+        for (let z = OUTER_Z_MIN; z < Z_MIN_EXT - 0.5; z += 140) {
+          emitStripWithCuts(OUTER_X_MIN, OUTER_X_MAX, z, Math.min(Z_MIN_EXT, z + 140));
+        }
+        // West Sheet (x: OUTER_X_MIN .. X_MIN_EXT, z: Z_MIN_EXT .. 504.5)
+        for (let z = Z_MIN_EXT; z < 504.5 - 0.5; z += 130) {
+          emitStripWithCuts(OUTER_X_MIN, X_MIN_EXT, z, Math.min(504.5, z + 130));
+        }
+        // East Sheet North of Port Lands (x: X_MAX_EXT .. OUTER_X_MAX, z: Z_MIN_EXT .. 35)
+        for (let z = Z_MIN_EXT; z < 35 - 0.5; z += 130) {
+          emitStripWithCuts(X_MAX_EXT, OUTER_X_MAX, z, Math.min(35, z + 130));
+        }
+        // Woodbine / Kew Beach & Scarborough Bluffs Coast (x: 3020 .. OUTER_X_MAX, z: 35 .. 39.5)
+        for (let x = 3020; x < OUTER_X_MAX - 0.5; x += 150) {
+          const x1 = Math.min(OUTER_X_MAX, x + 150);
+          pushOuterPatch(x, x1, 35, 39.5);
+          outerGroundGB.color = [0.46, 0.44, 0.40];
+          const sw = outerGroundGB.vert(x, -0.9, 39.5, 0, 0, 1, 0, 0);
+          const se = outerGroundGB.vert(x1, -0.9, 39.5, 0, 0, 1, 1, 0);
+          const ne = outerGroundGB.vert(x1, outerGroundY(x1, 39.5), 39.5, 0, 0, 1, 1, 1);
+          const nw = outerGroundGB.vert(x, outerGroundY(x, 39.5), 39.5, 0, 0, 1, 0, 1);
+          outerGroundGB.quad(sw, se, ne, nw);
+        }
+        // Humber Bay Park West & East Peninsula balancing Leslie Spit on Lake Ontario (over lakeGB)
+        const humberPeninsulaPoly = [
+          [-3960, 504], [-3560, 504], [-3585, 625], [-3685, 735],
+          [-3845, 710], [-3945, 610]
+        ];
+        const humberParkMat = new THREE.MeshLambertMaterial({ color: 0x2f5336 });
+        const humberWallMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.88, metalness: 0.08 });
+        addSculptedIsland(greaterTorontoGroup, humberPeninsulaPoly, 0.54, -0.9, humberParkMat, humberWallMat, 0);
+        const outerGroundMesh = new THREE.Mesh(outerGroundGB.build(), new THREE.MeshLambertMaterial({ vertexColors: true }));
+        greaterTorontoGroup.add(outerGroundMesh);
+
+        // 8B. Northern Don River, Humber River & Grenadier Pond Water Mesh (1 draw call sharing lakeMat for synced Day/Night!)
+        const riverWaterGB = new GeoBuilder();
+        const emitRiverBand = (xFn, hwFn, zStart, zEnd, step) => {
+          for (let z = zStart; z < zEnd - 0.1; z += step) {
+            const z1 = Math.min(zEnd, z + step);
+            const x0 = xFn(z), x1 = xFn(z1), w0 = hwFn(z) + 5, w1 = hwFn(z1) + 5;
+            const sw = riverWaterGB.vert(x1 - w1, WATER_Y, z1, 0, 1, 0, (x1 - w1) / 32, z1 / 32);
+            const se = riverWaterGB.vert(x1 + w1, WATER_Y, z1, 0, 1, 0, (x1 + w1) / 32, z1 / 32);
+            const ne = riverWaterGB.vert(x0 + w0, WATER_Y, z, 0, 1, 0, (x0 + w0) / 32, z / 32);
+            const nw = riverWaterGB.vert(x0 - w0, WATER_Y, z, 0, 1, 0, (x0 - w0) / 32, z / 32);
+            riverWaterGB.quad(sw, se, ne, nw);
+          }
+        };
+        emitRiverBand(donRiverX, donHalfW, OUTER_Z_MIN, 42.5, 110);
+        emitRiverBand(humberRiverX, humberHalfW, OUTER_Z_MIN, 504.5, 110);
+        emitRiverBand(() => -3620, () => 56, -460, 140, 150);
+        greaterTorontoGroup.add(new THREE.Mesh(riverWaterGB.build(), lakeMat));
+
+        // 8C. Outer Arterial Avenues, DVP, Gardiner/QEW & GO Rail Corridors (1 merged draw call)
+        const outerRoadsGB = new GeoBuilder();
+        const outerRoadSegs = [];
+        const addOuterRoad = (pts, width, col, yExtra = 0.22, register = true) => {
+          const sub = [];
+          for (let i = 0; i < pts.length - 1; i++) {
+            const [ax, az] = pts[i], [bx, bz] = pts[i + 1];
+            if (register) outerRoadSegs.push([ax, az, bx, bz, width]);
+            const len = Math.hypot(bx - ax, bz - az);
+            const nSteps = Math.max(1, Math.ceil(len / 130));
+            for (let s = 0; s < nSteps; s++) {
+              const t = s / nSteps;
+              sub.push([ax + (bx - ax) * t, az + (bz - az) * t]);
+            }
+          }
+          sub.push(pts[pts.length - 1]);
+          outerRoadsGB.color = col;
+          let dist = 0;
+          for (let i = 0; i < sub.length - 1; i++) {
+            const [ax, az] = sub[i], [bx, bz] = sub[i + 1];
+            const dx = bx - ax, dz = bz - az, len = Math.hypot(dx, dz);
+            if (len < 0.01) continue;
+            const nx = -dz / len * (width * 0.5), nz = dx / len * (width * 0.5);
+            const exY = typeof yExtra === 'function' ? yExtra : () => yExtra;
+            const ya0 = outerGroundY(ax + nx, az + nz) + exY(ax, az);
+            const ya1 = outerGroundY(ax - nx, az - nz) + exY(ax, az);
+            const yb0 = outerGroundY(bx + nx, bz + nz) + exY(bx, bz);
+            const yb1 = outerGroundY(bx - nx, bz - nz) + exY(bx, bz);
+            const u0 = dist / 24, u1 = (dist + len) / 24;
+            const a = outerRoadsGB.vert(ax + nx, ya0, az + nz, 0, 1, 0, 0, u0);
+            const b = outerRoadsGB.vert(ax - nx, ya1, az - nz, 0, 1, 0, width / 24, u0);
+            const c = outerRoadsGB.vert(bx - nx, yb1, bz - nz, 0, 1, 0, width / 24, u1);
+            const d = outerRoadsGB.vert(bx + nx, yb0, bz + nz, 0, 1, 0, 0, u1);
+            outerRoadsGB.quad(a, d, c, b);
+            dist += len;
+          }
+        };
+        const asph = [0.05, 0.055, 0.065], hwy = [0.085, 0.095, 0.11], rail = [0.16, 0.13, 0.10];
+        // North-South Arterials continuing smoothly from downtown ends (z = -1150)
+        addOuterRoad([[353, -1150], [375, -2655], [375, -3400], [375, -4380]], 16, asph); // Yonge St (clears The One / One Bloor)
+        addOuterRoad([[160, -1150], [160, -2655]], 13, asph); // Bay St
+        addOuterRoad([[-365, -1150], [-420, -1710], [-230, -1950], [-420, -2190], [-598, -2550], [-600, -2640], [-595, -4380]], 15, asph); // Queen's Park East / Avenue Rd (west of ROM)
+        addOuterRoad([[-420, -1710], [-670, -1950], [-420, -2190]], 13, asph); // Queen's Park Cres W
+        addOuterRoad([[586, -1150], [585, -2640]], 12, asph); // Church St
+        addOuterRoad([[805, -1150], [790, -2630], [980, -3400], [1160, -4380]], 13, asph); // Jarvis / Mt Pleasant
+        addOuterRoad([[1025, -1150], [1025, -2620]], 12, asph); // Sherbourne
+        addOuterRoad([[1230, -1150], [1230, -2615], [1340, -4380]], 12, asph); // Parliament / Bayview Ext
+        addOuterRoad([[-1210, -1150], [-1210, -2570], [-1245, -3340], [-1310, -4380]], 14, asph); // Spadina Rd (east of Casa Loma)
+        addOuterRoad([[-1840, -1150], [-1860, -2540], [-1920, -4380]], 14, asph); // Bathurst N
+        addOuterRoad([[-2620, -1150], [-2680, -2490], [-2760, -4380]], 14, asph); // Dufferin / Caledonia
+        addOuterRoad([[-2920, -1480], [-2920, -350], [-3060, 480]], 13, asph); // Parkside Dr / High Park E
+        addOuterRoad([[2520, -1150], [2600, -2640], [2720, -4380]], 13, asph); // Pape / Donlands
+        addOuterRoad([[3420, -80], [3420, -1200], [3480, -2740], [3540, -4380]], 13, asph); // Woodbine / Victoria Park
+        // East-West Arterials & Bloor Viaduct (Bloor passes cleanly north of ROM & Yorkville supertalls)
+        addOuterRoad([[-4460, -2260], [-3200, -2420], [-1600, -2530], [-600, -2615], [140, -2655], [375, -2655], [1820, -2600]], 17, asph); // Bloor West-Central
+        addOuterRoad([[2210, -2600], [3200, -2700], [4220, -2780]], 17, asph); // Danforth East
+        addOuterRoad([[1820, -2600], [2210, -2600]], 17, hwy, () => 22.0); // Prince Edward Viaduct Deck spanning Don River + DVP
+        addOuterRoad([[-4460, -3220], [-2680, -3300], [-1450, -3340], [375, -3400], [1680, -3460]], 14, asph); // St. Clair W-C
+        addOuterRoad([[2360, -3460], [3500, -3500], [4220, -3540]], 14, asph); // O'Connor / St Clair E
+        addOuterRoad([[-4460, -3960], [-1400, -4040], [375, -4080], [4220, -4160]], 15, asph); // Eglinton Ave
+        addOuterRoad([[1450, -989], [1875, -1120]], 13, asph); // Queen E (to Don River)
+        addOuterRoad([[2020, -1120], [3100, -1190], [4220, -1160]], 13, asph); // Queen E / Beaches
+        addOuterRoad([[1875, -1120], [2020, -1120]], 13, hwy, () => 5.5); // Queen E Don Bridge
+        addOuterRoad([[1492, -283], [1915, -280]], 14, asph); // Lake Shore E / Eastern
+        addOuterRoad([[2065, -280], [2950, -210], [3720, -60]], 14, asph); // Lake Shore E -> Beaches
+        addOuterRoad([[1915, -280], [2065, -280]], 14, hwy, () => 4.2); // Lake Shore E Don Bridge
+        addOuterRoad([[-2260, -172], [-2940, -380], [-4460, -820]], 13, asph); // Queen W / Queensway
+        addOuterRoad([[-2250, -593], [-3100, -950], [-4460, -1420]], 13, asph); // Dundas W -> Bloor W
+        // Highways: Gardiner/QEW & Don Valley Parkway (running inside the Don Valley west of the river)
+        addOuterRoad([[-2380, 411], [-2950, 440], [-3380, 480], [-3520, 480], [-4050, 520], [-4480, 620]], 20, hwy, (x) => (x > -2800 ? 6.0 : 2.8)); // Gardiner / QEW
+        addOuterRoad([[1895, 40], [1890, -450], [1855, -1350], [1995, -2580], [2185, -3450], [2360, -4380]], 19, hwy, () => 2.2); // Don Valley Parkway
+        // GO Rail Corridors (4 distinct outer trunk spokes)
+        addOuterRoad([[-900, 120], [-2550, -1200], [-3950, -2800], [-4460, -3650]], 8, rail, 0.16); // Kitchener / Pearson NW
+        addOuterRoad([[-2650, 440], [-4480, 560]], 8, rail, 0.16); // Lakeshore West
+        addOuterRoad([[1850, -1100], [3100, -1800], [4220, -2300]], 8, rail, 0.16); // Lakeshore East GO
+        addOuterRoad([[1965, 20], [1860, -1450], [2180, -3420], [2420, -4380]], 7, rail, 0.16); // Richmond Hill Don Valley Rail
+        greaterTorontoGroup.add(new THREE.Mesh(outerRoadsGB.build(), new THREE.MeshLambertMaterial({
+          vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1
+        })));
+
+        // Helper for outer clearance check so towers & houses stay strictly clear of rivers, roads, parks & PLAY
+        const distToSeg = (px, pz, ax, az, bx, bz) => {
+          const dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz;
+          const t = l2 > 0.01 ? Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / l2)) : 0;
+          return Math.hypot(px - (ax + t * dx), pz - (az + t * dz));
+        };
+        const nearOuterRoad = (x, z, pad) => {
+          for (let i = 0; i < outerRoadSegs.length; i++) {
+            const [ax, az, bx, bz, w] = outerRoadSegs[i];
+            if (Math.min(ax, bx) - w - pad > x || Math.max(ax, bx) + w + pad < x) continue;
+            if (Math.min(az, bz) - w - pad > z || Math.max(az, bz) + w + pad < z) continue;
+            if (distToSeg(x, z, ax, az, bx, bz) < w * 0.5 + pad) return true;
+          }
+          return false;
+        };
+        const isClearOuterSite = (x, z, pad = 28) => {
+          if (x > -2400 && x < 1430 && z > -1260 && z < 750) return false; // protect PLAY downtown
+          if (Math.hypot(x - 1380, z - (-360)) < 115 + pad) return false; // Distillery Historic District
+          if (Math.hypot(x - (-450), z - (-1950)) < 225 + pad) return false; // Queen's Park Oval
+          if (Math.hypot(x - (-520), z - (-2550)) < 85 + pad) return false; // ROM Crystal
+          if (Math.hypot(x - (-1450), z - (-3450)) < 210 + pad) return false; // Casa Loma
+          if (Math.hypot(x - (-95), z - (-990)) < 110 + pad) return false; // City Hall
+          if (Math.hypot(x - (-3450), z - 480) < 115 + pad) return false; // Humber Bay Arch Bridge
+          if (Math.hypot(x - 2380, z - (-3420)) < 110 + pad) return false; // Science Centre
+          if (Math.hypot(x - 3720, z - (-25)) < 110 + pad) return false; // R.C. Harris
+          if (isInHighPark(x, z) || isInGrenadierPond(x, z)) return false;
+          if (Math.abs(x - donRiverX(z)) < donHalfW(z) + 45 + pad) return false;
+          if (Math.abs(x - humberRiverX(z)) < humberHalfW(z) + 45 + pad) return false;
+          if (z > 430 && x < -2600) return false; // Humber Bay shoreline
+          if (z > -45 && x > 1360) return false; // East coastline / Port Lands / Beaches
+          if (x > 3580 && z > -240) return false; // Scarborough Bluffs face
+          if (nearOuterRoad(x, z, pad * 0.7)) return false;
+          return true;
+        };
+
+        // 8D. Merged Low-Poly Outer Horizon Landmarks (Bloor Viaduct, Science Centre, R.C. Harris, Yonge-Eglinton Core, Bridges - 1 draw call!)
+        const outerLandmarksGB = new GeoBuilder();
+        const addBoxOL = (cx, y0, cz, w, h, d, col) => {
+          outerLandmarksGB.color = col;
+          const x0 = cx - w * 0.5, x1 = cx + w * 0.5, y1 = y0 + h, z0 = cz - d * 0.5, z1 = cz + d * 0.5;
+          const q = (p0, p1, p2, p3, nx, ny, nz) => {
+            const a = outerLandmarksGB.vert(p0[0], p0[1], p0[2], nx, ny, nz, 0, 0);
+            const b = outerLandmarksGB.vert(p1[0], p1[1], p1[2], nx, ny, nz, 1, 0);
+            const c = outerLandmarksGB.vert(p2[0], p2[1], p2[2], nx, ny, nz, 1, 1);
+            const e = outerLandmarksGB.vert(p3[0], p3[1], p3[2], nx, ny, nz, 0, 1);
+            outerLandmarksGB.quad(a, b, c, e);
+          };
+          q([x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0], 0, 1, 0);
+          q([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], 0, 0, 1);
+          q([x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0], 0, 0, -1);
+          q([x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1], 1, 0, 0);
+          q([x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0], -1, 0, 0);
+        };
+        // Prince Edward Viaduct concrete piers + double-deck subway truss + Luminous Veil stanchions (x: 1825..2205, z: -2600)
+        addBoxOL(2015, 16.5, -2600, 386, 5.2, 16, [0.58, 0.60, 0.64]);
+        for (let px = 1860; px <= 2170; px += 62) addBoxOL(px, -0.5, -2600, 9.5, 21.5, 15, [0.66, 0.68, 0.72]);
+        for (let vx = 1835; vx <= 2195; vx += 15) {
+          addBoxOL(vx, 22.0, -2608.5, 1.0, 5.0, 0.6, [0.85, 0.90, 0.96]);
+          addBoxOL(vx, 22.0, -2591.5, 1.0, 5.0, 0.6, [0.85, 0.90, 0.96]);
+        }
+        // Lower Don Bridges (Queen E at x=1948 & Lake Shore E at x=1990)
+        addBoxOL(1948, 4.0, -1120, 146, 1.8, 14, [0.64, 0.66, 0.70]);
+        addBoxOL(1990, 2.8, -280, 152, 1.8, 15, [0.64, 0.66, 0.70]);
+        // Sunnyside Bathing Pavilion on Humber Bay waterfront (-2950, 488)
+        addBoxOL(-2950, 0.0, 488, 68, 8.5, 22, [0.92, 0.90, 0.86]);
+        addBoxOL(-2950, 8.5, 488, 72, 2.2, 24, [0.58, 0.24, 0.20]);
+        // R.C. Harris Water Treatment Plant ("Palace of Purification") overlooking the Beaches (3720, -25)
+        addBoxOL(3720, 0.0, -25, 118, 18, 34, [0.84, 0.80, 0.72]);
+        addBoxOL(3720, 18.0, -25, 48, 8, 28, [0.78, 0.74, 0.66]);
+        addBoxOL(3720, 26.0, -25, 52, 2.4, 30, [0.22, 0.48, 0.40]); // Copper Art Deco hip roof
+        addBoxOL(3620, 0.0, -25, 58, 11, 28, [0.82, 0.78, 0.70]);
+        addBoxOL(3820, 0.0, -25, 58, 11, 28, [0.82, 0.78, 0.70]);
+        // Ontario Science Centre tiered Brutalist pavilions overlooking Don Valley Fork (2380, -3420)
+        const scY = outerGroundY(2380, -3420);
+        addBoxOL(2380, scY, -3420, 82, 16, 46, [0.86, 0.85, 0.82]);
+        addBoxOL(2345, scY, -3370, 56, 20, 38, [0.82, 0.81, 0.78]);
+        // Yonge & Eglinton Mid-North Skyline Hero Silhouettes (visible straight north up Yonge from Downtown!)
+        for (const [tx, tz, tw, th, td, tcol] of [
+          [320, -4055, 34, 178, 32, [0.36, 0.56, 0.74]],
+          [408, -4040, 36, 162, 34, [0.58, 0.64, 0.70]],
+          [408, -4120, 32, 146, 30, [0.40, 0.58, 0.72]],
+          [318, -4130, 30, 128, 30, [0.64, 0.68, 0.74]],
+          [456, -4080, 28, 118, 28, [0.48, 0.55, 0.64]]
+        ]) addBoxOL(tx, outerGroundY(tx, tz) - 0.5, tz, tw, th, td, tcol);
+        greaterTorontoGroup.add(new THREE.Mesh(outerLandmarksGB.build(), new THREE.MeshLambertMaterial({ vertexColors: true })));
+
+        // 8E. Instanced Greater Toronto Highrise & Midrise Skyline Ring (1 Draw Call)
         const lodSpecs = [];
-        // Midtown Yonge / University / Bay corridor (z: -1050 to -3100, x: -700 to +850)
-        for (let z = -1080; z >= -3050; z -= 145) {
+        // Midtown Yonge / University / Bay corridor (z: -1200 to -3200, x: -700 to +850)
+        for (let z = -1200; z >= -3180; z -= 145) {
           for (let x = -680; x <= 820; x += 135) {
-            if (Math.hypot(x - (-450), z - (-1950)) < 230) continue; // keep Queen's Park open
-            if (Math.hypot(x - (-95), z - (-990)) < 110) continue; // keep Nathan Phillips Square open
-            const h = 38 + ((Math.abs(x * 17 + z * 31)) % 125);
+            if (!isClearOuterSite(x, z, 28)) continue;
+            const h = 42 + ((Math.abs(x * 17 + z * 31)) % 125);
             const w = 24 + ((Math.abs(x * 13 + z * 7)) % 22);
             const d = 24 + ((Math.abs(x * 23 + z * 11)) % 22);
             lodSpecs.push({ x, z, w, h, d, c: (x + z) % 3 === 0 ? 0x38bdf8 : ((x + z) % 2 === 0 ? 0x64748b : 0x94a3b8) });
           }
         }
-        // Humber Bay Shores Waterfront Condo Cluster (x: -3100 to -3900, z: 180 to 420)
-        for (let x = -3150; x >= -3850; x -= 95) {
-          for (let z = 210; z <= 390; z += 85) {
+        // Yonge & St. Clair + Yonge & Eglinton Mid-North Skyline Clusters
+        for (let z = -3350; z >= -4280; z -= 130) {
+          for (let x = 220; x <= 520; x += 110) {
+            if (!isClearOuterSite(x, z, 26)) continue;
+            const h = (z < -3850 ? 68 : 48) + ((Math.abs(x * 21 + z * 13)) % 88);
+            lodSpecs.push({ x, z, w: 26, h, d: 26, c: (x + z) % 2 === 0 ? 0x38bdf8 : 0x64748b });
+          }
+        }
+        // St. Jamestown High-Rise Cluster (x: 1050..1330, z: -2150..-2480)
+        for (let x = 1070; x <= 1320; x += 82) {
+          for (let z = -2180; z >= -2470; z -= 92) {
+            if (!isClearOuterSite(x, z, 20)) continue;
+            const h = 64 + ((Math.abs(x * 17 + z * 23)) % 46);
+            lodSpecs.push({ x, z, w: 24, h, d: 24, c: 0x94a3b8 });
+          }
+        }
+        // Humber Bay Shores Waterfront Condo Cluster (x: -3150 to -4050, z: 200 to 410)
+        for (let x = -3160; x >= -4020; x -= 98) {
+          for (let z = 205; z <= 395; z += 85) {
+            if (!isClearOuterSite(x, z, 24)) continue;
             const h = 85 + ((Math.abs(x * 19 + z * 29)) % 115);
             lodSpecs.push({ x, z, w: 28, h, d: 28, c: 0x38bdf8 });
           }
         }
-        // Outer Parkdale / High Park Horizon West & Corktown / East Bayfront East (keeps street grid textured)
+        // Bloor-Danforth East & West Corridor Midrises + Islington/High Park North Nodes
+        for (let x = -3850; x <= 3750; x += 240) {
+          for (const zOff of [-2505, -2675]) {
+            const bz = zOff - (x * 0.045);
+            if (!isClearOuterSite(x, bz, 26)) continue;
+            const h = 28 + ((Math.abs(x * 11 + bz * 17)) % 56);
+            lodSpecs.push({ x, z: bz, w: 26, h, d: 24, c: (x % 480 === 0) ? 0x64748b : 0x94a3b8 });
+          }
+        }
+        // Outer Parkdale West & East Bayfront
         for (let x = -2900; x <= -2420; x += 115) {
           for (let z = -420; z <= 120; z += 115) {
+            if (!isClearOuterSite(x, z, 22)) continue;
             const h = 32 + ((Math.abs(x * 11 + z * 19)) % 68);
             lodSpecs.push({ x, z, w: 32, h, d: 28, c: 0x94a3b8 });
           }
         }
-        for (let x = 1400; x <= 1880; x += 120) {
+        for (let x = 1420; x <= 1860; x += 120) {
           for (let z = -420; z <= 120; z += 120) {
+            if (!isClearOuterSite(x, z, 22)) continue;
             const h = 30 + ((Math.abs(x * 13 + z * 17)) % 64);
             lodSpecs.push({ x, z, w: 30, h, d: 26, c: 0x94a3b8 });
           }
@@ -21514,7 +21892,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         const m4 = new THREE.Matrix4(), q4 = new THREE.Quaternion(), p4 = new THREE.Vector3(), s4 = new THREE.Vector3(), col = new THREE.Color();
         q4.setFromEuler(new THREE.Euler(0, 16.2 * Math.PI / 180, 0));
         lodSpecs.forEach((s, i) => {
-          m4.compose(p4.set(s.x, s.h / 2, s.z), q4, s4.set(s.w, s.h, s.d));
+          const gy = outerGroundY(s.x, s.z);
+          m4.compose(p4.set(s.x, gy - 0.5 + s.h / 2, s.z), q4, s4.set(s.w, s.h, s.d));
           lodMesh.setMatrixAt(i, m4);
           lodMesh.setColorAt(i, col.setHex(s.c));
         });
@@ -21522,6 +21901,148 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         if (lodMesh.instanceColor) lodMesh.instanceColor.needsUpdate = true;
         lodMesh.frustumCulled = false;
         greaterTorontoGroup.add(lodMesh);
+
+        // 8F. Low-Poly Gabled Toronto Neighbourhood Fabric (Annex, Rosedale, Riverdale, Leslieville, Beaches, High Park West - 1 Draw Call!)
+        const resSpots = [];
+        for (let gz = -4320; gz <= 420; gz += 62) {
+          for (let gx = -4400; gx <= 4160; gx += 62) {
+            const jx = gx + (hash(gx * 0.13 + gz * 0.31) - 0.5) * 26;
+            const jz = gz + (hash(gx * 0.29 + gz * 0.17) - 0.5) * 26;
+            if (!isClearOuterSite(jx, jz, 28)) continue;
+            // Keep rich urban carpet near city core and taper cleanly at far edge
+            const rKeep = hash(gx * 0.07 + gz * 0.11);
+            if (Math.hypot(jx, jz) > 3950 && rKeep < 0.35) continue;
+            const w = 18 + hash(jx * 1.7 + jz) * 16;
+            const d = 15 + hash(jx + jz * 2.3) * 14;
+            const h = 9.0 + hash(jx * 3.1 + jz * 1.9) * 8.5;
+            resSpots.push({ x: jx, z: jz, w, h, d, yaw: ((Math.abs(Math.floor(jx + jz)) % 2 === 0) ? 0.28 : 0.28 + Math.PI * 0.5) });
+          }
+        }
+        if (resSpots.length) {
+          const houseGB = new GeoBuilder();
+          const hq = (p0, p1, p2, p3, nx, ny, nz, v0, v1) => {
+            const a = houseGB.vert(p0[0], p0[1], p0[2], nx, ny, nz, 0, v0);
+            const b = houseGB.vert(p1[0], p1[1], p1[2], nx, ny, nz, 1, v0);
+            const c = houseGB.vert(p2[0], p2[1], p2[2], nx, ny, nz, 1, v1);
+            const e = houseGB.vert(p3[0], p3[1], p3[2], nx, ny, nz, 0, v1);
+            houseGB.quad(a, b, c, e);
+          };
+          hq([-0.5, 0, 0.5], [0.5, 0, 0.5], [0.5, 0.65, 0.5], [-0.5, 0.65, 0.5], 0, 0, 1, 0, 0.62);
+          hq([0.5, 0, -0.5], [-0.5, 0, -0.5], [-0.5, 0.65, -0.5], [0.5, 0.65, -0.5], 0, 0, -1, 0, 0.62);
+          hq([0.5, 0, 0.5], [0.5, 0, -0.5], [0.5, 0.65, -0.5], [0.5, 0.65, 0.5], 1, 0, 0, 0, 0.62);
+          hq([-0.5, 0, -0.5], [-0.5, 0, 0.5], [-0.5, 0.65, 0.5], [-0.5, 0.65, -0.5], -1, 0, 0, 0, 0.62);
+          hq([-0.5, 0.65, 0.5], [0.5, 0.65, 0.5], [0.5, 1.0, 0], [-0.5, 1.0, 0], 0, 0.82, 0.57, 0.72, 0.98);
+          hq([0.5, 0.65, -0.5], [-0.5, 0.65, -0.5], [-0.5, 1.0, 0], [0.5, 1.0, 0], 0, 0.82, -0.57, 0.72, 0.98);
+          // East & West gable triangles
+          const eg0 = houseGB.vert(0.5, 0.65, 0.5, 1, 0, 0, 0, 0.55);
+          const eg1 = houseGB.vert(0.5, 0.65, -0.5, 1, 0, 0, 1, 0.55);
+          const eg2 = houseGB.vert(0.5, 1.0, 0, 1, 0, 0, 0.5, 0.65);
+          houseGB.idx.push(eg0, eg1, eg2);
+          const wg0 = houseGB.vert(-0.5, 0.65, -0.5, -1, 0, 0, 0, 0.55);
+          const wg1 = houseGB.vert(-0.5, 0.65, 0.5, -1, 0, 0, 1, 0.55);
+          const wg2 = houseGB.vert(-0.5, 1.0, 0, -1, 0, 0, 0.5, 0.65);
+          houseGB.idx.push(wg0, wg1, wg2);
+
+          const [resC, resCtx] = canvas2(128, 128);
+          const [resE, resEctx] = canvas2(128, 128);
+          // Top strip in texture V (y = 0..38 in canvas coords since canvas y=0 maps to v=1!): dark shingle roof
+          resCtx.fillStyle = '#33373d'; resCtx.fillRect(0, 0, 128, 42);
+          resCtx.fillStyle = '#d6cfc7'; resCtx.fillRect(0, 42, 128, 86);
+          resEctx.fillStyle = '#000000'; resEctx.fillRect(0, 0, 128, 128);
+          for (let wx = 10; wx < 118; wx += 26) {
+            for (const wy of [54, 86]) {
+              const lit = hash(wx * 5.7 + wy * 9.3) > 0.45;
+              resCtx.fillStyle = lit ? '#e2c98a' : '#2a3442';
+              resCtx.fillRect(wx, wy, 14, 18);
+              if (lit) {
+                resEctx.fillStyle = '#fde68a';
+                resEctx.fillRect(wx, wy, 14, 18);
+              }
+            }
+          }
+          const resTex = new THREE.CanvasTexture(resC), resEtex = new THREE.CanvasTexture(resE);
+          const resMat = new THREE.MeshLambertMaterial({
+            color: 0xffffff, map: resTex, emissive: 0xffffff, emissiveMap: resEtex, emissiveIntensity: 0.60
+          });
+          dayNightControllers.push((isDay) => { resMat.emissiveIntensity = isDay ? 0.03 : 0.60; });
+          const resMesh = new THREE.InstancedMesh(houseGB.build(), resMat, resSpots.length);
+          const resPal = [0x9c4d3e, 0xa8644d, 0xc9b48a, 0x7c858e, 0xb89b82, 0x8d5247];
+          const rM = new THREE.Matrix4(), rQ = new THREE.Quaternion(), rP = new THREE.Vector3(), rS = new THREE.Vector3(), rCol = new THREE.Color();
+          resSpots.forEach((s, i) => {
+            rQ.setFromEuler(new THREE.Euler(0, s.yaw, 0));
+            rM.compose(rP.set(s.x, outerGroundY(s.x, s.z) - 0.5, s.z), rQ, rS.set(s.w, s.h, s.d));
+            resMesh.setMatrixAt(i, rM);
+            resMesh.setColorAt(i, rCol.setHex(resPal[i % resPal.length]));
+          });
+          resMesh.instanceMatrix.needsUpdate = true;
+          if (resMesh.instanceColor) resMesh.instanceColor.needsUpdate = true;
+          resMesh.frustumCulled = false;
+          greaterTorontoGroup.add(resMesh);
+        }
+
+        // 8G. Outer Ravine, High Park, Humber Bay & Beaches Canopy Trees (2 InstancedMesh Draw Calls Total!)
+        const outerTrees = [];
+        const addTreeIfClear = (tx, tz, minSc, maxSc, seed) => {
+          if (tx < OUTER_X_MIN + 40 || tx > OUTER_X_MAX - 40 || tz < OUTER_Z_MIN + 40) return;
+          if (isInGrenadierPond(tx, tz) || Math.abs(tx - donRiverX(tz)) < donHalfW(tz) + 12 || Math.abs(tx - humberRiverX(tz)) < humberHalfW(tz) + 12) return;
+          if (nearOuterRoad(tx, tz, 14)) return;
+          outerTrees.push([tx, tz, minSc + hash(seed) * (maxSc - minSc)]);
+        };
+        // Don Valley & Rosedale Ravine tree belts
+        for (let i = 0; i < 480; i++) {
+          const tz = 30 - hash(i * 11.7) * 4350;
+          const side = (i % 2 === 0 ? 1 : -1) * (donHalfW(tz) + 18 + hash(i * 5.3) * 180);
+          addTreeIfClear(donRiverX(tz) + side, tz, 1.0, 1.85, i * 3.9);
+        }
+        // Humber Valley, High Park & Humber Bay Park peninsula woods
+        for (let i = 0; i < 540; i++) {
+          if (i < 290) {
+            const tx = -3840 + hash(i * 17.3) * 860;
+            const tz = -1120 + hash(i * 23.1) * 1350;
+            if (isInHighPark(tx, tz) && Math.hypot(tx - (-3450), tz - (-680)) > 95) addTreeIfClear(tx, tz, 1.0, 1.9, i * 7.1);
+          } else if (i < 440) {
+            const tz = 450 - hash(i * 13.7) * 4750;
+            const side = (i % 2 === 0 ? 1 : -1) * (humberHalfW(tz) + 20 + hash(i * 9.1) * 170);
+            addTreeIfClear(humberRiverX(tz) + side, tz, 1.0, 1.8, i * 4.3);
+          } else {
+            const tx = -3930 + hash(i * 19.3) * 340, tz = 520 + hash(i * 29.7) * 195;
+            if (pointInPoly(tx, tz, humberPeninsulaPoly)) addTreeIfClear(tx, tz, 0.9, 1.5, i * 6.7);
+          }
+        }
+        // Rosedale, Cedarvale Ravine, Forest Hill Neighbourhood Canopy & Scarborough Bluffs Crest
+        for (let i = 0; i < 420; i++) {
+          if (i < 280) {
+            const tx = -2400 + hash(i * 21.1) * 4400;
+            const tz = -3950 + hash(i * 14.9) * 1900;
+            if (Math.hypot(tx - (-1450), tz - (-3450)) > 175 && Math.hypot(tx - (-450), tz - (-1950)) > 220) {
+              addTreeIfClear(tx, tz, 0.95, 1.65, i * 8.3);
+            }
+          } else {
+            const tx = 2980 + hash(i * 31.3) * 1240;
+            const tz = -220 + hash(i * 17.9) * 215;
+            if (Math.hypot(tx - 3720, tz - (-25)) > 85) addTreeIfClear(tx, tz, 0.9, 1.55, i * 9.7);
+          }
+        }
+        if (outerTrees.length) {
+          const otTrunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.32, 0.50, 4.2, 5), new THREE.MeshLambertMaterial({ color: 0x5c4033 }), outerTrees.length);
+          const otCrown = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(3.8, 0), new THREE.MeshLambertMaterial({ color: 0xffffff }), outerTrees.length);
+          const tM = new THREE.Matrix4(), tP = new THREE.Vector3(), tQ = new THREE.Quaternion(), tS = new THREE.Vector3(), tC = new THREE.Color();
+          const tPal = [0x265c36, 0x326e41, 0x1a472a, 0x457d44, 0x5b7c3b];
+          outerTrees.forEach(([tx, tz, sc], i) => {
+            const gy = outerGroundY(tx, tz);
+            tM.compose(tP.set(tx, gy + 2.1 * sc, tz), tQ, tS.set(sc, sc, sc));
+            otTrunk.setMatrixAt(i, tM);
+            tM.compose(tP.set(tx, gy + 5.6 * sc, tz), tQ, tS.set(sc, sc * 1.15, sc));
+            otCrown.setMatrixAt(i, tM);
+            otCrown.setColorAt(i, tC.setHex(tPal[i % tPal.length]));
+          });
+          otTrunk.instanceMatrix.needsUpdate = true;
+          otCrown.instanceMatrix.needsUpdate = true;
+          if (otCrown.instanceColor) otCrown.instanceColor.needsUpdate = true;
+          otTrunk.frustumCulled = false;
+          otCrown.frustumCulled = false;
+          greaterTorontoGroup.add(otTrunk, otCrown);
+        }
       }
 
       // 9. SPEAKERS CORNER BOOTH AT 299 QUEEN ST W (-558, -602) & TORONTO RACCOONS ("TRASH PANDAS")
@@ -23159,6 +23680,10 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           distilleryDistrict: [1380, -360],
           cherryStreetBridges: [1680, 450],
           leslieSpitLighthouse: [2735, 1825],
+          bloorViaduct: [2015, -2600],
+          yongeEglinton: [375, -4080],
+          rcHarris: [3720, -25],
+          scarboroughBluffs: [3950, -50],
           speakersCorner: [-558, -602]
         }
       },
