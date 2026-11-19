@@ -18373,44 +18373,210 @@
         dist.add(chimney);
         greaterTorontoGroup.add(dist);
 
-        // Port Lands / Villiers Island (ookwemin minising) Iconic Red-and-White Cherry Street Tied-Arch Bridges (1680, 580)
+        // Port Lands / East Bayfront Mainland, Keating Channel, Naturalized Don River Mouth,
+        // Villiers Island (ookwemin minising) & Connected Tommy Thompson Park (Leslie Street Spit)
         const eastShoreWallMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.88, metalness: 0.08 });
         const eastMeadowMat = new THREE.MeshLambertMaterial({ color: 0x2f5336 });
-        const pl = new THREE.Group();
-        pl.position.set(1680, 0, 580);
-        addSculptedIsland(pl, [
-          [-185, 25], [-120, -90], [20, -105], [220, -88], [390, -45],
-          [428, 70], [415, 220], [320, 325], [140, 345], [-60, 320],
-          [-165, 240], [-192, 120]
-        ], 0.55, -0.9, eastMeadowMat, eastShoreWallMat, 0.96);
-        [-28, 28].forEach((bx, bi) => {
-          const bridgeDeck = new THREE.Mesh(new THREE.BoxGeometry(16, 2.2, 110), whiteSteelMat);
-          bridgeDeck.position.set(bx, 8, 0);
-          pl.add(bridgeDeck);
-          [-7, 7].forEach(rx => {
-            const tiedArch = new THREE.Mesh(new THREE.TorusGeometry(48, 1.5, 10, 28, Math.PI), bi === 0 ? redSteelMat : whiteSteelMat);
-            tiedArch.rotation.y = Math.PI / 2;
-            tiedArch.position.set(bx + rx, 8, 0);
-            pl.add(tiedArch);
+        const eastPortBaseMat = new THREE.MeshLambertMaterial({ color: 0x565f6b });
+        const eastGroup = new THREE.Group();
+
+        // 1. Landmasses sharing exact Keating Channel (z: 420..480), Don Mouth (x: 1988..2055), and Ship Channel (z: 712..768)
+        const eastBayfrontPortPoly = [
+          [1345, 35], [3020, 35], [3020, 710], [2055, 710], [2065, 580],
+          [2045, 465], [1990, 420], [1395, 420], [1345, 360], [1345, 140]
+        ];
+        const villiersPoly = [
+          [1495, 480], [1945, 478], [1985, 520], [1988, 625], [1955, 705],
+          [1820, 712], [1565, 710], [1488, 675], [1478, 565]
+        ];
+        const portSouthSpitPoly = [
+          [1820, 768], [2720, 768], [2720, 712], [3020, 712], [3020, 920],
+          [2840, 955], [2685, 980], [2610, 1180], [2675, 1460], [2770, 1790],
+          [2745, 1855], [2680, 1840], [2570, 1520], [2475, 1210], [2395, 945],
+          [2180, 910], [1920, 895], [1815, 840]
+        ];
+        addSculptedIsland(eastGroup, eastBayfrontPortPoly, 0.52, -0.9, eastPortBaseMat, eastShoreWallMat, 0);
+        addSculptedIsland(eastGroup, villiersPoly, 0.58, -0.9, eastMeadowMat, eastShoreWallMat, 0);
+        addSculptedIsland(eastGroup, portSouthSpitPoly, 0.56, -0.9, eastMeadowMat, eastShoreWallMat, 0);
+
+        // 2. Merged Quays, Roads, Polson Pier, Hearn Concrete Apron & Leslie Spit Trail (1 draw call!)
+        const roadQuayGB = new GeoBuilder();
+        const pushQuadFlat = (gb, x0, z0, x1, z1, y, col) => {
+          gb.color = col;
+          const a = gb.vert(x0, y, z1, 0, 1, 0, 0, 0);
+          const b = gb.vert(x1, y, z1, 0, 1, 0, 1, 0);
+          const c = gb.vert(x1, y, z0, 0, 1, 0, 1, 1);
+          const d = gb.vert(x0, y, z0, 0, 1, 0, 0, 1);
+          gb.quad(a, b, c, d);
+        };
+        // Concrete wharf aprons lining Keating Channel & Ship Channel + Hearn industrial pad
+        roadQuayGB.color = [0.60, 0.63, 0.67];
+        ribbon(roadQuayGB, [[1395, 412], [1990, 412]], 14, 0.64, 16);
+        ribbon(roadQuayGB, [[1495, 487], [1945, 487]], 12, 0.64, 16);
+        ribbon(roadQuayGB, [[2055, 703], [2720, 703]], 14, 0.64, 16);
+        ribbon(roadQuayGB, [[1825, 775], [2720, 775]], 16, 0.64, 16);
+        pushQuadFlat(roadQuayGB, 1895, 780, 2505, 880, 0.63, [0.46, 0.48, 0.52]); // Hearn / Port South concrete apron
+        // Polson Pier jutting west from Villiers Island toward Downtown Skyline
+        pushQuadFlat(roadQuayGB, 1345, 558, 1500, 588, 0.64, [0.58, 0.52, 0.44]);
+        // Cherry St dual approach roadways (north of Keating Channel & south on Villiers)
+        roadQuayGB.color = [0.22, 0.24, 0.27];
+        ribbon(roadQuayGB, [[1654, -90], [1654, 410]], 11, 0.66, 12);
+        ribbon(roadQuayGB, [[1706, -90], [1706, 410]], 11, 0.66, 12);
+        ribbon(roadQuayGB, [[1654, 490], [1654, 675]], 11, 0.66, 12);
+        ribbon(roadQuayGB, [[1706, 490], [1706, 675]], 11, 0.66, 12);
+        // Commissioners St across Villiers -> Don Mouth Bridge -> Port Lands Film District
+        ribbon(roadQuayGB, [[1510, 598], [1970, 598]], 12, 0.65, 12);
+        ribbon(roadQuayGB, [[2065, 598], [2860, 598]], 12, 0.65, 12);
+        // Unwin Ave & Leslie Street Spit spine trail curving out to Outer Harbour Lighthouse
+        ribbon(roadQuayGB, [[1860, 808], [2540, 808]], 10, 0.66, 12);
+        roadQuayGB.color = [0.70, 0.66, 0.58];
+        ribbon(roadQuayGB, [[2520, 812], [2528, 955], [2555, 1185], [2638, 1500], [2728, 1815]], 9, 0.65, 12);
+        eastGroup.add(new THREE.Mesh(roadQuayGB.build(), new THREE.MeshLambertMaterial({
+          vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1
+        })));
+
+        // 3. Cherry Street North Tied-Arch Bridges spanning Keating Channel (z = 408..492, actual water below!)
+        //    plus Commissioners St Bridge spanning the Naturalized Don River Mouth (x = 1966..2070, z = 598)
+        [-26, 26].forEach((bx, bi) => {
+          const deck = new THREE.Mesh(new THREE.BoxGeometry(14, 1.4, 86), whiteSteelMat);
+          deck.position.set(1680 + bx, 2.2, 450);
+          eastGroup.add(deck);
+          [-1, 1].forEach(endDir => {
+            const ramp = new THREE.Mesh(new THREE.BoxGeometry(14, 0.8, 18), whiteSteelMat);
+            ramp.position.set(1680 + bx, 1.4, 450 + endDir * 50);
+            ramp.rotation.x = endDir * 0.10;
+            eastGroup.add(ramp);
+          });
+          [-6.5, 6.5].forEach(rx => {
+            const arch = new THREE.Mesh(new THREE.TorusGeometry(38, 1.4, 8, 24, Math.PI), bi === 0 ? redSteelMat : whiteSteelMat);
+            arch.rotation.y = Math.PI / 2;
+            arch.position.set(1680 + bx + rx, 2.4, 450);
+            eastGroup.add(arch);
           });
         });
-        greaterTorontoGroup.add(pl);
+        const commDeck = new THREE.Mesh(new THREE.BoxGeometry(106, 1.4, 13), whiteSteelMat);
+        commDeck.position.set(2018, 2.2, 598);
+        eastGroup.add(commDeck);
+        [-6, 6].forEach(rz => {
+          const commArch = new THREE.Mesh(new THREE.TorusGeometry(34, 1.15, 7, 20, Math.PI), whiteSteelMat);
+          commArch.position.set(2018, 2.4, 598 + rz);
+          eastGroup.add(commArch);
+        });
 
-        // Tommy Thompson Park (Leslie Street Spit) Peninsula & Outer Harbour Lighthouse (2650, 1650)
-        const spit = new THREE.Group();
-        spit.position.set(2650, 0, 1650);
-        addSculptedIsland(spit, [
-          [-260, -860], [-155, -895], [-105, -720], [-25, -480], [45, -240],
-          [115, -20], [165, 165], [135, 220], [65, 200], [-25, 15],
-          [-110, -220], [-190, -490], [-255, -730]
-        ], 0.6, -0.9, eastMeadowMat, eastShoreWallMat, 0.88);
-        const lhTower = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 3.6, 22, 12), whiteSteelMat);
-        lhTower.position.set(120, 11, 180);
-        spit.add(lhTower);
-        const lhLantern = new THREE.Mesh(new THREE.CylinderGeometry(2.8, 2.8, 4.5, 12), redSteelMat);
-        lhLantern.position.set(120, 24, 180);
-        spit.add(lhLantern);
-        greaterTorontoGroup.add(spit);
+        // 4. One Merged Low-Poly Port Lands Landmarks & Industrial Skyline (1 draw call!)
+        const eastLandmarksGB = new GeoBuilder();
+        const addBoxGB = (gb, cx, y0, cz, w, h, d, col) => {
+          gb.color = col;
+          const x0 = cx - w * 0.5, x1 = cx + w * 0.5, y1 = y0 + h, z0 = cz - d * 0.5, z1 = cz + d * 0.5;
+          const q = (p0, p1, p2, p3, nx, ny, nz) => {
+            const a = gb.vert(p0[0], p0[1], p0[2], nx, ny, nz, 0, 0);
+            const b = gb.vert(p1[0], p1[1], p1[2], nx, ny, nz, 1, 0);
+            const c = gb.vert(p2[0], p2[1], p2[2], nx, ny, nz, 1, 1);
+            const e = gb.vert(p3[0], p3[1], p3[2], nx, ny, nz, 0, 1);
+            gb.quad(a, b, c, e);
+          };
+          q([x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0], 0, 1, 0);
+          q([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], 0, 0, 1);
+          q([x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0], 0, 0, -1);
+          q([x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1], 1, 0, 0);
+          q([x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0], -1, 0, 0);
+        };
+        const addCylGB = (gb, cx, y0, cz, rTop, rBot, h, segs, col) => {
+          gb.color = col;
+          const y1 = y0 + h;
+          const topRing = [];
+          for (let i = 0; i < segs; i++) {
+            const a0 = -(i / segs) * Math.PI * 2;
+            const a1 = -((i + 1) / segs) * Math.PI * 2;
+            const c0 = Math.cos(a0), s0 = Math.sin(a0), c1 = Math.cos(a1), s1 = Math.sin(a1);
+            const nm = Math.cos((a0 + a1) * 0.5), ns = Math.sin((a0 + a1) * 0.5);
+            const v0 = gb.vert(cx + c0 * rBot, y0, cz + s0 * rBot, nm, 0, ns, 0, 0);
+            const v1 = gb.vert(cx + c1 * rBot, y0, cz + s1 * rBot, nm, 0, ns, 1, 0);
+            const v2 = gb.vert(cx + c1 * rTop, y1, cz + s1 * rTop, nm, 0, ns, 1, 1);
+            const v3 = gb.vert(cx + c0 * rTop, y1, cz + s0 * rTop, nm, 0, ns, 0, 1);
+            gb.quad(v0, v1, v2, v3);
+            topRing.push(gb.vert(cx + c0 * rTop, y1, cz + s0 * rTop, 0, 1, 0, 0.5, 0.5));
+          }
+          for (let i = 1; i < segs - 1; i++) gb.idx.push(topRing[0], topRing[i], topRing[i + 1]);
+        };
+        // Victory Soya Mills Historic Grain Silos at Parliament Slip & Keating Channel (1515, 378)
+        for (let r = 0; r < 2; r++) {
+          for (let k = 0; k < 6; k++) {
+            addCylGB(eastLandmarksGB, 1485 + k * 7.8, 0.5, 372 + r * 8.2, 3.6, 3.6, 34, 8, [0.90, 0.89, 0.85]);
+          }
+        }
+        addBoxGB(eastLandmarksGB, 1506, 34.5, 376, 36, 8, 12, [0.78, 0.78, 0.76]);
+        // East Bayfront waterfront low-poly blocks north of Keating Channel
+        for (const [bx, bz, bw, bh, bd, col] of [
+          [1435, 225, 64, 34, 42, [0.36, 0.45, 0.56]],
+          [1545, 235, 72, 28, 38, [0.68, 0.70, 0.74]],
+          [1795, 230, 68, 36, 40, [0.34, 0.42, 0.52]],
+          [1905, 255, 60, 26, 44, [0.58, 0.34, 0.28]],
+          [1560, 325, 58, 22, 32, [0.46, 0.52, 0.60]],
+          [1810, 325, 64, 24, 34, [0.64, 0.67, 0.72]]
+        ]) addBoxGB(eastLandmarksGB, bx, 0.5, bz, bw, bh, bd, col);
+        // Polson Pier Waterfront Club / Skyline Venue (1420, 572)
+        addBoxGB(eastLandmarksGB, 1420, 0.6, 572, 34, 8.5, 18, [0.92, 0.94, 0.96]);
+        // Port Lands Studio District / Film Soundstages & Warehouses along Commissioners St
+        for (const [bx, bz, bw, bh, bd, col] of [
+          [2210, 520, 92, 18, 48, [0.74, 0.76, 0.80]],
+          [2335, 515, 86, 20, 52, [0.52, 0.56, 0.62]],
+          [2465, 525, 78, 16, 46, [0.78, 0.79, 0.82]],
+          [2600, 520, 90, 17, 50, [0.42, 0.46, 0.52]],
+          [2230, 650, 110, 20, 44, [0.66, 0.68, 0.72]],
+          [2390, 652, 95, 18, 42, [0.58, 0.32, 0.26]],
+          [2560, 648, 105, 16, 45, [0.70, 0.73, 0.76]]
+        ]) addBoxGB(eastLandmarksGB, bx, 0.5, bz, bw, bh, bd, col);
+        // Richard L. Hearn Generating Station (Turbine Hall + 215 m Red/White Striped Smokestack south of Ship Channel)
+        addBoxGB(eastLandmarksGB, 2215, 0.6, 848, 148, 34, 48, [0.48, 0.26, 0.22]);
+        addBoxGB(eastLandmarksGB, 2215, 34.6, 848, 128, 10, 32, [0.32, 0.35, 0.40]);
+        addBoxGB(eastLandmarksGB, 2320, 0.6, 848, 46, 22, 42, [0.40, 0.43, 0.48]);
+        const stackX = 2365, stackZ = 848, stackBands = 9, bandH = 23.8;
+        for (let bi = 0; bi < stackBands; bi++) {
+          const r0 = 8.4 - (bi / stackBands) * 3.8;
+          const r1 = 8.4 - ((bi + 1) / stackBands) * 3.8;
+          const isRedBand = (bi >= 6 && bi % 2 === 0);
+          addCylGB(eastLandmarksGB, stackX, 0.6 + bi * bandH, stackZ, r1, r0, bandH, 10, isRedBand ? [0.85, 0.18, 0.16] : [0.88, 0.89, 0.90]);
+        }
+        // Outer Harbour Lighthouse at southern tip of Tommy Thompson Park (2735, 1825)
+        addCylGB(eastLandmarksGB, 2735, 0.6, 1825, 2.4, 3.6, 22, 10, [0.95, 0.96, 0.98]);
+        addCylGB(eastLandmarksGB, 2735, 22.6, 1825, 2.7, 2.7, 4.4, 10, [0.86, 0.16, 0.16]);
+        eastGroup.add(new THREE.Mesh(eastLandmarksGB.build(), new THREE.MeshLambertMaterial({ vertexColors: true })));
+
+        // 5. Instanced Low-Poly Trees along Biidaasige Park (Villiers Island) & Tommy Thompson Park Spit (2 draw calls total!)
+        const eastTreeSpots = [];
+        for (let i = 0; i < 42; i++) {
+          const tx = 1505 + hash(i * 11.3) * 440;
+          const tz = 492 + hash(i * 19.7) * 204;
+          if (Math.abs(tx - 1680) < 48 || Math.abs(tz - 598) < 22) continue; // keep Cherry & Commissioners clear
+          if (pointInPoly(tx, tz, villiersPoly)) eastTreeSpots.push([tx, tz, 0.85 + hash(i * 5.3) * 0.55]);
+        }
+        for (let i = 0; i < 95; i++) {
+          const tFrac = i / 95;
+          const cx = 2505 + tFrac * 225 + (hash(i * 7.9) - 0.5) * 140;
+          const cz = 945 + tFrac * 860 + (hash(i * 13.1) - 0.5) * 45;
+          if (Math.abs(cx - (2515 + tFrac * 215)) < 12) continue; // keep spine trail clear
+          if (pointInPoly(cx, cz, portSouthSpitPoly)) eastTreeSpots.push([cx, cz, 0.85 + hash(i * 3.7) * 0.65]);
+        }
+        if (eastTreeSpots.length) {
+          const eastTrunkInst = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.28, 0.44, 3.8, 5), new THREE.MeshLambertMaterial({ color: 0x5c4033 }), eastTreeSpots.length);
+          const eastCrownInst = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(3.4, 0), new THREE.MeshLambertMaterial({ color: 0xffffff }), eastTreeSpots.length);
+          const tm = new THREE.Matrix4(), tPos = new THREE.Vector3(), tQ = new THREE.Quaternion(), tScl = new THREE.Vector3(), tCol = new THREE.Color();
+          const ePal = [0x2d6a3e, 0x3a7d44, 0x1b4d32, 0x4b8f4c];
+          eastTreeSpots.forEach(([tx, tz, sc], i) => {
+            tm.compose(tPos.set(tx, 0.55 + 1.9 * sc, tz), tQ, tScl.set(sc, sc, sc));
+            eastTrunkInst.setMatrixAt(i, tm);
+            tm.compose(tPos.set(tx, 0.55 + 5.1 * sc, tz), tQ, tScl.set(sc, sc * 1.1, sc));
+            eastCrownInst.setMatrixAt(i, tm);
+            eastCrownInst.setColorAt(i, tCol.setHex(ePal[i % ePal.length]));
+          });
+          eastTrunkInst.instanceMatrix.needsUpdate = true;
+          eastCrownInst.instanceMatrix.needsUpdate = true;
+          if (eastCrownInst.instanceColor) eastCrownInst.instanceColor.needsUpdate = true;
+          eastGroup.add(eastTrunkInst, eastCrownInst);
+        }
+
+        greaterTorontoGroup.add(eastGroup);
       }
 
       // 8. INSTANCED GREATER TORONTO SKYLINE RING (220 Midtown, Humber Bay & East Bayfront Towers in 1 Draw Call!)
@@ -18441,7 +18607,7 @@
             lodSpecs.push({ x, z, w: 32, h, d: 28, c: 0x94a3b8 });
           }
         }
-        for (let x = 1280; x <= 1780; x += 120) {
+        for (let x = 1400; x <= 1880; x += 120) {
           for (let z = -420; z <= 120; z += 120) {
             const h = 30 + ((Math.abs(x * 13 + z * 17)) % 64);
             lodSpecs.push({ x, z, w: 30, h, d: 26, c: 0x94a3b8 });
@@ -20119,8 +20285,8 @@
           ontarioPlaceCinesphere: [-2120, 720],
           humberBayBridge: [-3450, 480],
           distilleryDistrict: [1380, -360],
-          cherryStreetBridges: [1680, 580],
-          leslieSpitLighthouse: [2650, 1650],
+          cherryStreetBridges: [1680, 450],
+          leslieSpitLighthouse: [2735, 1825],
           speakersCorner: [-558, -602]
         }
       },
