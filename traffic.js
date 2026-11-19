@@ -813,12 +813,30 @@
       }
     });
 
+    const lensCount = Math.max(1, signals.length);
+    const _initRedOff = new THREE.Color(0.18, 0.02, 0.02);
+    const _initYelOff = new THREE.Color(0.16, 0.1, 0.01);
+    const _initGrnOff = new THREE.Color(0.01, 0.15, 0.05);
+    const _initPedOff = new THREE.Color(0.06, 0.06, 0.06);
+    const _initDontWalk = new THREE.Color(2.5, 0.85, 0.05);
+    for (let i = 0; i < lensCount; i++) {
+      if (typeof redLensMesh.setColorAt === 'function') redLensMesh.setColorAt(i, _initRedOff);
+      if (typeof yellowLensMesh.setColorAt === 'function') yellowLensMesh.setColorAt(i, _initYelOff);
+      if (typeof greenLensMesh.setColorAt === 'function') greenLensMesh.setColorAt(i, _initGrnOff);
+      if (typeof pedWalkMesh.setColorAt === 'function') pedWalkMesh.setColorAt(i, _initPedOff);
+      if (typeof pedHandMesh.setColorAt === 'function') pedHandMesh.setColorAt(i, _initDontWalk);
+    }
     polesMesh.instanceMatrix.needsUpdate = true;
     redLensMesh.instanceMatrix.needsUpdate = true;
     yellowLensMesh.instanceMatrix.needsUpdate = true;
     greenLensMesh.instanceMatrix.needsUpdate = true;
     pedWalkMesh.instanceMatrix.needsUpdate = true;
     pedHandMesh.instanceMatrix.needsUpdate = true;
+    if (redLensMesh.instanceColor) redLensMesh.instanceColor.needsUpdate = true;
+    if (yellowLensMesh.instanceColor) yellowLensMesh.instanceColor.needsUpdate = true;
+    if (greenLensMesh.instanceColor) greenLensMesh.instanceColor.needsUpdate = true;
+    if (pedWalkMesh.instanceColor) pedWalkMesh.instanceColor.needsUpdate = true;
+    if (pedHandMesh.instanceColor) pedHandMesh.instanceColor.needsUpdate = true;
 
     scene.add(polesMesh);
     scene.add(redLensMesh);
@@ -960,7 +978,8 @@
       m.head = make('head', headMat);
       m.tail = make('tail', tailMat);
       m.decal = make('decal', decalMat, true);
-      m.sign = make('sign', signMat, true);
+      // Isolate police sign material because only police calls setColorAt (Three r128 caches USE_INSTANCING_COLOR per material)
+      m.sign = make('sign', kind === 'police' ? signMat.clone() : signMat, true);
     });
     const slotCounter = {};
     cars.forEach(c => {
@@ -972,12 +991,14 @@
       else c.paint = pickPaint();
       meshes[c.kind].paint.setColorAt(c.slot, c.paint);
       if (meshes[c.kind].tail) meshes[c.kind].tail.setColorAt(c.slot, new THREE.Color(0.55, 0.55, 0.55));
+      if (c.kind === 'police' && meshes[c.kind].sign) meshes[c.kind].sign.setColorAt(c.slot, new THREE.Color(1.35, 0.75, 0.90));
       if (c.kind === 'ttc_bus') c.lenScale = 1.0;
       else c.lenScale = 0.97 + rnd() * 0.06;
     });
     Object.values(meshes).forEach(m => {
       if (m.paint.instanceColor) m.paint.instanceColor.needsUpdate = true;
       if (m.tail && m.tail.instanceColor) m.tail.instanceColor.needsUpdate = true;
+      if (m.sign && m.sign.instanceColor) m.sign.instanceColor.needsUpdate = true;
     });
 
     // Headlight beams on the road, red tail glow, and a soft contact shadow

@@ -3737,6 +3737,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
 
     // Randomize Daytime or Nighttime at session start (or honor ?time=day|night)
     let timeOfDay = (Math.random() < 0.5) ? 'day' : 'night';
+    const budweiserBandMode = (Math.random() < 0.5) ? 'megadeth_anthrax' : 'offspring';
     try {
       const qTime = (typeof window !== 'undefined' && window.location && window.location.search)
         ? new URLSearchParams(window.location.search).get('time')
@@ -4086,34 +4087,67 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       return getIslandBridge(x, z, pad) !== null;
     }
 
+    // Sculpted Organic Shoreline Polygons for Ontario Place Archipelago (shared by collision, water, & 3D terrain)
+    const OP_WEST_POLY = [
+      [-2292, 650], [-2262, 616], [-2185, 608], [-2120, 612],
+      [-2065, 590], [-1985, 584], [-1912, 596], [-1882, 636],
+      [-1882, 684], [-1908, 722], [-1975, 738], [-2052, 736],
+      [-2076, 776], [-2115, 810], [-2195, 814], [-2272, 782],
+      [-2298, 720]
+    ];
+    const OP_CENTRAL_POLY = [
+      [-1836, 560], [-1812, 530], [-1745, 534], [-1672, 548],
+      [-1615, 590], [-1596, 655], [-1602, 725], [-1642, 778],
+      [-1705, 808], [-1775, 808], [-1822, 768], [-1836, 695],
+      [-1836, 635]
+    ];
+    const OP_EAST_POLY = [
+      [-1554, 615], [-1536, 578], [-1472, 574], [-1452, 585],
+      [-1492, 585], [-1492, 635], [-1452, 635], [-1452, 695],
+      [-1476, 748], [-1518, 762], [-1548, 732], [-1556, 668]
+    ];
+    const OP_TRILLIUM_POLY = [
+      [-1416, 548], [-1404, 522], [-1384, 524], [-1368, 558],
+      [-1366, 622], [-1376, 672], [-1396, 684], [-1416, 664],
+      [-1420, 606]
+    ];
+    const OP_ISLAND_POLYS = [OP_WEST_POLY, OP_CENTRAL_POLY, OP_EAST_POLY, OP_TRILLIUM_POLY];
+
+    function nearPolyEdge(x, z, poly, r) {
+      const r2 = r * r;
+      for (let i = 0, n = poly.length; i < n; i++) {
+        const a = poly[i], b = poly[(i + 1) % n];
+        const dx = b[0] - a[0], dz = b[1] - a[1], L2 = dx * dx + dz * dz || 1;
+        let t = ((x - a[0]) * dx + (z - a[1]) * dz) / L2;
+        if (t < 0) t = 0; else if (t > 1) t = 1;
+        const qx = a[0] + dx * t - x, qz = a[1] + dz * t - z;
+        if (qx * qx + qz * qz < r2) return true;
+      }
+      return false;
+    }
+
+    function inPolyPad(x, z, poly, pad) {
+      const inside = pointInPoly(x, z, poly);
+      if (!pad) return inside;
+      if (pad > 0) return inside || nearPolyEdge(x, z, poly, pad);
+      return inside && !nearPolyEdge(x, z, poly, -pad);
+    }
+
     function isOnOntarioPlaceGround(x, z, pad) {
+      if (x < -2320 || x > -1350 || z < 460 || z > 840) return false;
       const p = pad || 0;
-      // 1. West Entrance Bridge over Lake Ontario water (x = -2120, z: 472..624)
-      if (x >= -2125 - p && x <= -2115 + p && z >= 472 - p && z <= 624 + p) return true;
-      // 2. West Island: Cinesphere & West Commons Forest (x: -2300..-2075, z: 616..815)
-      if (x >= -2300 - p && x <= -2075 + p && z >= 616 - p && z <= 815 + p) return true;
-      // 3. West Island Woodlands Peninsula north of Pod Cove (x: -2076..-1880, z: 585..742)
-      if (x >= -2076 - p && x <= -1880 + p && z >= 585 - p && z <= 742 + p) return true;
-      // 4. West-Central Forest Channel Bridge (x: -1884..-1832, z: 648..664)
-      if (x >= -1884 - p && x <= -1832 + p && z >= 648 - p && z <= 664 + p) return true;
-      // 5. Central Mainland Bridge (Remembrance Dr / Ontario Place Blvd)
-      if (x >= -1820 - p && x <= -1804 + p && z >= 472 - p && z <= 536 + p) return true;
-      // 6. Central Island (Budweiser Stage, Woodlands & Echo Beach)
-      if (x >= -1836 - p && x <= -1595 + p && z >= 530 - p && z <= 815 + p) return true;
-      // 7. Central-East Forum Bridge
-      if (x >= -1599 - p && x <= -1552 + p && z >= 654 - p && z <= 668 + p) return true;
-      // 8. East Island Timber Marina Piers (allow walking out onto finger piers)
+      // Connecting Channel Bridges & Timber Marina Piers
+      if (x >= -2125 - p && x <= -2115 + p && z >= 472 - p && z <= 624 + p) return true; // West Entrance Bridge
+      if (x >= -1884 - p && x <= -1832 + p && z >= 648 - p && z <= 664 + p) return true; // West-Central Forest Bridge
+      if (x >= -1820 - p && x <= -1804 + p && z >= 472 - p && z <= 536 + p) return true; // Central Remembrance Bridge
+      if (x >= -1599 - p && x <= -1552 + p && z >= 654 - p && z <= 668 + p) return true; // Central-East Forum Bridge
+      if (x >= -1456 - p && x <= -1414 + p && z >= 590 - p && z <= 606 + p) return true; // East-Trillium Footbridge
+      if (x >= -1406 - p && x <= -1390 + p && z >= 484 - p && z <= 528 + p) return true; // Trillium Davis Trail Bridge
       if ((x >= -1495 - p && x <= -1488 + p && z >= 583 - p && z <= 637 + p) ||
-          (z >= 606 - p && z <= 612 + p && x >= -1495 - p && x <= -1456 + p)) return true;
-      // 9. East Island (Forum & Parkland, carved out around Marina Slip)
-      const inEastIsland = x >= -1556 - p && x <= -1452 + p && z >= 575 - p && z <= 765 + p;
-      const inMarinaSlip = x >= -1492 + p && x <= -1448 - p && z >= 585 + p && z <= 635 - p;
-      if (inEastIsland && !inMarinaSlip) return true;
-      // 10. East-Trillium Footbridge
-      if (x >= -1456 - p && x <= -1414 + p && z >= 590 - p && z <= 606 + p) return true;
-      // 11. Trillium Park Peninsula & William G. Davis Trail North Bridge
-      if (x >= -1420 - p && x <= -1366 + p && z >= 522 - p && z <= 682 + p) return true;
-      if (x >= -1406 - p && x <= -1390 + p && z >= 484 - p && z <= 528 + p) return true;
+          (z >= 606 - p && z <= 612 + p && x >= -1495 - p && x <= -1456 + p)) return true; // Marina Piers
+      for (let i = 0; i < OP_ISLAND_POLYS.length; i++) {
+        if (inPolyPad(x, z, OP_ISLAND_POLYS[i], p)) return true;
+      }
       return false;
     }
 
@@ -4695,6 +4729,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     const lakeGB = new GeoBuilder();
     const WATER_Y = -0.65;
     const X_MIN_EXT = Math.min(minX - 800, -2650), X_MAX_EXT = Math.max(maxX + 800, 1850), Z_MIN_EXT = Math.min(minZ - 800, -1450), Z_MAX_EXT = maxZ + 800;
+    const LAKE_X_MIN = Math.min(X_MIN_EXT - 1800, -4500), LAKE_X_MAX = Math.max(X_MAX_EXT + 2400, 4200);
 
     // up-facing quad for x0<x1, zN<zS (CCW from above)
     function groundQuad(gb, x0, x1, zN0, zN1, zS0, zS1, y, uvScale = 4) {
@@ -4702,6 +4737,9 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       const c = gb.vert(x1, y, zN1, 0, 1, 0, x1 / uvScale, zN1 / uvScale), d = gb.vert(x0, y, zN0, 0, 1, 0, x0 / uvScale, zN0 / uvScale);
       gb.quad(a, b, c, d);
     }
+    // Far west & east Lake Ontario apron quads so open water extends past Tommy Thompson & Humber Bay without edge seams
+    groundQuad(lakeGB, LAKE_X_MIN, X_MIN_EXT, getShorelineZ(LAKE_X_MIN) - 0.5, getShorelineZ(X_MIN_EXT) - 0.5, 3820, 3820, WATER_Y, 32);
+    groundQuad(lakeGB, X_MAX_EXT, LAKE_X_MAX, getShorelineZ(X_MAX_EXT) - 0.5, getShorelineZ(LAKE_X_MAX) - 0.5, 3820, 3820, WATER_Y, 32);
     const rawXCuts = [X_MIN_EXT, TRENCH_X0, TRENCH_X1, X_MAX_EXT];
     for (let x = X_MIN_EXT + 8; x < X_MAX_EXT; x += 8) rawXCuts.push(x);
     HARBOUR_SHORELINE.forEach(([sx]) => {
@@ -8030,10 +8068,18 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     // ---------- Rogers Centre Retractable Dome & Blue Jays Stadium Interior ----------
     let rogersCentreDome = null;
     {
-      let cx = LM.rogersCentre[0], cz = LM.rogersCentre[1], R = 105;
+      let cx = LM.rogersCentre[0], cz = LM.rogersCentre[1], R = 80;
       if (rogersPoly) {
         cx = rogersPoly.cx; cz = rogersPoly.cz;
-        R = rogersPoly.pts.reduce((s, p) => s + Math.hypot(p[0] - cx, p[1] - cz), 0) / rogersPoly.pts.length;
+        let sumR = 0, minR = Infinity;
+        for (let i = 0; i < rogersPoly.pts.length; i++) {
+          const d = Math.hypot(rogersPoly.pts[i][0] - cx, rogersPoly.pts[i][1] - cz);
+          sumR += d;
+          if (d < minR) minR = d;
+        }
+        const avgR = sumR / rogersPoly.pts.length;
+        // Clamp circular dome, seating, and turf to inscribed radius so nothing protrudes north over the rail corridor
+        R = Math.min(avgR, minR * 0.96);
       } else {
         const ring = [];
         for (let i = 0; i < 40; i++) ring.push([cx + Math.cos(-i / 40 * Math.PI * 2) * R, cz + Math.sin(-i / 40 * Math.PI * 2) * R]);
@@ -9125,8 +9171,9 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     warnLights.instanceMatrix.needsUpdate = true;
 
     // ---------- CN Tower Peace Sanctuary Zone (NO FIGHTING ZONE) ----------
-    const peaceCenter = [LM.cnTower[0], LM.cnTower[1]];
-    const PEACE_RADIUS = 55;
+    // Keep strictly within CN Tower Plaza (north edge >= 131m stays well south of GO rail tracks & clear of Rogers Centre)
+    const peaceCenter = [LM.cnTower[0] + 2, LM.cnTower[1]];
+    const PEACE_RADIUS = 28;
 
     // Glowing Sanctuary Floor Disc
     const peaceCanvas = document.createElement('canvas');
@@ -9166,7 +9213,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     peaceTex.anisotropy = 4;
     const peaceFloor = new THREE.Mesh(
       new THREE.CircleGeometry(PEACE_RADIUS, 48),
-      new THREE.MeshLambertMaterial({ map: peaceTex, transparent: true, opacity: 0.95 })
+      new THREE.MeshLambertMaterial({ map: peaceTex, transparent: true, opacity: 0.72, depthWrite: false })
     );
     peaceFloor.rotation.x = -Math.PI / 2;
     peaceFloor.position.set(peaceCenter[0], 0.08, peaceCenter[1]);
@@ -9177,7 +9224,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     const barrierMat = new THREE.MeshBasicMaterial({
       color: 0x10b981,
       transparent: true,
-      opacity: 0.28,
+      opacity: 0.16,
+      depthWrite: false,
       side: THREE.DoubleSide
     });
     const barrierMesh = new THREE.Mesh(barrierGeo, barrierMat);
@@ -9307,6 +9355,50 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       const n = g.attributes.normal;
       for (let i = 0; i < n.count; i++) if (n.getY(i) < 0) n.setXYZ(i, -n.getX(i), -n.getY(i), -n.getZ(i));
       return g;
+    }
+    function addSculptedIsland(parent, pts, yTop, yBot, topMat, wallMat, edgeInset = 0.992) {
+      let area2 = 0;
+      for (let i = 0; i < pts.length; i++) {
+        const a = pts[i], b = pts[(i + 1) % pts.length];
+        area2 += a[0] * b[1] - b[0] * a[1];
+      }
+      const ordered = area2 > 0 ? pts.slice().reverse() : pts;
+      const wallGB = new GeoBuilder();
+      for (let i = 0; i < ordered.length; i++) {
+        const a = ordered[i], b = ordered[(i + 1) % ordered.length];
+        const ex = b[0] - a[0], ez = b[1] - a[1], len = Math.hypot(ex, ez) || 1;
+        const nx = -ez / len, nz = ex / len;
+        const v0 = wallGB.vert(a[0], yBot, a[1], nx, 0, nz, 0, 0);
+        const v1 = wallGB.vert(b[0], yBot, b[1], nx, 0, nz, len / 8, 0);
+        const v2 = wallGB.vert(b[0], yTop - 0.01, b[1], nx, 0, nz, len / 8, 1);
+        const v3 = wallGB.vert(a[0], yTop - 0.01, a[1], nx, 0, nz, 0, 1);
+        wallGB.quad(v0, v1, v2, v3);
+      }
+      parent.add(new THREE.Mesh(wallGB.build(), wallMat));
+      if (edgeInset && edgeInset < 1) {
+        const [cx, cz] = centroid(ordered);
+        const inner = ordered.map(([x, z]) => [cx + (x - cx) * edgeInset, cz + (z - cz) * edgeInset]);
+        const rimGB = new GeoBuilder();
+        for (let i = 0; i < ordered.length; i++) {
+          const j = (i + 1) % ordered.length;
+          const a = ordered[i], b = ordered[j], c = inner[j], d = inner[i];
+          const v0 = rimGB.vert(a[0], yTop - 0.03, a[1], 0, 1, 0, 0, 0);
+          const v1 = rimGB.vert(b[0], yTop - 0.03, b[1], 0, 1, 0, 1, 0);
+          const v2 = rimGB.vert(c[0], yTop, c[1], 0, 1, 0, 1, 1);
+          const v3 = rimGB.vert(d[0], yTop, d[1], 0, 1, 0, 0, 1);
+          rimGB.quad(v0, v1, v2, v3);
+        }
+        const rimMesh = new THREE.Mesh(rimGB.build(), wallMat);
+        rimMesh.receiveShadow = true;
+        parent.add(rimMesh);
+        const turfTop = new THREE.Mesh(capGeo(inner, () => yTop), topMat);
+        turfTop.receiveShadow = true;
+        parent.add(turfTop);
+      } else {
+        const topMesh = new THREE.Mesh(capGeo(ordered, () => yTop), topMat);
+        topMesh.receiveShadow = true;
+        parent.add(topMesh);
+      }
     }
     function scaledPoly(pts, k) {
       const [cx, cz] = centroid(pts);
@@ -15241,6 +15333,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         //     Pod Cove, Central Island / North-to-South Budweiser Stage w/ The Offspring,
         //     Echo Beach, East Island / Forum & Marina, Trillium Park & Bridges)
         // =========================================================================
+        const opMeadowMat = new THREE.MeshStandardMaterial({ color: 0x2f5a38, roughness: 0.92, metalness: 0.02 });
         const opArch = new THREE.Group();
         const opTimberMat = new THREE.MeshStandardMaterial({ color: 0x8b6239, roughness: 0.85, metalness: 0.05 });
         const opSandMat = new THREE.MeshStandardMaterial({ color: 0xe6d2a2, roughness: 0.94, metalness: 0.0 });
@@ -15250,36 +15343,37 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         const opPathMat = new THREE.MeshStandardMaterial({ color: 0xc8bfa8, roughness: 0.92, metalness: 0.02 });
 
         // Custom High-Resolution LED Tour Backdrop for Budweiser Stage:
-        // "THE OFFSPRING — SUPERCHARGED WORLDWIDE TOUR" (Facing SOUTH toward audience!)
+        // 50% "THE OFFSPRING — SUPERCHARGED WORLDWIDE TOUR" / 50% "MEGADETH & ANTHRAX — SUMMER TOUR" (Facing SOUTH toward audience!)
         const offspringCanvas = document.createElement('canvas');
         offspringCanvas.width = 1024;
         offspringCanvas.height = 512;
         const octx = offspringCanvas.getContext('2d');
         if (octx && octx.fillRect) {
+          const isMetalBill = (budweiserBandMode === 'megadeth_anthrax');
           // Electric dark sky concert gradient
           const grad = octx.createLinearGradient ? octx.createLinearGradient(0, 0, 0, 512) : null;
           if (grad) {
-            grad.addColorStop(0, '#09051a');
-            grad.addColorStop(0.52, '#2d0a1e');
+            grad.addColorStop(0, isMetalBill ? '#09090b' : '#09051a');
+            grad.addColorStop(0.52, isMetalBill ? '#3b0712' : '#2d0a1e');
             grad.addColorStop(1, '#090915');
             octx.fillStyle = grad;
           } else {
-            octx.fillStyle = '#120820';
+            octx.fillStyle = isMetalBill ? '#18080c' : '#120820';
           }
           octx.fillRect(0, 0, 1024, 512);
 
-          // Radiant high-voltage orange-red Supercharged sunburst center glow
+          // Radiant concert spotlight center glow
           const rgrad = octx.createRadialGradient ? octx.createRadialGradient(512, 235, 25, 512, 235, 360) : null;
           if (rgrad) {
-            rgrad.addColorStop(0, 'rgba(255, 115, 20, 0.90)');
-            rgrad.addColorStop(0.38, 'rgba(220, 38, 38, 0.55)');
-            rgrad.addColorStop(0.75, 'rgba(56, 189, 248, 0.22)');
+            rgrad.addColorStop(0, isMetalBill ? 'rgba(239, 68, 68, 0.85)' : 'rgba(255, 115, 20, 0.90)');
+            rgrad.addColorStop(0.38, isMetalBill ? 'rgba(180, 83, 9, 0.50)' : 'rgba(220, 38, 38, 0.55)');
+            rgrad.addColorStop(0.75, isMetalBill ? 'rgba(250, 204, 21, 0.18)' : 'rgba(56, 189, 248, 0.22)');
             rgrad.addColorStop(1, 'rgba(9, 5, 26, 0)');
             octx.fillStyle = rgrad;
             octx.fillRect(0, 0, 1024, 512);
           }
 
-          // Electric cyan & gold lightning bolts framing the stage screen
+          // Electric lightning bolts / thrash streaks framing the stage screen
           const drawBolt = (pts, color, lw) => {
             octx.strokeStyle = color;
             octx.lineWidth = lw;
@@ -15287,42 +15381,72 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
             pts.forEach(([lx, ly], idx) => idx === 0 ? octx.moveTo(lx, ly) : octx.lineTo(lx, ly));
             octx.stroke();
           };
-          drawBolt([[90, 20], [175, 145], [135, 165], [220, 320], [160, 480]], '#38bdf8', 7);
-          drawBolt([[934, 20], [849, 145], [889, 165], [804, 320], [864, 480]], '#38bdf8', 7);
-          drawBolt([[240, 10], [290, 110], [265, 125], [320, 220]], '#facc15', 5);
-          drawBolt([[784, 10], [734, 110], [759, 125], [704, 220]], '#facc15', 5);
+          const boltPrimary = isMetalBill ? '#ef4444' : '#38bdf8';
+          const boltAccent = '#facc15';
+          drawBolt([[90, 20], [175, 145], [135, 165], [220, 320], [160, 480]], boltPrimary, 7);
+          drawBolt([[934, 20], [849, 145], [889, 165], [804, 320], [864, 480]], boltPrimary, 7);
+          drawBolt([[240, 10], [290, 110], [265, 125], [320, 220]], boltAccent, 5);
+          drawBolt([[784, 10], [734, 110], [759, 125], [704, 220]], boltAccent, 5);
 
           // Venue kicker
           octx.textAlign = 'center';
-          octx.fillStyle = '#bae6fd';
+          octx.fillStyle = isMetalBill ? '#fde68a' : '#bae6fd';
           octx.font = 'bold 26px sans-serif';
           octx.fillText('LIVE AT BUDWEISER STAGE • TORONTO', 512, 74);
 
-          // Giant "THE OFFSPRING" tour headline with heavy rock outline
-          octx.font = '900 104px Impact, Arial Black, sans-serif';
-          octx.lineWidth = 12;
-          octx.strokeStyle = '#090514';
-          octx.strokeText('THE OFFSPRING', 512, 232);
-          octx.fillStyle = '#facc15';
-          octx.fillText('THE OFFSPRING', 512, 228);
-          octx.lineWidth = 3;
-          octx.strokeStyle = '#ef4444';
-          octx.strokeText('THE OFFSPRING', 512, 228);
+          if (isMetalBill) {
+            // Giant "MEGADETH" headline in blazing silver-gold chrome with heavy outline
+            octx.font = '900 108px Impact, Arial Black, sans-serif';
+            octx.lineWidth = 12;
+            octx.strokeStyle = '#090514';
+            octx.strokeText('MEGADETH', 512, 208);
+            octx.fillStyle = '#f8fafc';
+            octx.fillText('MEGADETH', 512, 204);
+            octx.lineWidth = 3;
+            octx.strokeStyle = '#ef4444';
+            octx.strokeText('MEGADETH', 512, 204);
 
-          // Bold Supercharged banner bar
-          octx.fillStyle = '#0ea5e9';
-          octx.fillRect(156, 276, 712, 78);
-          octx.strokeStyle = '#fef08a';
-          octx.lineWidth = 4;
-          octx.strokeRect(156, 276, 712, 78);
-          octx.fillStyle = '#ffffff';
-          octx.font = '900 44px Impact, Arial Black, sans-serif';
-          octx.fillText('SUPERCHARGED TOUR', 512, 332);
+            // Bold "WITH ANTHRAX" crimson-and-gold banner bar
+            octx.fillStyle = '#991b1b';
+            octx.fillRect(146, 250, 732, 92);
+            octx.strokeStyle = '#facc15';
+            octx.lineWidth = 5;
+            octx.strokeRect(146, 250, 732, 92);
+            octx.fillStyle = '#facc15';
+            octx.font = '900 66px Impact, Arial Black, sans-serif';
+            octx.fillText('& ANTHRAX', 512, 319);
 
-          // Bottom voltage bars & pyro accent strip
-          octx.fillStyle = '#fb923c';
-          octx.font = 'bold 28px sans-serif';
-          octx.fillText('WORLDWIDE TOUR • ONTARIO PLACE', 512, 422);
+            // Summer tour kicker
+            octx.fillStyle = '#fca5a5';
+            octx.font = 'bold 28px sans-serif';
+            octx.fillText('SUMMER THRASH TOUR • ONTARIO PLACE', 512, 422);
+          } else {
+            // Giant "THE OFFSPRING" tour headline with heavy rock outline
+            octx.font = '900 104px Impact, Arial Black, sans-serif';
+            octx.lineWidth = 12;
+            octx.strokeStyle = '#090514';
+            octx.strokeText('THE OFFSPRING', 512, 232);
+            octx.fillStyle = '#facc15';
+            octx.fillText('THE OFFSPRING', 512, 228);
+            octx.lineWidth = 3;
+            octx.strokeStyle = '#ef4444';
+            octx.strokeText('THE OFFSPRING', 512, 228);
+
+            // Bold Supercharged banner bar
+            octx.fillStyle = '#0ea5e9';
+            octx.fillRect(156, 276, 712, 78);
+            octx.strokeStyle = '#fef08a';
+            octx.lineWidth = 4;
+            octx.strokeRect(156, 276, 712, 78);
+            octx.fillStyle = '#ffffff';
+            octx.font = '900 44px Impact, Arial Black, sans-serif';
+            octx.fillText('SUPERCHARGED TOUR', 512, 332);
+
+            // Bottom voltage bars & pyro accent strip
+            octx.fillStyle = '#fb923c';
+            octx.font = 'bold 28px sans-serif';
+            octx.fillText('WORLDWIDE TOUR • ONTARIO PLACE', 512, 422);
+          }
         }
         const offspringTex = new THREE.CanvasTexture(offspringCanvas);
         const opOffspringScreenMat = new THREE.MeshStandardMaterial({
@@ -15344,12 +15468,9 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           return m;
         };
 
-        // Helper for marine island concrete deck (surface y = 0.15m down to lake floor -1.2m)
-        const addIslandSlab = (x0, x1, z0, z1, topMat) => {
-          const cx = (x0 + x1) * 0.5, cz = (z0 + z1) * 0.5;
-          const w = x1 - x0, d = z1 - z0;
-          addBoxTo(opArch, cx, -0.58, cz, w, 1.35, d, opSeawallMat);
-          addBoxTo(opArch, cx, 0.125, cz, Math.max(2, w - 1.4), 0.06, Math.max(2, d - 1.4), topMat || plazaGraniteMat);
+        // Sculpted curved coastal parkland islands (replaces blocky boxes in the harbour!)
+        const addIslandPoly = (pts, topMat, inset) => {
+          addSculptedIsland(opArch, pts, 0.145, -1.25, topMat || opMeadowMat, opSeawallMat, inset === undefined ? 0.985 : inset);
         };
 
         // Helper for pedestrian bridges spanning Lake Ontario water channels
@@ -15375,9 +15496,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           }
         };
 
-        // (a) West Island Sculpted Landmasses (West Commons + Woodlands Peninsula; Pod Cove stays open water!)
-        addIslandSlab(-2300, -2075, 616, 815, gardenMat);
-        addIslandSlab(-2076, -1880, 585, 742, gardenMat);
+        // (a) West Island Sculpted Curved Landmasses (West Commons + Woodlands Peninsula; Pod Cove stays open water!)
+        addIslandPoly(OP_WEST_POLY, opMeadowMat);
         // Scenic Woodland Walkways & Trails across Ontario Place Forest (1 GeoBuilder mesh = 1 draw call!)
         const ontarioTrails = [
           // Main winding Forest Trail: Cinesphere -> Birch/Pine Woods -> Forest Channel Bridge -> Budweiser Stage Plaza
@@ -15411,13 +15531,18 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         // West-Central Forest Channel Bridge (x: -1884..-1832, z: 648..664)
         addChannelBridge(-1884, -1832, 648, 664, true, true);
 
-        // (b) Central Island (x: -1836..-1595, z: 530..815): Central Bridge, Budweiser Stage (Stage N -> Lawn S!) & Echo Beach
+        // (b) Central Island: Curved Shoreline, Budweiser Stage (Stage N -> Lawn S!) & Crescent Echo Beach
         addChannelBridge(-1820, -1804, 476, 536, false, false);
-        addIslandSlab(-1836, -1595, 530, 815, gardenMat);
+        addIslandPoly(OP_CENTRAL_POLY, opMeadowMat);
         // Paved concert amphitheatre plaza & concourse (-1792..-1698, z: 604..698)
         addBoxTo(opArch, -1745, 0.16, 652, 94, 0.04, 96, plazaGraniteMat);
-        // Echo Beach golden sand shoreline & cabana (eastern shore of Central Island, x: -1655..-1598)
-        addBoxTo(opArch, -1626, 0.17, 707, 56, 0.05, 114, opSandMat);
+        // Echo Beach golden crescent sand shoreline & cabana (eastern shore of Central Island)
+        const echoBeachPts = [
+          [-1648, 656], [-1612, 650], [-1599, 680], [-1603, 725], [-1632, 764], [-1652, 756], [-1644, 706]
+        ];
+        const echoBeachMesh = new THREE.Mesh(capGeo(echoBeachPts, () => 0.175), opSandMat);
+        echoBeachMesh.receiveShadow = true;
+        opArch.add(echoBeachMesh);
         addBoxTo(opArch, -1628, 2.8, 658, 16, 4.4, 9, opTimberMat);
         addBoxTo(opArch, -1628, 5.2, 658, 18, 0.45, 11, opCanopyMat);
 
@@ -15430,6 +15555,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         // Towering LED Backdrop displaying "THE OFFSPRING — SUPERCHARGED WORLDWIDE TOUR" (facing +Z SOUTH, rotation.y = 0!)
         const offspringScreen = new THREE.Mesh(new THREE.PlaneGeometry(34, 10.6), opOffspringScreenMat);
         offspringScreen.name = 'budweiserStageOffspringBackdrop';
+        offspringScreen.userData.budweiserConcert = budweiserBandMode;
         offspringScreen.position.set(-1745, 7.6, 606.8);
         offspringScreen.rotation.y = 0;
         opArch.add(offspringScreen);
@@ -15463,10 +15589,16 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           addBoxTo(opArch, px, 8.8, 674, 4.2, 17.5, 4.2, whiteSteelMat);
           addBoxTo(opArch, px, 17.5, 648, 2.4, 2.2, 54, whiteSteelMat);
         }
-        // 3. Terraced Grassy 400-Level Amphitheatre Lawn (SOUTH side, z: 696..748, facing NORTH at Stage!)
+        // 3. Gently Sloped Curved Grassy 400-Level Amphitheatre Lawn (SOUTH side, z: 696..748, facing NORTH at Stage!)
         for (let t = 0; t < 4; t++) {
-          const bH = 0.48 + t * 0.44;
-          addBoxTo(opArch, -1745, 0.15 + bH * 0.5, 704 + t * 11.5, 78 - t * 6, bH, 9.2, gardenMat);
+          const bH = 0.44 + t * 0.42;
+          const tz = 704 + t * 11.5;
+          const hw = 39 - t * 3.5;
+          const bermPts = [
+            [-1745 - hw, tz - 4.2], [-1745 - hw + 5, tz - 4.8], [-1745 + hw - 5, tz - 4.8], [-1745 + hw, tz - 4.2],
+            [-1745 + hw, tz + 4.2], [-1745 + hw - 5, tz + 4.8], [-1745 - hw + 5, tz + 4.8], [-1745 - hw, tz + 4.2]
+          ];
+          addSculptedIsland(opArch, bermPts, 0.15 + bH, 0.14, opMeadowMat, opMeadowMat, 0);
         }
         addSolid({ type: 'poly', pts: [[-1768, 584], [-1722, 584], [-1722, 606], [-1768, 606]], h: 16, name: 'Budweiser Stage House' });
         addSolid({ type: 'poly', pts: [[-1788, 618], [-1780, 618], [-1780, 626], [-1788, 626]], h: 18, name: 'Budweiser Stage NW Pylon' });
@@ -15474,11 +15606,10 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         addSolid({ type: 'poly', pts: [[-1788, 670], [-1780, 670], [-1780, 678], [-1788, 678]], h: 18, name: 'Budweiser Stage SW Pylon' });
         addSolid({ type: 'poly', pts: [[-1710, 670], [-1702, 670], [-1702, 678], [-1710, 678]], h: 18, name: 'Budweiser Stage SE Pylon' });
 
-        // (c) Central-East Forum Bridge & East Island (Forum -1505, 665 + Carved Marina Basin + Boats)
+        // (c) Central-East Forum Bridge & Curved East Island (Forum -1505, 665 + Carved Marina Basin + Boats)
         addChannelBridge(-1599, -1552, 654, 668, true, true);
-        addIslandSlab(-1556, -1492, 575, 765, gardenMat);
-        addIslandSlab(-1492, -1452, 575, 585, plazaGraniteMat);
-        addIslandSlab(-1492, -1452, 635, 765, gardenMat);
+        addIslandPoly(OP_EAST_POLY, opMeadowMat, 0);
+        addBoxTo(opArch, -1472, 0.155, 580, 38, 0.03, 9, plazaGraniteMat);
         // Forum Sunken Paved Plaza (-1505, 665) & 12-Spoke Translucent Rotunda Ring
         const forumPlaza = new THREE.Mesh(new THREE.CylinderGeometry(28, 28, 0.08, 24), plazaGraniteMat);
         forumPlaza.position.set(-1505, 0.16, 665);
@@ -15523,10 +15654,10 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           scene.userData.westMarinaBoats.push({ mesh: bg, baseY: WATER_Y + 0.06, phase: idx * 1.4, amp: 0.08 });
         });
 
-        // (d) East-Trillium Footbridge & Trillium Park / William G. Davis Trail (-1420..-1366, z: 522..682)
+        // (d) East-Trillium Footbridge & Curved Trillium Park Headland Peninsula
         addChannelBridge(-1456, -1414, 590, 606, true, true);
         addChannelBridge(-1406, -1390, 484, 528, false, true);
-        addIslandSlab(-1420, -1366, 522, 682, gardenMat);
+        addIslandPoly(OP_TRILLIUM_POLY, opMeadowMat);
         // William G. Davis Trail cedar boardwalk spine & waterfront lookout terrace
         addBoxTo(opArch, -1398, 0.17, 560, 8.0, 0.06, 130, opTimberMat);
         addBoxTo(opArch, -1394, 0.18, 590, 24, 0.06, 22, plazaGraniteMat);
@@ -15729,6 +15860,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           return false;
         };
         const canPlantOntarioTree = (x, z) => {
+          if (!isOnOntarioPlaceGround(x, z, -5.0)) return false; // keep all trees cleanly on curved island turf
           if (Math.hypot(x + 2120, z - 720) < 38) return false; // Cinesphere boardwalk & dome
           if (Math.hypot(x + 2120, z - 635) < 16) return false; // West bridge plaza
           if (x >= -1798 && x <= -1692 && z >= 578 && z <= 758) return false; // Budweiser Stage, bowl & grassy lawn
@@ -18194,16 +18326,16 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         ipSign.rotation.y = Math.PI;
         westParkGrp.add(ipSign);
 
-        // 4. CORONATION PARK (West Lawn -1520..-1424, z=418..470 & East Royal Oak Lawn -1356..-1272, z=462..556)
+        // 4. CORONATION PARK (chamfered lawns free of boxy corners)
         const corWestTurf = new THREE.Mesh(
-          capGeo([[-1520, 418], [-1424, 418], [-1424, 470], [-1520, 470]], () => 0.03),
+          capGeo([[-1512, 418], [-1432, 418], [-1424, 426], [-1424, 462], [-1432, 470], [-1512, 470], [-1520, 462], [-1520, 426]], () => 0.03),
           turfMat
         );
         corWestTurf.receiveShadow = true;
         westParkGrp.add(corWestTurf);
 
         const corEastTurf = new THREE.Mesh(
-          capGeo([[-1356, 464], [-1272, 464], [-1272, 554], [-1356, 554]], () => 0.03),
+          capGeo([[-1348, 464], [-1280, 464], [-1272, 472], [-1272, 546], [-1280, 554], [-1348, 554], [-1356, 546], [-1356, 472]], () => 0.03),
           turfMat
         );
         corEastTurf.receiveShadow = true;
@@ -20868,7 +21000,9 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       {
         id: 'budweiserStage',
         name: 'Ontario Place Budweiser Stage',
-        desc: 'Lakeside amphitheatre facing north (The Offspring Supercharged Tour), grassy lawn & Echo Beach',
+        desc: budweiserBandMode === 'megadeth_anthrax'
+          ? 'Lakeside amphitheatre facing north (Megadeth & Anthrax Summer Tour), grassy lawn & Echo Beach'
+          : 'Lakeside amphitheatre facing north (The Offspring Supercharged Tour), grassy lawn & Echo Beach',
         pos: { x: -1745.0, y: 1.7, z: 695.0 },
         yaw: 0.0
       },
@@ -21112,11 +21246,15 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         greaterTorontoGroup.add(dist);
 
         // Port Lands / Villiers Island (ookwemin minising) Iconic Red-and-White Cherry Street Tied-Arch Bridges (1680, 580)
+        const eastShoreWallMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.88, metalness: 0.08 });
+        const eastMeadowMat = new THREE.MeshLambertMaterial({ color: 0x2f5336 });
         const pl = new THREE.Group();
         pl.position.set(1680, 0, 580);
-        const plIsland = new THREE.Mesh(new THREE.BoxGeometry(620, 1.2, 440), parkGrassMat);
-        plIsland.position.set(120, 0, 120);
-        pl.add(plIsland);
+        addSculptedIsland(pl, [
+          [-185, 25], [-120, -90], [20, -105], [220, -88], [390, -45],
+          [428, 70], [415, 220], [320, 325], [140, 345], [-60, 320],
+          [-165, 240], [-192, 120]
+        ], 0.55, -0.9, eastMeadowMat, eastShoreWallMat, 0.96);
         [-28, 28].forEach((bx, bi) => {
           const bridgeDeck = new THREE.Mesh(new THREE.BoxGeometry(16, 2.2, 110), whiteSteelMat);
           bridgeDeck.position.set(bx, 8, 0);
@@ -21133,10 +21271,11 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         // Tommy Thompson Park (Leslie Street Spit) Peninsula & Outer Harbour Lighthouse (2650, 1650)
         const spit = new THREE.Group();
         spit.position.set(2650, 0, 1650);
-        const spitLand = new THREE.Mesh(new THREE.BoxGeometry(160, 1.2, 1100), parkGrassMat);
-        spitLand.rotation.y = -0.35;
-        spitLand.position.set(0, 0, -350);
-        spit.add(spitLand);
+        addSculptedIsland(spit, [
+          [-260, -860], [-155, -895], [-105, -720], [-25, -480], [45, -240],
+          [115, -20], [165, 165], [135, 220], [65, 200], [-25, 15],
+          [-110, -220], [-190, -490], [-255, -730]
+        ], 0.6, -0.9, eastMeadowMat, eastShoreWallMat, 0.88);
         const lhTower = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 3.6, 22, 12), whiteSteelMat);
         lhTower.position.set(120, 11, 180);
         spit.add(lhTower);
@@ -22883,6 +23022,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       isOnIslandBridge,
       getIslandBridge,
       waterY: WATER_Y,
+      budweiserConcert: budweiserBandMode,
       islandFerry: {
         ferryMesh: cruisingFerry,
         airportFerryMesh: airportFerryMesh,
@@ -23459,21 +23599,26 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     }
 
     // ------------------------------------------------------------------------
-    // Water surface plane
+    // Water surface plane (only added standalone; when city.js is active, city's
+    // seamless harbour & lake mesh covers both mainland and islands uniformly)
     // ------------------------------------------------------------------------
-    const waterMat = new THREE.MeshStandardMaterial({
-      color: 0x1f6f8b,
-      roughness: 0.12,
-      metalness: 0.35,
-      opacity: 0.85,
+    const hasCityLake = (typeof window !== 'undefined' && typeof window.buildTorontoCity === 'function');
+    const waterMat = hasCityLake ? null : new THREE.MeshStandardMaterial({
+      color: 0x0e3a5c,
+      roughness: 0.16,
+      metalness: 0.72,
+      envMapIntensity: 1.15,
+      opacity: 0.92,
       transparent: true,
       depthWrite: false
     });
-    const water = new THREE.Mesh(new THREE.PlaneGeometry(3000, 950, 1, 1), waterMat);
-    water.rotation.x = -Math.PI / 2;
-    water.position.set(-120, WATER_Y + 0.01, Z(120));
-    water.renderOrder = 1;
-    islandsGroup.add(water);
+    if (waterMat) {
+      const water = new THREE.Mesh(new THREE.PlaneGeometry(3000, 950, 1, 1), waterMat);
+      water.rotation.x = -Math.PI / 2;
+      water.position.set(-120, WATER_Y + 0.01, Z(120));
+      water.renderOrder = 1;
+      islandsGroup.add(water);
+    }
 
     // ------------------------------------------------------------------------
     // Terrain (land + shallows) 5m grid
@@ -26295,7 +26440,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       const radomeMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.35, side: THREE.DoubleSide });
       const cockpitGlassMat = new THREE.MeshStandardMaterial({
         color: 0x38bdf8, roughness: 0.08, metalness: 0.25,
-        transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide
+        transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide
       });
       const cabinWinGlassMat = new THREE.MeshBasicMaterial({
         color: 0xbae6fd, transparent: true, opacity: 0.14, depthWrite: false, side: THREE.DoubleSide, fog: false
@@ -26394,16 +26539,16 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         addInstMesh(pl, unitBoxGeo, porterWhiteMat, winPillars);
         addInstMesh(pl, unitBoxGeo, isHero ? cabinWinGlassMat : cabinWinMat, winPanes);
 
-        // Aerodynamic Lower Nose & Weather Radar Radome (-Z forward, below cockpit eye line)
-        const lowerNose = new THREE.Mesh(new THREE.CylinderGeometry(0.62, fuseR * 0.92, 3.8, 20, 1, false), porterWhiteMat);
-        lowerNose.rotation.x = -Math.PI / 2;
-        lowerNose.scale.set(1.0, 0.58, 1.0);
-        lowerNose.position.set(0, -0.42, -fuseLen / 2 - 1.9);
+        // Aerodynamic Sloped Lower Nose & Weather Radar Radome (-Z forward, tucked strictly below cockpit glareshield)
+        const lowerNose = new THREE.Mesh(new THREE.CylinderGeometry(0.58, fuseR * 0.88, 3.6, 20, 1, false), porterWhiteMat);
+        lowerNose.rotation.x = -Math.PI / 2 - 0.12;
+        lowerNose.scale.set(0.95, 1.0, 0.34);
+        lowerNose.position.set(0, -0.56, -fuseLen / 2 - 1.55);
         airframe.add(lowerNose);
 
-        const radome = new THREE.Mesh(new THREE.SphereGeometry(0.64, 16, 12), radomeMat);
-        radome.scale.set(0.96, 0.68, 1.50);
-        radome.position.set(0, -0.45, -fuseLen / 2 - 3.85);
+        const radome = new THREE.Mesh(new THREE.SphereGeometry(0.62, 16, 12), radomeMat);
+        radome.scale.set(0.92, 0.42, 1.45);
+        radome.position.set(0, -0.52, -fuseLen / 2 - 3.65);
         airframe.add(radome);
 
         // Flight Deck Cockpit Canopy Roof, Pillars & Transparent Wraparound Windshields
@@ -26713,12 +26858,12 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       }
 
       // 1. Active Runway 08 Takeoff Aircraft (hero Q400 with full interior cabin & cockpit!)
-      flightPlane = buildPorterDash8Q400(-1360, Z(-170), -Math.PI / 2, { spinSpeed: 22.0, headlight: true, noOb: true, isHero: true });
+      flightPlane = buildPorterDash8Q400(-1360, Z(-170), -Math.PI / 2, { spinSpeed: 24.0, headlight: true, noOb: true, isHero: true });
       // 2. Runway 26 Holding / Taxiing Q400 at East Taxiway
-      buildPorterDash8Q400(-1160, Z(-206), Math.PI / 2, { spinSpeed: 12.0, headlight: true });
-      // 3 & 4. Two Gate-Parked Porter Q400 Turboprops at Terminal Gates 1 & 2
-      buildPorterDash8Q400(ax - 34, az + 50, 0.12, { spinSpeed: 2.8, headlight: false });
-      buildPorterDash8Q400(ax + 34, az + 50, -0.12, { spinSpeed: 0.0, headlight: false });
+      buildPorterDash8Q400(-1160, Z(-206), Math.PI / 2, { spinSpeed: 14.0, headlight: true });
+      // 3 & 4. Two Gate-Parked Porter Q400 Turboprops at Terminal Gates 1 & 2 (idling props ready for departure)
+      buildPorterDash8Q400(ax - 34, az + 50, 0.12, { spinSpeed: 6.5, headlight: false });
+      buildPorterDash8Q400(ax + 34, az + 50, -0.12, { spinSpeed: 4.2, headlight: false });
 
       mergeGroupByMaterial(apg);
       islandsGroup.add(apg);
@@ -28475,7 +28620,16 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         for (let i = 0; i < towerBeacons.length; i++) towerBeacons[i].visible = flash > 0.5;
       }
 
-      // Skip all off-island kinetic updates when player is underground or far north downtown
+      // Keep all Porter Q400 propellers spinning smoothly whenever above ground
+      // (including in-flight over downtown north of z=450 and from waterfront viewpoints!)
+      if (aboveGround) {
+        for (let i = 0; i < q400Propellers.length; i++) {
+          const p = q400Propellers[i];
+          if (p.hub && p.speed) p.hub.rotation.z += dt * p.speed;
+        }
+      }
+
+      // Skip remaining off-island kinetic updates when player is underground or far north downtown
       if (hasPlayer && (playerPos.y < -4.0 || playerPos.z < 450)) return;
 
       const flyingHigh = hasPlayer && playerPos.y > 20;
@@ -28537,10 +28691,6 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       if (nearAirport) {
         if (radarDish) radarDish.rotation.y += dt * 3.2;
         if (windsockCone) windsockCone.rotation.y = Math.sin(tTime * 1.8) * 0.25;
-        for (let i = 0; i < q400Propellers.length; i++) {
-          const p = q400Propellers[i];
-          if (p.hub && p.speed) p.hub.rotation.z += dt * p.speed;
-        }
       }
 
       if (nearWild) {
@@ -28732,9 +28882,10 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
 
     function setTimeOfDay(isDay) {
       if (waterMat && waterMat.color) {
-        if (typeof waterMat.color.setHex === 'function') waterMat.color.setHex(isDay ? 0x268bbd : 0x145374);
-        waterMat.roughness = isDay ? 0.14 : 0.12;
-        waterMat.envMapIntensity = isDay ? 1.15 : 0.85;
+        if (typeof waterMat.color.setHex === 'function') waterMat.color.setHex(isDay ? 0x165e85 : 0x0e3a5c);
+        waterMat.roughness = isDay ? 0.22 : 0.16;
+        waterMat.metalness = isDay ? 0.45 : 0.72;
+        waterMat.envMapIntensity = isDay ? 0.85 : 1.15;
       }
       if (lampGlowMat && lampGlowMat.color && typeof lampGlowMat.color.setHex === 'function') {
         lampGlowMat.color.setHex(isDay ? 0xdbeafe : 0xffd58a);
@@ -29652,12 +29803,30 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       }
     });
 
+    const lensCount = Math.max(1, signals.length);
+    const _initRedOff = new THREE.Color(0.18, 0.02, 0.02);
+    const _initYelOff = new THREE.Color(0.16, 0.1, 0.01);
+    const _initGrnOff = new THREE.Color(0.01, 0.15, 0.05);
+    const _initPedOff = new THREE.Color(0.06, 0.06, 0.06);
+    const _initDontWalk = new THREE.Color(2.5, 0.85, 0.05);
+    for (let i = 0; i < lensCount; i++) {
+      if (typeof redLensMesh.setColorAt === 'function') redLensMesh.setColorAt(i, _initRedOff);
+      if (typeof yellowLensMesh.setColorAt === 'function') yellowLensMesh.setColorAt(i, _initYelOff);
+      if (typeof greenLensMesh.setColorAt === 'function') greenLensMesh.setColorAt(i, _initGrnOff);
+      if (typeof pedWalkMesh.setColorAt === 'function') pedWalkMesh.setColorAt(i, _initPedOff);
+      if (typeof pedHandMesh.setColorAt === 'function') pedHandMesh.setColorAt(i, _initDontWalk);
+    }
     polesMesh.instanceMatrix.needsUpdate = true;
     redLensMesh.instanceMatrix.needsUpdate = true;
     yellowLensMesh.instanceMatrix.needsUpdate = true;
     greenLensMesh.instanceMatrix.needsUpdate = true;
     pedWalkMesh.instanceMatrix.needsUpdate = true;
     pedHandMesh.instanceMatrix.needsUpdate = true;
+    if (redLensMesh.instanceColor) redLensMesh.instanceColor.needsUpdate = true;
+    if (yellowLensMesh.instanceColor) yellowLensMesh.instanceColor.needsUpdate = true;
+    if (greenLensMesh.instanceColor) greenLensMesh.instanceColor.needsUpdate = true;
+    if (pedWalkMesh.instanceColor) pedWalkMesh.instanceColor.needsUpdate = true;
+    if (pedHandMesh.instanceColor) pedHandMesh.instanceColor.needsUpdate = true;
 
     scene.add(polesMesh);
     scene.add(redLensMesh);
@@ -29799,7 +29968,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       m.head = make('head', headMat);
       m.tail = make('tail', tailMat);
       m.decal = make('decal', decalMat, true);
-      m.sign = make('sign', signMat, true);
+      // Isolate police sign material because only police calls setColorAt (Three r128 caches USE_INSTANCING_COLOR per material)
+      m.sign = make('sign', kind === 'police' ? signMat.clone() : signMat, true);
     });
     const slotCounter = {};
     cars.forEach(c => {
@@ -29811,12 +29981,14 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       else c.paint = pickPaint();
       meshes[c.kind].paint.setColorAt(c.slot, c.paint);
       if (meshes[c.kind].tail) meshes[c.kind].tail.setColorAt(c.slot, new THREE.Color(0.55, 0.55, 0.55));
+      if (c.kind === 'police' && meshes[c.kind].sign) meshes[c.kind].sign.setColorAt(c.slot, new THREE.Color(1.35, 0.75, 0.90));
       if (c.kind === 'ttc_bus') c.lenScale = 1.0;
       else c.lenScale = 0.97 + rnd() * 0.06;
     });
     Object.values(meshes).forEach(m => {
       if (m.paint.instanceColor) m.paint.instanceColor.needsUpdate = true;
       if (m.tail && m.tail.instanceColor) m.tail.instanceColor.needsUpdate = true;
+      if (m.sign && m.sign.instanceColor) m.sign.instanceColor.needsUpdate = true;
     });
 
     // Headlight beams on the road, red tail glow, and a soft contact shadow
@@ -35050,8 +35222,9 @@ function syncSceneFog() {
     scene.fog.color.setHex(isDay ? 0x8cb7db : 0x0c1322);
   }
   if (state.onPlane) scene.fog.density = 0.00022;
-  else if (state.onIsland || state.onFerry) scene.fog.density = 0.00065;
-  else scene.fog.density = getMainlandFogDensity();
+  else if (isDay) scene.fog.density = 0.00048;
+  else if (state.onIsland || state.onFerry) scene.fog.density = 0.0014;
+  else scene.fog.density = 0.0018;
 }
 
 function setCityTimeOfDay(mode, fromNet, byName) {
@@ -35111,13 +35284,15 @@ function setupPostFX() {
     THREE.HalfFloatType && caps.isWebGL2 && gl && typeof gl.getExtension === 'function' &&
     (gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float'))
   );
-  const rtOpts = { format: THREE.RGBAFormat };
-  if (supportsHalfFloatRT) rtOpts.type = THREE.HalfFloatType;
   let rt;
-  if (caps.isWebGL2 && THREE.WebGLMultisampleRenderTarget) {
-    // keep MSAA when rendering through the composer at <=1.5x DPR; disable extra MSAA at 2x retina
-    rt = new THREE.WebGLMultisampleRenderTarget(size.x, size.y, rtOpts);
-    rt.samples = (pr >= 1.75 ? 0 : 2);
+  if (pr < 1.75 && caps.isWebGL2 && THREE.WebGLMultisampleRenderTarget) {
+    // Only allocate a multisample RT when MSAA samples > 0; RGBA8 avoids ANGLE/Metal MSAA HalfFloat FBO issues
+    rt = new THREE.WebGLMultisampleRenderTarget(size.x, size.y, { format: THREE.RGBAFormat });
+    rt.samples = 2;
+  } else if (THREE.WebGLRenderTarget) {
+    const rtOpts = { format: THREE.RGBAFormat };
+    if (supportsHalfFloatRT) rtOpts.type = THREE.HalfFloatType;
+    rt = new THREE.WebGLRenderTarget(size.x, size.y, rtOpts);
   }
   composer = new THREE.EffectComposer(renderer, rt);
   composer.setPixelRatio(pr);
@@ -35137,8 +35312,21 @@ function setupPostFX() {
   if (THREE.ShaderPass && THREE.sRGBEncoding !== undefined && renderer.outputEncoding === THREE.sRGBEncoding) {
     outputEncodingPass = new THREE.ShaderPass({
       uniforms: { tDiffuse: { value: null } },
-      vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-      fragmentShader: 'uniform sampler2D tDiffuse; varying vec2 vUv; void main() { gl_FragColor = texture2D(tDiffuse, vUv); #include <encodings_fragment> }'
+      vertexShader: [
+        'varying vec2 vUv;',
+        'void main() {',
+        '  vUv = uv;',
+        '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
+        '}'
+      ].join('\n'),
+      fragmentShader: [
+        'uniform sampler2D tDiffuse;',
+        'varying vec2 vUv;',
+        'void main() {',
+        '  gl_FragColor = texture2D(tDiffuse, vUv);',
+        '  #include <encodings_fragment>',
+        '}'
+      ].join('\n')
     });
     if (outputEncodingPass.material) outputEncodingPass.material.toneMapped = false;
     composer.addPass(outputEncodingPass);

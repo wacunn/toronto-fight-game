@@ -1301,8 +1301,9 @@ function syncSceneFog() {
     scene.fog.color.setHex(isDay ? 0x8cb7db : 0x0c1322);
   }
   if (state.onPlane) scene.fog.density = 0.00022;
-  else if (state.onIsland || state.onFerry) scene.fog.density = 0.00065;
-  else scene.fog.density = getMainlandFogDensity();
+  else if (isDay) scene.fog.density = 0.00048;
+  else if (state.onIsland || state.onFerry) scene.fog.density = 0.0014;
+  else scene.fog.density = 0.0018;
 }
 
 function setCityTimeOfDay(mode, fromNet, byName) {
@@ -1362,13 +1363,15 @@ function setupPostFX() {
     THREE.HalfFloatType && caps.isWebGL2 && gl && typeof gl.getExtension === 'function' &&
     (gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float'))
   );
-  const rtOpts = { format: THREE.RGBAFormat };
-  if (supportsHalfFloatRT) rtOpts.type = THREE.HalfFloatType;
   let rt;
-  if (caps.isWebGL2 && THREE.WebGLMultisampleRenderTarget) {
-    // keep MSAA when rendering through the composer at <=1.5x DPR; disable extra MSAA at 2x retina
-    rt = new THREE.WebGLMultisampleRenderTarget(size.x, size.y, rtOpts);
-    rt.samples = (pr >= 1.75 ? 0 : 2);
+  if (pr < 1.75 && caps.isWebGL2 && THREE.WebGLMultisampleRenderTarget) {
+    // Only allocate a multisample RT when MSAA samples > 0; RGBA8 avoids ANGLE/Metal MSAA HalfFloat FBO issues
+    rt = new THREE.WebGLMultisampleRenderTarget(size.x, size.y, { format: THREE.RGBAFormat });
+    rt.samples = 2;
+  } else if (THREE.WebGLRenderTarget) {
+    const rtOpts = { format: THREE.RGBAFormat };
+    if (supportsHalfFloatRT) rtOpts.type = THREE.HalfFloatType;
+    rt = new THREE.WebGLRenderTarget(size.x, size.y, rtOpts);
   }
   composer = new THREE.EffectComposer(renderer, rt);
   composer.setPixelRatio(pr);
@@ -1388,8 +1391,21 @@ function setupPostFX() {
   if (THREE.ShaderPass && THREE.sRGBEncoding !== undefined && renderer.outputEncoding === THREE.sRGBEncoding) {
     outputEncodingPass = new THREE.ShaderPass({
       uniforms: { tDiffuse: { value: null } },
-      vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-      fragmentShader: 'uniform sampler2D tDiffuse; varying vec2 vUv; void main() { gl_FragColor = texture2D(tDiffuse, vUv); #include <encodings_fragment> }'
+      vertexShader: [
+        'varying vec2 vUv;',
+        'void main() {',
+        '  vUv = uv;',
+        '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
+        '}'
+      ].join('\n'),
+      fragmentShader: [
+        'uniform sampler2D tDiffuse;',
+        'varying vec2 vUv;',
+        'void main() {',
+        '  gl_FragColor = texture2D(tDiffuse, vUv);',
+        '  #include <encodings_fragment>',
+        '}'
+      ].join('\n')
     });
     if (outputEncodingPass.material) outputEncodingPass.material.toneMapped = false;
     composer.addPass(outputEncodingPass);

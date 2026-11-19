@@ -519,21 +519,26 @@
     }
 
     // ------------------------------------------------------------------------
-    // Water surface plane
+    // Water surface plane (only added standalone; when city.js is active, city's
+    // seamless harbour & lake mesh covers both mainland and islands uniformly)
     // ------------------------------------------------------------------------
-    const waterMat = new THREE.MeshStandardMaterial({
-      color: 0x1f6f8b,
-      roughness: 0.12,
-      metalness: 0.35,
-      opacity: 0.85,
+    const hasCityLake = (typeof window !== 'undefined' && typeof window.buildTorontoCity === 'function');
+    const waterMat = hasCityLake ? null : new THREE.MeshStandardMaterial({
+      color: 0x0e3a5c,
+      roughness: 0.16,
+      metalness: 0.72,
+      envMapIntensity: 1.15,
+      opacity: 0.92,
       transparent: true,
       depthWrite: false
     });
-    const water = new THREE.Mesh(new THREE.PlaneGeometry(3000, 950, 1, 1), waterMat);
-    water.rotation.x = -Math.PI / 2;
-    water.position.set(-120, WATER_Y + 0.01, Z(120));
-    water.renderOrder = 1;
-    islandsGroup.add(water);
+    if (waterMat) {
+      const water = new THREE.Mesh(new THREE.PlaneGeometry(3000, 950, 1, 1), waterMat);
+      water.rotation.x = -Math.PI / 2;
+      water.position.set(-120, WATER_Y + 0.01, Z(120));
+      water.renderOrder = 1;
+      islandsGroup.add(water);
+    }
 
     // ------------------------------------------------------------------------
     // Terrain (land + shallows) 5m grid
@@ -3355,7 +3360,7 @@
       const radomeMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.35, side: THREE.DoubleSide });
       const cockpitGlassMat = new THREE.MeshStandardMaterial({
         color: 0x38bdf8, roughness: 0.08, metalness: 0.25,
-        transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide
+        transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide
       });
       const cabinWinGlassMat = new THREE.MeshBasicMaterial({
         color: 0xbae6fd, transparent: true, opacity: 0.14, depthWrite: false, side: THREE.DoubleSide, fog: false
@@ -3454,16 +3459,16 @@
         addInstMesh(pl, unitBoxGeo, porterWhiteMat, winPillars);
         addInstMesh(pl, unitBoxGeo, isHero ? cabinWinGlassMat : cabinWinMat, winPanes);
 
-        // Aerodynamic Lower Nose & Weather Radar Radome (-Z forward, below cockpit eye line)
-        const lowerNose = new THREE.Mesh(new THREE.CylinderGeometry(0.62, fuseR * 0.92, 3.8, 20, 1, false), porterWhiteMat);
-        lowerNose.rotation.x = -Math.PI / 2;
-        lowerNose.scale.set(1.0, 0.58, 1.0);
-        lowerNose.position.set(0, -0.42, -fuseLen / 2 - 1.9);
+        // Aerodynamic Sloped Lower Nose & Weather Radar Radome (-Z forward, tucked strictly below cockpit glareshield)
+        const lowerNose = new THREE.Mesh(new THREE.CylinderGeometry(0.58, fuseR * 0.88, 3.6, 20, 1, false), porterWhiteMat);
+        lowerNose.rotation.x = -Math.PI / 2 - 0.12;
+        lowerNose.scale.set(0.95, 1.0, 0.34);
+        lowerNose.position.set(0, -0.56, -fuseLen / 2 - 1.55);
         airframe.add(lowerNose);
 
-        const radome = new THREE.Mesh(new THREE.SphereGeometry(0.64, 16, 12), radomeMat);
-        radome.scale.set(0.96, 0.68, 1.50);
-        radome.position.set(0, -0.45, -fuseLen / 2 - 3.85);
+        const radome = new THREE.Mesh(new THREE.SphereGeometry(0.62, 16, 12), radomeMat);
+        radome.scale.set(0.92, 0.42, 1.45);
+        radome.position.set(0, -0.52, -fuseLen / 2 - 3.65);
         airframe.add(radome);
 
         // Flight Deck Cockpit Canopy Roof, Pillars & Transparent Wraparound Windshields
@@ -3773,12 +3778,12 @@
       }
 
       // 1. Active Runway 08 Takeoff Aircraft (hero Q400 with full interior cabin & cockpit!)
-      flightPlane = buildPorterDash8Q400(-1360, Z(-170), -Math.PI / 2, { spinSpeed: 22.0, headlight: true, noOb: true, isHero: true });
+      flightPlane = buildPorterDash8Q400(-1360, Z(-170), -Math.PI / 2, { spinSpeed: 24.0, headlight: true, noOb: true, isHero: true });
       // 2. Runway 26 Holding / Taxiing Q400 at East Taxiway
-      buildPorterDash8Q400(-1160, Z(-206), Math.PI / 2, { spinSpeed: 12.0, headlight: true });
-      // 3 & 4. Two Gate-Parked Porter Q400 Turboprops at Terminal Gates 1 & 2
-      buildPorterDash8Q400(ax - 34, az + 50, 0.12, { spinSpeed: 2.8, headlight: false });
-      buildPorterDash8Q400(ax + 34, az + 50, -0.12, { spinSpeed: 0.0, headlight: false });
+      buildPorterDash8Q400(-1160, Z(-206), Math.PI / 2, { spinSpeed: 14.0, headlight: true });
+      // 3 & 4. Two Gate-Parked Porter Q400 Turboprops at Terminal Gates 1 & 2 (idling props ready for departure)
+      buildPorterDash8Q400(ax - 34, az + 50, 0.12, { spinSpeed: 6.5, headlight: false });
+      buildPorterDash8Q400(ax + 34, az + 50, -0.12, { spinSpeed: 4.2, headlight: false });
 
       mergeGroupByMaterial(apg);
       islandsGroup.add(apg);
@@ -5535,7 +5540,16 @@
         for (let i = 0; i < towerBeacons.length; i++) towerBeacons[i].visible = flash > 0.5;
       }
 
-      // Skip all off-island kinetic updates when player is underground or far north downtown
+      // Keep all Porter Q400 propellers spinning smoothly whenever above ground
+      // (including in-flight over downtown north of z=450 and from waterfront viewpoints!)
+      if (aboveGround) {
+        for (let i = 0; i < q400Propellers.length; i++) {
+          const p = q400Propellers[i];
+          if (p.hub && p.speed) p.hub.rotation.z += dt * p.speed;
+        }
+      }
+
+      // Skip remaining off-island kinetic updates when player is underground or far north downtown
       if (hasPlayer && (playerPos.y < -4.0 || playerPos.z < 450)) return;
 
       const flyingHigh = hasPlayer && playerPos.y > 20;
@@ -5597,10 +5611,6 @@
       if (nearAirport) {
         if (radarDish) radarDish.rotation.y += dt * 3.2;
         if (windsockCone) windsockCone.rotation.y = Math.sin(tTime * 1.8) * 0.25;
-        for (let i = 0; i < q400Propellers.length; i++) {
-          const p = q400Propellers[i];
-          if (p.hub && p.speed) p.hub.rotation.z += dt * p.speed;
-        }
       }
 
       if (nearWild) {
@@ -5792,9 +5802,10 @@
 
     function setTimeOfDay(isDay) {
       if (waterMat && waterMat.color) {
-        if (typeof waterMat.color.setHex === 'function') waterMat.color.setHex(isDay ? 0x268bbd : 0x145374);
-        waterMat.roughness = isDay ? 0.14 : 0.12;
-        waterMat.envMapIntensity = isDay ? 1.15 : 0.85;
+        if (typeof waterMat.color.setHex === 'function') waterMat.color.setHex(isDay ? 0x165e85 : 0x0e3a5c);
+        waterMat.roughness = isDay ? 0.22 : 0.16;
+        waterMat.metalness = isDay ? 0.45 : 0.72;
+        waterMat.envMapIntensity = isDay ? 0.85 : 1.15;
       }
       if (lampGlowMat && lampGlowMat.color && typeof lampGlowMat.color.setHex === 'function') {
         lampGlowMat.color.setHex(isDay ? 0xdbeafe : 0xffd58a);
