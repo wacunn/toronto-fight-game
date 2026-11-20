@@ -6994,8 +6994,29 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       if (x >= -635 && x <= -535 && z >= -1120 && z <= -1005) return true;
       if (x >= -1175 && x <= -1105 && z >= -955 && z <= -880) return true;
       if (x >= 596 && x <= 624 && z >= -965 && z <= -835) return true;
-      // Trinity Bellwoods Park
-      if (x >= -1765 && x <= -1590 && z >= -525 && z <= -395) return true;
+      // Trinity Bellwoods Park (continuous Queen W to Dundas W valley)
+      if (x >= -1765 && x <= -1585 && z >= -725 && z <= -380) return true;
+      // Distillery Historic District (reserve from procedural tower overlap)
+      if (x >= 1295 && x <= 1465 && z >= -425 && z <= -295) return true;
+      // Art Gallery of Ontario (AGO), Grange Park & OCAD Sharp Centre for Design
+      if (x >= -630 && x <= -408 && z >= -1005 && z <= -778) return true;
+      // Toronto Western Hospital (Bathurst & Dundas) & Hospital Row (University Ave North)
+      if (x >= -1575 && x <= -1420 && z >= -1025 && z <= -830) return true;
+      if (x >= -340 && x <= -120 && z >= -1175 && z <= -1075) return true;
+      // Alexandra Park Central Green Courtyard
+      if (x >= -1315 && x <= -1235 && z >= -805 && z <= -695) return true;
+      // CAMH Queen St W Campus & Allan A. Lamport Stadium (clear of Richmond St W)
+      if (x >= -2000 && x <= -1775 && z >= -120 && z <= 68) return true;
+      if (x >= -2285 && x <= -2105 && z >= -55 && z <= 125) return true;
+      // Moss Park & Armoury + Regent Park Athletic Grounds & Aquatic Centre
+      if (x >= 915 && x <= 1075 && z >= -915 && z <= -850) return true;
+      if (x >= 1075 && x <= 1225 && z >= -1175 && z <= -1065) return true;
+      if (x >= 1280 && x <= 1575 && z >= -1175 && z <= -1065) return true;
+      // Sugar Beach, Corus Quay, Sherbourne Common & Redpath Sugar buffer
+      if (x >= 1120 && x <= 1360 && z >= -105 && z <= 75) return true;
+      if (x >= 990 && x <= 1120 && z >= 100 && z <= 280) return true;
+      // Corktown Common Park & Lower Don Berm (Canary District courtyard fills cleanly around custom Canary midrises)
+      if (x >= 1490 && x <= 1860 && z >= -230 && z <= 30) return true;
       // Liberty Village Brick Factory Mills Plaza
       if (x >= -1995 && x <= -1690 && z >= 82 && z <= 155) return true;
       // Historic Fort York National Historic Site
@@ -7292,6 +7313,51 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       }
     }
 
+    // ---------- Authentic Downtown Campuses & East/West Empty-Block Complexes (zero extra draw calls!) ----------
+    {
+      const GA = -17 * Math.PI / 180, gca = Math.cos(GA), gsa = Math.sin(GA);
+      const rRect = (cx, cz, w, d, ang = 0) => {
+        const hw = w * 0.5, hd = d * 0.5, ca = Math.cos(ang), sa = Math.sin(ang);
+        const r = [[-hw, hd], [hw, hd], [hw, -hd], [-hw, -hd]].map(([u, v]) => [cx + u * ca - v * sa, cz + u * sa + v * ca]);
+        if (polyArea(r) < 0) r.reverse();
+        return r;
+      };
+      const addDTComplex = (cx, cz, w, d, h, style, tint, name, ang = 0) => {
+        const pts = rRect(cx, cz, w, d, ang);
+        addBuilding(pts, h, style, 0, { tint, shops: false });
+        addSolid({ type: 'poly', pts, h, name });
+      };
+      // 1. Hospital Row (University Ave North: Mount Sinai, SickKids, Toronto General Research)
+      addDTComplex(-290, -1125, 42, 46, 62, 'concrete', [1.14, 1.12, 1.08], 'Mount Sinai Hospital');
+      addDTComplex(-215, -1125, 46, 48, 72, 'glass', [0.84, 0.98, 1.14], 'SickKids Peter Gilgan Centre');
+      addDTComplex(-145, -1125, 40, 44, 58, 'concrete', [1.08, 1.06, 1.02], 'Toronto General Research');
+      // 2. Toronto Western Hospital (Bathurst & Dundas)
+      addDTComplex(-1535, -945, 36, 48, 42, 'concrete', [1.12, 1.10, 1.04], 'Toronto Western Main Wing');
+      addDTComplex(-1465, -915, 38, 42, 54, 'glass', [0.82, 0.96, 1.12], 'Toronto Western Fell Pavilion');
+      // 3. Art Gallery of Ontario (AGO Heritage Main Massing behind Gehry wing; Gehry & OCAD sculpted in greaterTorontoGroup)
+      addDTComplex(-520, -955, 76, 36, 22, 'brick', [0.96, 0.72, 0.64], 'Art Gallery of Ontario (AGO)', GA * 0.25);
+      // 4. CAMH Queen St West Campus Pavilions (south of Richmond W, framing central landscaped courtyard)
+      addDTComplex(-1945, -55, 36, 48, 26, 'glass', [0.86, 1.02, 1.12], 'CAMH Bell Gateway Building', GA);
+      addDTComplex(-1828, -82, 36, 48, 28, 'concrete', [1.14, 1.10, 1.04], 'CAMH McCain Complex', GA);
+      addDTComplex(-1888, 26, 54, 28, 22, 'brick', [0.98, 0.88, 0.80], 'CAMH Queen West Pavilion', GA);
+      // 5. Allan A. Lamport Stadium (Parkdale/Liberty West: East & West Grandstands flanking pitch)
+      addDTComplex(-2248, 18, 18, 92, 16, 'concrete', [1.08, 1.06, 1.04], 'Lamport Stadium West Stand');
+      addDTComplex(-2142, 18, 18, 92, 14, 'concrete', [1.08, 1.06, 1.04], 'Lamport Stadium East Stand');
+      // 6. Moss Park Armoury & Regent Park Aquatic / Residences
+      addDTComplex(1042, -898, 40, 22, 18, 'brick', [0.96, 0.56, 0.48], 'Moss Park Armoury');
+      addDTComplex(1148, -1120, 44, 34, 48, 'condo', [0.88, 0.94, 1.02], 'Regent Park Mixed-Use Tower');
+      addDTComplex(1308, -1118, 36, 40, 14, 'glass', [0.84, 1.04, 1.16], 'Regent Park Aquatic Centre');
+      addDTComplex(1515, -1115, 42, 44, 44, 'condo', [0.94, 0.90, 0.86], 'Regent Park East Residences');
+      // 7. Corus Quay & George Brown Waterfront Campus overlooking Sugar Beach
+      addDTComplex(1198, -62, 54, 30, 32, 'glass', [0.82, 0.98, 1.14], 'Corus Quay Waterfront');
+      addDTComplex(1312, -96, 46, 32, 34, 'concrete', [1.12, 1.10, 1.06], 'George Brown Waterfront Campus');
+      // 8. Canary District (Front St E Promenade Pan Am Athletes Village)
+      addDTComplex(1555, -455, 46, 36, 32, 'brick', [1.02, 0.84, 0.76], 'Canary District West');
+      addDTComplex(1645, -455, 44, 36, 36, 'glass', [0.88, 0.96, 1.06], 'Canary Commons');
+      addDTComplex(1560, -345, 44, 34, 28, 'concrete', [1.12, 1.08, 1.02], 'Canary Park Residence');
+      addDTComplex(1665, -345, 48, 34, 32, 'brick', [0.98, 0.78, 0.70], 'Canary Block South');
+    }
+
     // ---------- Frontage infill along every street that has no real buildings ----------
     {
       let lots = 0;
@@ -7310,7 +7376,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
               if (t + lotW > len - 3) break;
               const s0 = r.w / 2 + 3.2;
               const mx = ax + dx * (t + lotW / 2) + nx * side * (s0 + 10), mz = az + dz * (t + lotW / 2) + nz * side * (s0 + 10);
-              if (mx < -2260 || mx > 1020 || mz < PLAY.minZ || mz > PLAY.maxZ || inRealData(mx, mz) || nearRealBuilding(mx, mz, 48) || isReservedParkOrLandmark(mx, mz)) { t += lotW; continue; }
+              if (mx < -2260 || mx > 1380 || mz < PLAY.minZ || mz > PLAY.maxZ || inRealData(mx, mz) || nearRealBuilding(mx, mz, 34) || isReservedParkOrLandmark(mx, mz)) { t += lotW; continue; }
               // up to two rows deep: street-front shops, then a taller building behind
               let off = s0;
               for (let row = 0; row < 2; row++) {
@@ -7333,6 +7399,36 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           });
         }
       });
+      // Interior Downtown Superblock Courtyard Infill (fills hollow grey blocks between widely spaced avenues)
+      const GA = -17 * Math.PI / 180, gca = Math.cos(GA), gsa = Math.sin(GA);
+      const CPITCH = 44;
+      for (let gu = -2750; gu <= 2250; gu += CPITCH) {
+        for (let gv = -2100; gv <= 1100; gv += CPITCH) {
+          const jx = gu * gca - gv * gsa + (hash(gu * 0.19 + gv * 0.31) - 0.5) * 10;
+          const jz = gu * gsa + gv * gca + (hash(gu * 0.27 + gv * 0.13) - 0.5) * 10;
+          if (jx < -2290 || jx > 1830 || jz < -1160 || jz > 420) continue;
+          if (inRealData(jx, jz) || nearRealBuilding(jx, jz, 32) || isReservedParkOrLandmark(jx, jz)) continue;
+          if (jz > getShorelineZ(jx) - 24 || nearGardiner(jx, jz, 22)) continue;
+          if (jx > -1200 && jx < -900 && jz > 480) continue;
+          const sx = 18 + hash(jx * 0.83 + jz * 0.19) * 12;
+          const sz = 16 + hash(jx * 0.29 + jz * 0.73) * 12;
+          const rect = [[-sx * 0.5, sz * 0.5], [sx * 0.5, sz * 0.5], [sx * 0.5, -sz * 0.5], [-sx * 0.5, -sz * 0.5]]
+            .map(([u, v]) => [jx + u * gca - v * gsa, jz + u * gsa + v * gca]);
+          if (wellBlockPoly && rect.some(([rx, rz]) => pointInPoly(rx, rz, wellBlockPoly))) continue;
+          if (!lotIsFree(rect)) continue;
+          let bx0 = Infinity, bz0 = Infinity, bx1 = -Infinity, bz1 = -Infinity;
+          rect.forEach(([rx, rz]) => {
+            if (rx < bx0) bx0 = rx; if (rx > bx1) bx1 = rx;
+            if (rz < bz0) bz0 = rz; if (rz > bz1) bz1 = rz;
+          });
+          if (solids.some(o => o.type === 'poly' && !(bx1 + 5 < o.bb[0] || bx0 - 5 > o.bb[2] || bz1 + 5 < o.bb[1] || bz0 - 5 > o.bb[3]))) continue;
+          const rSeed = jx * 2.1 + jz * 3.7;
+          const h = 10 + hash(rSeed * 4.3) * 18;
+          const style = ['victorian', 'brick', 'warehouse', 'stone'][Math.floor(hash(rSeed * 6.1) * 4)];
+          addLot(rect, h, style, rSeed, { shops: false });
+          lots++;
+        }
+      }
       console.info('[city] frontage infill lots:', lots);
     }
 
@@ -7722,7 +7818,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           const gx = gcx + gu * gca - gv * gsa, gz = gcz + gu * gsa + gv * gca;
           if (gx < minX - REACH || gx > maxX + REACH || gz < minZ - REACH || gz > maxZ + 40) continue;
           const jx = gx + (hash(gx * 0.13 + gz) - 0.5) * 16, jz = gz + (hash(gz * 0.17 + gx) - 0.5) * 16;
-          if ((jx > -2280 && jx < 1020 + 18 && jz > PLAY.minZ - 18 && jz < PLAY.minZ + 18 + 2410) || isReservedParkOrLandmark(jx, jz) || jz > getShorelineZ(jx) - 25 || nearGardiner(jx, jz, 24)) continue;
+          if ((jx > -2280 && jx < 1380 + 18 && jz > PLAY.minZ - 18 && jz < PLAY.minZ + 18 + 2410) || isReservedParkOrLandmark(jx, jz) || jz > getShorelineZ(jx) - 25 || nearGardiner(jx, jz, 24)) continue;
           if (jx > -1200 && jx < -900 && jz > 540) continue; // keep Bathurst Quay / Airport Ferry waterfront promenade clear
           const sx = 22 + hash(jx * 0.7) * 30, sz = 22 + hash(jz * 0.9) * 30;
           if (jz + sz / 2 + 18 > getShorelineZ(jx)) continue; // never place skyline blocks in Lake Ontario / Harbour
@@ -21260,18 +21356,24 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
 
       // 7. EAST END: DISTILLERY HISTORIC DISTRICT, PORT LANDS CHERRY ST BRIDGES & LESLIE SPIT
       {
-        // Distillery Historic District (1380, -360): Victorian red-brick complex & 52m Maltings Smokestack
+        // Distillery Historic District (1380, -360): Victorian red-brick complex, dark slate gable roofs & 54m Maltings Smokestack
         const dist = new THREE.Group();
         dist.position.set(1380, 0, -360);
+        const distBrickMat = new THREE.MeshStandardMaterial({ color: 0x7c2d23, roughness: 0.85 });
+        const distRoofMat = new THREE.MeshStandardMaterial({ color: 0x262c34, roughness: 0.78 });
         for (let bx = -75; bx <= 75; bx += 38) {
           for (let bz = -55; bz <= 55; bz += 36) {
             const bh = 14 + ((Math.abs(bx * 7 + bz * 13)) % 14);
-            const bldg = new THREE.Mesh(new THREE.BoxGeometry(28, bh, 22), redBrickMat);
+            const bldg = new THREE.Mesh(new THREE.BoxGeometry(28, bh, 22), distBrickMat);
             bldg.position.set(bx, bh / 2, bz);
-            dist.add(bldg);
+            const hip = new THREE.Mesh(new THREE.ConeGeometry(16.5, 5.2, 4), distRoofMat);
+            hip.rotation.y = Math.PI / 4;
+            hip.scale.set(1.22, 1.0, 0.96);
+            hip.position.set(bx, bh + 2.6, bz);
+            dist.add(bldg, hip);
           }
         }
-        const chimney = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 4.2, 54, 16), redBrickMat);
+        const chimney = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 4.2, 54, 16), distBrickMat);
         chimney.position.set(12, 27, -8);
         dist.add(chimney);
         greaterTorontoGroup.add(dist);
@@ -21734,6 +21836,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         };
         const isClearOuterSite = (x, z, pad = 28) => {
           if (x > -2400 && x < 1430 && z > -1260 && z < 750) return false; // protect PLAY downtown
+          if (x >= 1430 && x <= 1880 && z >= -550 && z <= 45) return false; // Canary District & Corktown Common
+          if (x >= 1270 && x <= 1595 && z >= -1195 && z <= -1045) return false; // Regent Park East
           if (Math.hypot(x - 1380, z - (-360)) < 115 + pad) return false; // Distillery Historic District
           if (Math.hypot(x - (-450), z - (-1950)) < 225 + pad) return false; // Queen's Park Oval
           if (Math.hypot(x - (-520), z - (-2550)) < 85 + pad) return false; // ROM Crystal
@@ -21839,28 +21943,46 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
             lodSpecs.push({ x, z, w: 28, h, d: 28, c: 0x38bdf8 });
           }
         }
-        // Bloor-Danforth East & West Corridor Midrises + Islington/High Park North Nodes
+        // Bloor-Danforth Corridor (taller nodes west/central, authentic 4-6 storey Danforth mainstreet midrises east of Don Valley)
         for (let x = -3850; x <= 3750; x += 240) {
           for (const zOff of [-2505, -2675]) {
             const bz = zOff - (x * 0.045);
             if (!isClearOuterSite(x, bz, 26)) continue;
-            const h = 28 + ((Math.abs(x * 11 + bz * 17)) % 56);
-            lodSpecs.push({ x, z: bz, w: 26, h, d: 24, c: (x % 480 === 0) ? 0x64748b : 0x94a3b8 });
+            const eastDanforth = x > 2050;
+            const h = eastDanforth
+              ? (14 + ((Math.abs(x * 7 + bz * 13)) % 11))
+              : (28 + ((Math.abs(x * 11 + bz * 17)) % 56));
+            lodSpecs.push({ x, z: bz, w: 26, h, d: 24, c: eastDanforth ? 0x64748b : ((x % 480 === 0) ? 0x64748b : 0x94a3b8) });
           }
         }
-        // Outer Parkdale West & East Bayfront
-        for (let x = -2900; x <= -2420; x += 115) {
+        // Iconic High-Rise Apartment Nodes East of Don Valley: Thorncliffe / Flemingdon Park & Main-Danforth / Crescent Town
+        for (let x = 2560; x <= 2920; x += 110) {
+          for (let z = -3480; z >= -3810; z -= 105) {
+            if (!isClearOuterSite(x, z, 24)) continue;
+            const h = 54 + ((Math.abs(x * 17 + z * 23)) % 46);
+            lodSpecs.push({ x, z, w: 28, h, d: 24, c: 0x64748b });
+          }
+        }
+        for (let x = 3360; x <= 3640; x += 95) {
+          for (let z = -2760; z >= -3020; z -= 95) {
+            if (!isClearOuterSite(x, z, 22)) continue;
+            const h = 58 + ((Math.abs(x * 19 + z * 11)) % 54);
+            lodSpecs.push({ x, z, w: 26, h, d: 26, c: (x + z) % 2 === 0 ? 0x38bdf8 : 0x94a3b8 });
+          }
+        }
+        // Outer Parkdale West & Cabbagetown/Regent East (North of Canary District & Distillery)
+        for (let x = -2900; x <= -2480; x += 115) {
           for (let z = -420; z <= 120; z += 115) {
             if (!isClearOuterSite(x, z, 22)) continue;
             const h = 32 + ((Math.abs(x * 11 + z * 19)) % 68);
             lodSpecs.push({ x, z, w: 32, h, d: 28, c: 0x94a3b8 });
           }
         }
-        for (let x = 1420; x <= 1860; x += 120) {
-          for (let z = -420; z <= 120; z += 120) {
+        for (let x = 1480; x <= 1800; x += 110) {
+          for (let z = -1020; z <= -620; z += 120) {
             if (!isClearOuterSite(x, z, 22)) continue;
-            const h = 30 + ((Math.abs(x * 13 + z * 17)) % 64);
-            lodSpecs.push({ x, z, w: 30, h, d: 26, c: 0x94a3b8 });
+            const h = 28 + ((Math.abs(x * 13 + z * 17)) % 52);
+            lodSpecs.push({ x, z, w: 28, h, d: 26, c: 0x94a3b8 });
           }
         }
         lodTowerCount = lodSpecs.length;
@@ -22042,6 +22164,129 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           otTrunk.frustumCulled = false;
           otCrown.frustumCulled = false;
           greaterTorontoGroup.add(otTrunk, otCrown);
+        }
+
+        // 8H. Downtown Parks, Art Museums, Athletic Fields & Beaches Landmarks (1 merged GeoBuilder + 2 tree layers!)
+        const dvGB = new GeoBuilder();
+        const pushFlatQuad = (x0, x1, z0, z1, y, col) => {
+          dvGB.color = col;
+          const a = dvGB.vert(x0, y, z1, 0, 1, 0, 0, 0);
+          const b = dvGB.vert(x1, y, z1, 0, 1, 0, 1, 0);
+          const c = dvGB.vert(x1, y, z0, 0, 1, 0, 1, 1);
+          const d = dvGB.vert(x0, y, z0, 0, 1, 0, 0, 1);
+          dvGB.quad(a, b, c, d);
+        };
+        const pushBoxDV = (cx, y0, cz, w, h, d, col, ang = 0) => {
+          dvGB.color = col;
+          const hw = w * 0.5, hd = d * 0.5, y1 = y0 + h, ca = Math.cos(ang), sa = Math.sin(ang);
+          const xf = (u, v) => [cx + u * ca - v * sa, cz + u * sa + v * ca];
+          const p00 = xf(-hw, hd), p10 = xf(hw, hd), p11 = xf(hw, -hd), p01 = xf(-hw, -hd);
+          const q = (a0, a1, a2, a3, nx, ny, nz) => {
+            const v0 = dvGB.vert(a0[0], a0[1], a0[2], nx, ny, nz, 0, 0);
+            const v1 = dvGB.vert(a1[0], a1[1], a1[2], nx, ny, nz, 1, 0);
+            const v2 = dvGB.vert(a2[0], a2[1], a2[2], nx, ny, nz, 1, 1);
+            const v3 = dvGB.vert(a3[0], a3[1], a3[2], nx, ny, nz, 0, 1);
+            dvGB.quad(v0, v1, v2, v3);
+          };
+          q([p00[0], y1, p00[1]], [p10[0], y1, p10[1]], [p11[0], y1, p11[1]], [p01[0], y1, p01[1]], 0, 1, 0);
+          q([p00[0], y0, p00[1]], [p10[0], y0, p10[1]], [p10[0], y1, p10[1]], [p00[0], y1, p00[1]], sa, 0, ca);
+          q([p11[0], y0, p11[1]], [p01[0], y0, p01[1]], [p01[0], y1, p01[1]], [p11[0], y1, p11[1]], -sa, 0, -ca);
+          q([p10[0], y0, p10[1]], [p11[0], y0, p11[1]], [p11[0], y1, p11[1]], [p10[0], y1, p10[1]], ca, 0, -sa);
+          q([p01[0], y0, p01[1]], [p00[0], y0, p00[1]], [p00[0], y1, p00[1]], [p01[0], y1, p01[1]], -ca, 0, sa);
+        };
+        const pushStrutDV = (x0, y0, z0, x1, y1, z1, r, col) => {
+          dvGB.color = col;
+          for (const [ox, oz] of [[-r, 0], [r, 0], [0, -r], [0, r]]) {
+            const v0 = dvGB.vert(x0 + ox, y0, z0 + oz, 0, 1, 0, 0, 0);
+            const v1 = dvGB.vert(x0 - ox, y0, z0 - oz, 0, 1, 0, 1, 0);
+            const v2 = dvGB.vert(x1 - ox, y1, z1 - oz, 0, 1, 0, 1, 1);
+            const v3 = dvGB.vert(x1 + ox, y1, z1 + oz, 0, 1, 0, 0, 1);
+            dvGB.quad(v0, v1, v2, v3);
+          }
+        };
+        const parkGrn = [0.10, 0.25, 0.11], turfGrn = [0.08, 0.30, 0.11], walkTan = [0.36, 0.34, 0.30];
+        // 1. Trinity Bellwoods Park North Valley (continuous Queen W to Dundas W)
+        pushFlatQuad(-1755, -1595, -720, -390, 0.08, parkGrn);
+        pushFlatQuad(-1682, -1668, -715, -395, 0.10, walkTan);
+        pushFlatQuad(-1742, -1690, -640, -565, 0.11, [0.14, 0.28, 0.20]); // Tennis courts
+        // 2. Grange Park + Historic Grange Mansion & AGO Gehry Galleria Wing
+        pushFlatQuad(-618, -482, -905, -785, 0.08, parkGrn);
+        pushFlatQuad(-572, -528, -860, -825, 0.10, [0.22, 0.32, 0.36]); // Grange circular wading pool
+        pushBoxDV(-550, 0.08, -892, 34, 11, 20, [0.48, 0.20, 0.16]); // The Grange 1817 Georgian Brick Mansion
+        pushBoxDV(-520, 20.0, -985, 92, 8.5, 16, [0.42, 0.56, 0.68], -0.07); // AGO Gehry Dundas curved titanium/glass canopy
+        pushBoxDV(-520, 22.0, -935, 86, 6.0, 12, [0.48, 0.36, 0.24], -0.07); // AGO South Galleria Douglas fir sculptural rib
+        // 3. OCAD University Sharp Centre for Design ("Tabletop on Multi-Colored Legs", x: -440, z: -856)
+        pushBoxDV(-438, 25.0, -856, 54, 11.5, 28, [0.88, 0.89, 0.91], 0.08);
+        for (let px = -22; px <= 22; px += 7.3) {
+          for (const pz of [-10, 10]) {
+            if ((Math.round(px) + pz) % 2 === 0) pushBoxDV(-438 + px * 0.99, 25.2, -856 + pz, 4.4, 11.1, 4.4, [0.06, 0.07, 0.09], 0.08);
+          }
+        }
+        const ocadLegs = [
+          [-462, -868, -456, -862, [0.85, 0.14, 0.14]], [-446, -844, -448, -854, [0.90, 0.72, 0.10]],
+          [-430, -868, -432, -858, [0.14, 0.36, 0.85]], [-414, -844, -420, -852, [0.10, 0.65, 0.38]],
+          [-454, -842, -452, -854, [0.90, 0.38, 0.10]], [-420, -868, -424, -858, [0.58, 0.22, 0.78]]
+        ];
+        ocadLegs.forEach(([x0, z0, x1, z1, lcol]) => pushStrutDV(x0, 0, z0, x1, 25.2, z1, 0.75, lcol));
+        // 4. Alexandra Park Courtyard & CAMH Queen W Lawn & Allan A. Lamport Stadium Pitch
+        pushFlatQuad(-1310, -1240, -798, -702, 0.08, parkGrn);
+        pushFlatQuad(-1920, -1850, -110, -18, 0.08, parkGrn);
+        pushFlatQuad(-2232, -2158, -32, 68, 0.09, turfGrn);
+        pushFlatQuad(-2197, -2193, -28, 64, 0.11, [0.84, 0.86, 0.88]); // Halfway line
+        // 5. Moss Park Diamond & Regent Park Athletic Soccer Field
+        pushFlatQuad(930, 1015, -905, -855, 0.08, parkGrn);
+        pushFlatQuad(962, 982, -892, -870, 0.10, walkTan);
+        pushFlatQuad(1182, 1280, -1165, -1072, 0.09, turfGrn);
+        pushFlatQuad(1229, 1233, -1162, -1075, 0.11, [0.84, 0.86, 0.88]);
+        // 6. Canada's Sugar Beach (1175..1305, 16..50: white sand, striped granite & 10 pink umbrellas) + Sherbourne Common
+        pushFlatQuad(1122, 1168, -85, -15, 0.08, parkGrn);
+        pushFlatQuad(1176, 1305, 16, 50, 0.09, [0.68, 0.66, 0.61]);
+        pushBoxDV(1212, 0.1, 30, 14, 3.2, 10, [0.76, 0.42, 0.50], 0.4); // Candy-striped pink granite outcrop
+        for (let ui = 0; ui < 10; ui++) {
+          const ux = 1190 + (ui % 5) * 23, uz = 23 + Math.floor(ui / 5) * 16;
+          pushBoxDV(ux, 2.4, uz, 4.2, 0.9, 4.2, [0.94, 0.36, 0.58], ui * 0.3);
+        }
+        // 7. Corktown Common Parkland overlooking the Don River (1620..1850, -220..+25)
+        pushFlatQuad(1620, 1850, -220, 25, 0.08, parkGrn);
+        pushFlatQuad(1720, 1790, -135, -35, 0.10, [0.10, 0.24, 0.30]); // Marsh pond
+        pushBoxDV(1710, 0.08, -170, 28, 6.2, 14, [0.74, 0.78, 0.82]); // Corktown Common silver pavilion
+        const dvMesh = new THREE.Mesh(dvGB.build(), new THREE.MeshLambertMaterial({
+          vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1
+        }));
+        greaterTorontoGroup.add(dvMesh);
+
+        // 8I. Downtown Park Trees (2 InstancedMesh Draw Calls total across Trinity Bellwoods N, Grange, Moss Park & Corktown Common!)
+        const dtTrees = [];
+        const pushDTParkTrees = (x0, x1, z0, z1, n, seed) => {
+          for (let i = 0; i < n; i++) {
+            dtTrees.push([x0 + hash(seed + i * 7.3) * (x1 - x0), z0 + hash(seed + i * 13.9) * (z1 - z0), 0.75 + hash(seed + i * 3.1) * 0.55]);
+          }
+        };
+        pushDTParkTrees(-1750, -1600, -715, -400, 56, 101);
+        pushDTParkTrees(-614, -486, -895, -790, 26, 202);
+        pushDTParkTrees(-1305, -1245, -792, -708, 12, 303);
+        pushDTParkTrees(-1915, -1855, -105, -24, 16, 404);
+        pushDTParkTrees(934, 1010, -900, -860, 16, 505);
+        pushDTParkTrees(1126, 1164, -80, -20, 12, 606);
+        pushDTParkTrees(1630, 1840, -210, 15, 48, 707);
+        if (dtTrees.length) {
+          const dtTrunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.22, 0.36, 3.4, 5), new THREE.MeshLambertMaterial({ color: 0x5c4033 }), dtTrees.length);
+          const dtCrown = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(2.8, 0), new THREE.MeshLambertMaterial({ color: 0xffffff }), dtTrees.length);
+          const dm = new THREE.Matrix4(), dP = new THREE.Vector3(), dQ = new THREE.Quaternion(), dS = new THREE.Vector3(), dC = new THREE.Color();
+          const dPal = [0x246234, 0x337640, 0x1b4b2a, 0x458546];
+          dtTrees.forEach(([tx, tz, sc], i) => {
+            dm.compose(dP.set(tx, 1.7 * sc, tz), dQ, dS.set(sc, sc, sc));
+            dtTrunk.setMatrixAt(i, dm);
+            dm.compose(dP.set(tx, 4.4 * sc, tz), dQ, dS.set(sc, sc * 1.15, sc));
+            dtCrown.setMatrixAt(i, dm);
+            dtCrown.setColorAt(i, dC.setHex(dPal[i % dPal.length]));
+          });
+          dtTrunk.instanceMatrix.needsUpdate = true;
+          dtCrown.instanceMatrix.needsUpdate = true;
+          if (dtCrown.instanceColor) dtCrown.instanceColor.needsUpdate = true;
+          dtTrunk.frustumCulled = false;
+          dtCrown.frustumCulled = false;
+          greaterTorontoGroup.add(dtTrunk, dtCrown);
         }
       }
 
