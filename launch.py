@@ -50,7 +50,9 @@ def open_app() -> None:
         webbrowser.open(URL)
         return
 
-    for opener in ("xdg-open", "garcon-url-handler"):
+    # Prefer ChromeOS's native host-browser bridge (`garcon-url-handler`) BEFORE `xdg-open`
+    # so `http://localhost:8788` always opens in native ChromeOS Chrome with hardware WebGL & PointerEvents.
+    for opener in ("garcon-url-handler", "xdg-open"):
         if shutil.which(opener):
             subprocess.Popen([opener, URL], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             return
