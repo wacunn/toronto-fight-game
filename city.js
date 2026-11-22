@@ -74,16 +74,37 @@
     return g;
   };
 
+  // ---------- Hardware profile (Chromebook / ARM / low-RAM adaptive scaling) ----------
+  const FOD_HW = (function () {
+    const ua = (typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent : '';
+    const mem = (typeof navigator !== 'undefined' && navigator.deviceMemory) ? navigator.deviceMemory : 8;
+    const cores = (typeof navigator !== 'undefined' && navigator.hardwareConcurrency) ? navigator.hardwareConcurrency : 8;
+    const qp = (typeof window !== 'undefined' && window.location && window.location.search)
+      ? new URLSearchParams(window.location.search).get('quality')
+      : null;
+    const lite = qp === 'low' || (qp !== 'ultra' && (
+      /\bCrOS\b|Linux aarch64|Linux arm|Android|Mobile/i.test(ua) || mem <= 4 || cores <= 4
+    ));
+    const hw = { lite, texScale: lite ? 0.25 : 0.5 };
+    if (typeof window !== 'undefined') window.FOD_HW = hw;
+    return hw;
+  })();
+  const LITE_HW = FOD_HW.lite;
+
   // ---------- Procedural facade textures (night city) ----------
   // One tile = 8 window columns x 8 floors -> 32 m wide x 28 m tall.
   // A bigger tile + per-building U offset hides the "checkerboard" repetition.
   const TILE_W = 32, TILE_H = 28;
   const STOREFRONT_H = 4.5; // ground-floor retail band height (m)
 
-  function canvas2(w, h) {
+  function canvas2(w, h, scale) {
     const c = document.createElement('canvas');
-    c.width = w; c.height = h;
-    return [c, c.getContext('2d')];
+    const sc = (scale !== undefined) ? scale : (LITE_HW && Math.max(w, h) >= 512 ? 0.5 : 1);
+    c.width = Math.max(4, Math.round(w * sc));
+    c.height = Math.max(4, Math.round(h * sc));
+    const ctx = c.getContext('2d');
+    if (sc !== 1 && ctx && typeof ctx.scale === 'function') ctx.scale(sc, sc);
+    return [c, ctx];
   }
 
   let _canadianFlagMat = null;
@@ -203,9 +224,10 @@
 
   function makeFacade(style, seed) {
     const SZ = 1024, CELL = SZ / 8;
-    const [c, ctx] = canvas2(SZ, SZ);   // albedo
-    const [e, ectx] = canvas2(SZ, SZ);  // emissive (lit interiors)
-    const [r, rctx] = canvas2(SZ, SZ);  // roughness (glass glossy, walls rough)
+    const fScale = FOD_HW.texScale;
+    const [c, ctx] = canvas2(SZ, SZ, fScale);   // albedo
+    const [e, ectx] = canvas2(SZ, SZ, fScale);  // emissive (lit interiors)
+    const [r, rctx] = LITE_HW ? [null, { fillStyle: '', fillRect: function () {} }] : canvas2(SZ, SZ, fScale);
     ectx.fillStyle = '#000'; ectx.fillRect(0, 0, SZ, SZ);
 
     const S = {
@@ -233,8 +255,8 @@
     rctx.fillStyle = `rgb(${S.wallRough},${S.wallRough},${S.wallRough})`; rctx.fillRect(0, 0, SZ, SZ);
 
     // Wall material grain: brick courses / stone blocks / concrete stains
-    if (style === 'brick' || style === 'stone' || S.masonry) {
-      const bh = style === 'stone' ? 20 : 10, bw = style === 'stone' ? 52 : 24;
+    if (!LITE_HW && (style === 'brick' || style === 'stone' || S.masonry)) {
+      const bh = style === 'stone' ? 20 : 16, bw = style === 'stone' ? 52 : 32;
       for (let y = 0; y < SZ; y += bh) {
         for (let x = ((y / bh) % 2) ? 0 : bw / 2; x < SZ; x += bw) {
           ctx.fillStyle = `rgba(${hash(seed + x * 3 + y) > 0.5 ? '255,230,210' : '0,0,0'},${0.03 + hash(seed + x * 7 + y * 3) * 0.1})`;
@@ -355,15 +377,15 @@
     const bumpKind = S.balcony ? 'balcony' : (S.masonry ? 'masonry' : (S.full ? 'curtain' : 'stone'));
     const tex = new THREE.CanvasTexture(c);
     const etex = new THREE.CanvasTexture(e);
-    const rtex = new THREE.CanvasTexture(r);
-    const btex = getFacadeBumpTex(bumpKind, SZ);
-    [tex, etex, rtex].forEach(t => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; });
+    const rtex = r ? new THREE.CanvasTexture(r) : null;
+    const btex = LITE_HW ? null : getFacadeBumpTex(bumpKind, 512);
+    [tex, etex, rtex].forEach(t => { if (!t) return; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = LITE_HW ? 1 : 4; });
     return new THREE.MeshStandardMaterial({
       map: tex,
       emissive: 0xffffff,
       emissiveMap: etex,
       emissiveIntensity: 1.0,
-      roughness: 1.0,
+      roughness: rtex ? 1.0 : (S.wallRough / 255),
       roughnessMap: rtex,
       bumpMap: btex,
       bumpScale: S.full ? 0.08 : 0.14,
@@ -378,8 +400,8 @@
   // Ground-floor shops & restaurants: vibrant 16-bay Toronto streetscape (King St bistros, St. Lawrence cafes, pubs, awnings & neon)
   function makeStorefront(seed) {
     const W = 4096, H = 384, BAY = 256, NBAYS = 16; // 16 hi-res bays per 64 m tile, 4.5 m tall
-    const [c, ctx] = canvas2(W, H);
-    const [e, ectx] = canvas2(W, H);
+    const [c, ctx] = canvas2(W, H, FOD_HW.texScale);
+    const [e, ectx] = canvas2(W, H, FOD_HW.texScale);
     ectx.fillStyle = '#000'; ectx.fillRect(0, 0, W, H);
     ctx.fillStyle = '#2d2622'; ctx.fillRect(0, 0, W, H);
 
@@ -844,14 +866,13 @@
     opts = opts || {};
     const cw = opts.w || (lines.length > 1 ? 1024 : 512);
     const ch = opts.h || (lines.length > 1 ? 256 : 128);
+    const lScale = LITE_HW ? 0.35 : 0.5;
     const cacheKey = opts.noCache ? '' : `${cw}x${ch}|${lines.join('\n')}|${opts.bg || ''}|${opts.fg || ''}|${opts.subFg || ''}|${opts.borderColor || ''}|${opts.border !== false}|${opts.size || ''}`;
     if (cacheKey && _labelTexCache.has(cacheKey)) return _labelTexCache.get(cacheKey);
-    const c = document.createElement('canvas');
-    c.width = cw; c.height = ch;
-    const ctx = c.getContext('2d');
+    const [c, ctx] = canvas2(cw, ch, opts.noCache ? (LITE_HW ? 0.5 : 1) : lScale);
     drawLabelToCtx(ctx, 0, 0, cw, ch, lines, opts);
     const t = new THREE.CanvasTexture(c);
-    t.anisotropy = 4;
+    t.anisotropy = LITE_HW ? 1 : 4;
     if (cacheKey) _labelTexCache.set(cacheKey, t);
     return t;
   }
@@ -1864,8 +1885,8 @@
     const MOON_DIR = new THREE.Vector3(-0.45, 0.8, -0.38).normalize();
     const ACTIVE_LIGHT_DIR = MOON_DIR.clone();
     const moon = new THREE.DirectionalLight(0xbcd0f0, 0.70);
-    moon.castShadow = true;
-    moon.shadow.mapSize.set(2048, 2048);
+    moon.castShadow = !LITE_HW;
+    moon.shadow.mapSize.set(LITE_HW ? 512 : 2048, LITE_HW ? 512 : 2048);
     moon.shadow.camera.left = -75; moon.shadow.camera.right = 75;
     moon.shadow.camera.top = 75; moon.shadow.camera.bottom = -75;
     moon.shadow.camera.near = 25; moon.shadow.camera.far = 1350;
@@ -1988,8 +2009,8 @@
       pushFace(c000, c100, c101, c001, [0, -1, 0]);
     }
 
-    // Batched SignAtlas pool (packs static street/shop/landmark signs into 2048x2048 RGBA atlases)
-    const SIGN_ATLAS_W = 2048, SIGN_ATLAS_H = 2048, SIGN_CELL_W = 512, SIGN_CELL_H = 128;
+    // Batched SignAtlas pool (packs static street/shop/landmark signs into RGBA atlases)
+    const SIGN_ATLAS_W = LITE_HW ? 1024 : 2048, SIGN_ATLAS_H = LITE_HW ? 1024 : 2048, SIGN_CELL_W = LITE_HW ? 256 : 512, SIGN_CELL_H = LITE_HW ? 64 : 128;
     const SIGN_COLS = SIGN_ATLAS_W / SIGN_CELL_W, SIGN_ROWS = SIGN_ATLAS_H / SIGN_CELL_H;
     const SIGN_PER_SHEET = SIGN_COLS * SIGN_ROWS;
     const signSheets = [];
@@ -2004,7 +2025,7 @@
       if (signSlotCache.has(key)) return signSlotCache.get(key);
       let sheet = signSheets.length ? signSheets[signSheets.length - 1] : null;
       if (!sheet || sheet.count >= SIGN_PER_SHEET) {
-        const [canvas, ctx] = canvas2(SIGN_ATLAS_W, SIGN_ATLAS_H);
+        const [canvas, ctx] = canvas2(SIGN_ATLAS_W, SIGN_ATLAS_H, 1);
         ctx.fillStyle = '#0f172a';
         ctx.fillRect(0, 0, SIGN_ATLAS_W, SIGN_ATLAS_H);
         sheet = { canvas, ctx, count: 0, gb: new GeoBuilder() };
@@ -3156,17 +3177,8 @@
 
     const wallBuckets = new Map();
     const WALL_CELL = 24;
-    function wallBucketKeys(x0, z0, x1, z1) {
-      const gx0 = Math.floor(Math.min(x0, x1) / WALL_CELL) - 1;
-      const gx1 = Math.floor(Math.max(x0, x1) / WALL_CELL) + 1;
-      const gz0 = Math.floor(Math.min(z0, z1) / WALL_CELL) - 1;
-      const gz1 = Math.floor(Math.max(z0, z1) / WALL_CELL) + 1;
-      const keys = [];
-      for (let gx = gx0; gx <= gx1; gx++) {
-        for (let gz = gz0; gz <= gz1; gz++) keys.push(gx + ',' + gz);
-      }
-      return keys;
-    }
+    let _wallStamp = 0;
+    function wallCellInt(gx, gz) { return (gx * 65536) + (gz & 0xffff); }
     function analyzeCoplanarConflicts(candPts, yLo, yHi) {
       let maxSpan = 0, score = 0;
       for (let i = 0; i < candPts.length; i++) {
@@ -3174,32 +3186,35 @@
         const dx = bx - ax, dz = bz - az, len = Math.hypot(dx, dz);
         if (len < 0.2) continue;
         const nx = dz / len, nz = -dx / len, tx = dx / len, tz = dz / len;
-        const seen = new Set();
-        const keys = wallBucketKeys(ax, az, bx, bz);
-        for (let ki = 0; ki < keys.length; ki++) {
-          const arr = wallBuckets.get(keys[ki]);
-          if (!arr) continue;
-          for (let wi = 0; wi < arr.length; wi++) {
-            const w = arr[wi];
-            if (seen.has(w)) continue;
-            seen.add(w);
-            const hOv = Math.min(yHi, w.y1) - Math.max(yLo, w.y0);
-            if (hOv <= 0.05) continue;
-            if (nx * w.nx + nz * w.nz < 0.992) continue;
-            const t0 = (w.ax - ax) * tx + (w.az - az) * tz;
-            const t1 = (w.bx - ax) * tx + (w.bz - az) * tz;
-            const sMin = Math.max(0, Math.min(t0, t1)), sMax = Math.min(len, Math.max(t0, t1));
-            const tOv = sMax - sMin;
-            if (tOv <= 0.2) continue;
-            const d0 = (w.ax - ax) * nx + (w.az - az) * nz;
-            const d1 = (w.bx - ax) * nx + (w.bz - az) * nz;
-            const dt = t1 - t0;
-            const o0 = Math.abs(dt) > 1e-4 ? d0 + (d1 - d0) * ((sMin - t0) / dt) : d0;
-            const o1 = Math.abs(dt) > 1e-4 ? d0 + (d1 - d0) * ((sMax - t0) / dt) : d1;
-            const minOverlapDist = (o0 * o1 <= 0) ? 0 : Math.min(Math.abs(o0), Math.abs(o1));
-            if (minOverlapDist > 0.22) continue;
-            score += tOv * hOv;
-            if ((w.y1 - w.y0) > maxSpan) maxSpan = w.y1 - w.y0;
+        const stamp = ++_wallStamp;
+        const gx0 = Math.floor(Math.min(ax, bx) / WALL_CELL) - 1, gx1 = Math.floor(Math.max(ax, bx) / WALL_CELL) + 1;
+        const gz0 = Math.floor(Math.min(az, bz) / WALL_CELL) - 1, gz1 = Math.floor(Math.max(az, bz) / WALL_CELL) + 1;
+        for (let gx = gx0; gx <= gx1; gx++) {
+          for (let gz = gz0; gz <= gz1; gz++) {
+            const arr = wallBuckets.get(wallCellInt(gx, gz));
+            if (!arr) continue;
+            for (let wi = 0; wi < arr.length; wi++) {
+              const w = arr[wi];
+              if (w._q === stamp) continue;
+              w._q = stamp;
+              const hOv = Math.min(yHi, w.y1) - Math.max(yLo, w.y0);
+              if (hOv <= 0.05) continue;
+              if (nx * w.nx + nz * w.nz < 0.992) continue;
+              const t0 = (w.ax - ax) * tx + (w.az - az) * tz;
+              const t1 = (w.bx - ax) * tx + (w.bz - az) * tz;
+              const sMin = Math.max(0, Math.min(t0, t1)), sMax = Math.min(len, Math.max(t0, t1));
+              const tOv = sMax - sMin;
+              if (tOv <= 0.2) continue;
+              const d0 = (w.ax - ax) * nx + (w.az - az) * nz;
+              const d1 = (w.bx - ax) * nx + (w.bz - az) * nz;
+              const dt = t1 - t0;
+              const o0 = Math.abs(dt) > 1e-4 ? d0 + (d1 - d0) * ((sMin - t0) / dt) : d0;
+              const o1 = Math.abs(dt) > 1e-4 ? d0 + (d1 - d0) * ((sMax - t0) / dt) : d1;
+              const minOverlapDist = (o0 * o1 <= 0) ? 0 : Math.min(Math.abs(o0), Math.abs(o1));
+              if (minOverlapDist > 0.22) continue;
+              score += tOv * hOv;
+              if ((w.y1 - w.y0) > maxSpan) maxSpan = w.y1 - w.y0;
+            }
           }
         }
       }
@@ -3210,48 +3225,61 @@
       let rects = [{ s0: 0, s1: len, y0: yLo, y1: yHi }];
       if (len < 0.25 || yHi - yLo < 0.25) return [];
       const nx = dz / len, nz = -dx / len, tx = dx / len, tz = dz / len;
-      const seen = new Set();
-      const keys = wallBucketKeys(ax, az, bx, bz);
-      for (let ki = 0; ki < keys.length; ki++) {
-        const arr = wallBuckets.get(keys[ki]);
-        if (!arr) continue;
-        for (let wi = 0; wi < arr.length; wi++) {
-          const w = arr[wi];
-          if (seen.has(w)) continue;
-          seen.add(w);
-          const cy0 = Math.max(yLo, w.y0), cy1 = Math.min(yHi, w.y1);
-          if (cy1 - cy0 <= 0.18) continue;
-          if (nx * w.nx + nz * w.nz < 0.992) continue;
-          const t0 = (w.ax - ax) * tx + (w.az - az) * tz;
-          const t1 = (w.bx - ax) * tx + (w.bz - az) * tz;
-          const bs0 = Math.max(0, Math.min(t0, t1)), bs1 = Math.min(len, Math.max(t0, t1));
-          if (bs1 - bs0 <= 0.25) continue;
-          const d0 = (w.ax - ax) * nx + (w.az - az) * nz;
-          const d1 = (w.bx - ax) * nx + (w.bz - az) * nz;
-          const dt = t1 - t0;
-          const o0 = Math.abs(dt) > 1e-4 ? d0 + (d1 - d0) * ((bs0 - t0) / dt) : d0;
-          const o1 = Math.abs(dt) > 1e-4 ? d0 + (d1 - d0) * ((bs1 - t0) / dt) : d1;
-          const minOverlapDist = (o0 * o1 <= 0) ? 0 : Math.min(Math.abs(o0), Math.abs(o1));
-          if (minOverlapDist > 0.16) continue;
-          const next = [];
-          for (let ri = 0; ri < rects.length; ri++) {
-            const r = rects[ri];
-            const is0 = Math.max(r.s0, bs0), is1 = Math.min(r.s1, bs1);
-            const iy0 = Math.max(r.y0, w.y0), iy1 = Math.min(r.y1, w.y1);
-            if (is1 - is0 <= 0.25 || iy1 - iy0 <= 0.18) { next.push(r); continue; }
-            if (is0 - r.s0 > 0.25) next.push({ s0: r.s0, s1: is0, y0: r.y0, y1: r.y1 });
-            if (r.s1 - is1 > 0.25) next.push({ s0: is1, s1: r.s1, y0: r.y0, y1: r.y1 });
-            if (iy0 - r.y0 > 0.25) next.push({ s0: is0, s1: is1, y0: r.y0, y1: iy0 });
-            if (r.y1 - iy1 > 0.25) next.push({ s0: is0, s1: is1, y0: iy1, y1: r.y1 });
+      const stamp = ++_wallStamp;
+      const gx0 = Math.floor(Math.min(ax, bx) / WALL_CELL) - 1, gx1 = Math.floor(Math.max(ax, bx) / WALL_CELL) + 1;
+      const gz0 = Math.floor(Math.min(az, bz) / WALL_CELL) - 1, gz1 = Math.floor(Math.max(az, bz) / WALL_CELL) + 1;
+      for (let gx = gx0; gx <= gx1; gx++) {
+        for (let gz = gz0; gz <= gz1; gz++) {
+          const arr = wallBuckets.get(wallCellInt(gx, gz));
+          if (!arr) continue;
+          for (let wi = 0; wi < arr.length; wi++) {
+            const w = arr[wi];
+            if (w._q === stamp) continue;
+            w._q = stamp;
+            const cy0 = Math.max(yLo, w.y0), cy1 = Math.min(yHi, w.y1);
+            if (cy1 - cy0 <= 0.18) continue;
+            if (nx * w.nx + nz * w.nz < 0.992) continue;
+            const t0 = (w.ax - ax) * tx + (w.az - az) * tz;
+            const t1 = (w.bx - ax) * tx + (w.bz - az) * tz;
+            const bs0 = Math.max(0, Math.min(t0, t1)), bs1 = Math.min(len, Math.max(t0, t1));
+            if (bs1 - bs0 <= 0.25) continue;
+            const d0 = (w.ax - ax) * nx + (w.az - az) * nz;
+            const d1 = (w.bx - ax) * nx + (w.bz - az) * nz;
+            const dt = t1 - t0;
+            const o0 = Math.abs(dt) > 1e-4 ? d0 + (d1 - d0) * ((bs0 - t0) / dt) : d0;
+            const o1 = Math.abs(dt) > 1e-4 ? d0 + (d1 - d0) * ((bs1 - t0) / dt) : d1;
+            const minOverlapDist = (o0 * o1 <= 0) ? 0 : Math.min(Math.abs(o0), Math.abs(o1));
+            if (minOverlapDist > 0.16) continue;
+            const next = [];
+            for (let ri = 0; ri < rects.length; ri++) {
+              const r = rects[ri];
+              const is0 = Math.max(r.s0, bs0), is1 = Math.min(r.s1, bs1);
+              const iy0 = Math.max(r.y0, w.y0), iy1 = Math.min(r.y1, w.y1);
+              if (is1 - is0 <= 0.25 || iy1 - iy0 <= 0.18) { next.push(r); continue; }
+              if (is0 - r.s0 > 0.25) next.push({ s0: r.s0, s1: is0, y0: r.y0, y1: r.y1 });
+              if (r.s1 - is1 > 0.25) next.push({ s0: is1, s1: r.s1, y0: r.y0, y1: r.y1 });
+              if (iy0 - r.y0 > 0.25) next.push({ s0: is0, s1: is1, y0: r.y0, y1: iy0 });
+              if (r.y1 - iy1 > 0.25) next.push({ s0: is0, s1: is1, y0: iy1, y1: r.y1 });
+            }
+            rects = next;
+            if (!rects.length) return rects;
           }
-          rects = next;
-          if (!rects.length) return rects;
         }
       }
       return rects;
     }
-    function emitClippedWallQuads(targetGB, ax, az, dx, dz, len, nx, nz, yLo, yHi, uBase, uScale, vScale) {
+    function emitClippedWallQuads(targetGB, ax, az, dx, dz, len, nx, nz, yLo, yHi, uBase, uScale, vScale, fast) {
       if (yHi - yLo < 0.25) return;
+      if (fast) {
+        const u0 = uBase / uScale, u1 = (uBase + len) / uScale;
+        const v0 = yLo / vScale, v1 = yHi / vScale;
+        const a = targetGB.vert(ax, yLo, az, nx, 0, nz, u0, v0);
+        const b = targetGB.vert(ax + dx, yLo, az + dz, nx, 0, nz, u1, v0);
+        const c = targetGB.vert(ax + dx, yHi, az + dz, nx, 0, nz, u1, v1);
+        const d = targetGB.vert(ax, yHi, az, nx, 0, nz, u0, v1);
+        targetGB.quad(a, d, c, b);
+        return;
+      }
       const rects = subtractWallRects(ax, az, ax + dx, az + dz, yLo, yHi);
       for (let ri = 0; ri < rects.length; ri++) {
         const r = rects[ri];
@@ -3272,12 +3300,16 @@
         const [ax, az] = candPts[i], [bx, bz] = candPts[(i + 1) % candPts.length];
         const dx = bx - ax, dz = bz - az, len = Math.hypot(dx, dz);
         if (len < 0.2) continue;
-        const rec = { ax, az, bx, bz, nx: dz / len, nz: -dx / len, y0: yLo, y1: yHi };
-        const keys = wallBucketKeys(ax, az, bx, bz);
-        for (let ki = 0; ki < keys.length; ki++) {
-          let arr = wallBuckets.get(keys[ki]);
-          if (!arr) { arr = []; wallBuckets.set(keys[ki], arr); }
-          arr.push(rec);
+        const rec = { ax, az, bx, bz, nx: dz / len, nz: -dx / len, y0: yLo, y1: yHi, _q: 0 };
+        const gx0 = Math.floor(Math.min(ax, bx) / WALL_CELL) - 1, gx1 = Math.floor(Math.max(ax, bx) / WALL_CELL) + 1;
+        const gz0 = Math.floor(Math.min(az, bz) / WALL_CELL) - 1, gz1 = Math.floor(Math.max(az, bz) / WALL_CELL) + 1;
+        for (let gx = gx0; gx <= gx1; gx++) {
+          for (let gz = gz0; gz <= gz1; gz++) {
+            const k = wallCellInt(gx, gz);
+            let arr = wallBuckets.get(k);
+            if (!arr) { arr = []; wallBuckets.set(k, arr); }
+            arr.push(rec);
+          }
         }
       }
     }
@@ -3292,12 +3324,15 @@
       const shops = opts.shops !== false && y0 === 0 && baseH >= 9;
       const hasPodium = !!opts.podiumStyle && y0 === 0 && baseH > 24;
       const podiumH = hasPodium ? Math.min(16.5, baseH * 0.42) : 0;
-      const initConf = analyzeCoplanarConflicts(pts, y0, vh);
+      const fastWall = !!opts.fastWall;
+      const initConf = fastWall ? { score: 0, maxSpan: 0 } : analyzeCoplanarConflicts(pts, y0, vh);
       if (initConf.score > 0 && origArea > 4) {
         const span = vh - y0;
-        const tryOffs = span > initConf.maxSpan + 0.2
-          ? [-0.26, 0.26, -0.41, 0.41, -0.57, 0.57, -0.73, 0.73, 1.04]
-          : [0.26, 0.41, 0.57, -0.26, 0.73, 0.91, -0.41, 1.15, -0.57];
+        const tryOffs = LITE_HW
+          ? (span > initConf.maxSpan + 0.2 ? [-0.26, 0.26, -0.57] : [0.26, 0.57, -0.26])
+          : (span > initConf.maxSpan + 0.2
+            ? [-0.26, 0.26, -0.41, 0.41, -0.57, 0.57, -0.73, 0.73, 1.04]
+            : [0.26, 0.41, 0.57, -0.26, 0.73, 0.91, -0.41, 1.15, -0.57]);
         let bestPts = pts, bestScore = initConf.score, bestOff = 0;
         for (let oi = 0; oi < tryOffs.length; oi++) {
           const off = tryOffs[oi];
@@ -3334,12 +3369,12 @@
         const len = Math.hypot(dx, dz);
         if (len < 0.01) continue;
         const nx = dz / len, nz = -dx / len; // outward for CCW (positive area)
-        emitClippedWallQuads(gb, ax, az, dx, dz, len, nx, nz, fy0, h, u, TILE_W, TILE_H);
-        if (podGB) emitClippedWallQuads(podGB, ax, az, dx, dz, len, nx, nz, shops ? STOREFRONT_H : 0, podiumH, u, TILE_W, TILE_H);
-        if (shops) emitClippedWallQuads(shopGB, ax, az, dx, dz, len, nx, nz, 0, STOREFRONT_H, u, 64, STOREFRONT_H);
+        emitClippedWallQuads(gb, ax, az, dx, dz, len, nx, nz, fy0, h, u, TILE_W, TILE_H, fastWall);
+        if (podGB) emitClippedWallQuads(podGB, ax, az, dx, dz, len, nx, nz, shops ? STOREFRONT_H : 0, podiumH, u, TILE_W, TILE_H, fastWall);
+        if (shops) emitClippedWallQuads(shopGB, ax, az, dx, dz, len, nx, nz, 0, STOREFRONT_H, u, 64, STOREFRONT_H, fastWall);
         u += len;
       }
-      registerWallFootprint(pts, y0, h);
+      if (!fastWall) registerWallFootprint(pts, y0, h);
       gb.color = [1, 1, 1];
       if (podGB) {
         podGB.color = [1, 1, 1];
@@ -4158,7 +4193,15 @@
     }
 
     const elevatedMotorways = MAP.roads.filter(r => r.l >= 3 && (r.t === 'motorway' || r.t === 'motorway_link'));
+    let _gardMinZ = Infinity, _gardMaxZ = -Infinity;
+    for (const road of elevatedMotorways) {
+      for (let i = 1; i < road.p.length; i += 2) {
+        if (road.p[i] < _gardMinZ) _gardMinZ = road.p[i];
+        if (road.p[i] > _gardMaxZ) _gardMaxZ = road.p[i];
+      }
+    }
     function nearGardiner(x, z, pad) {
+      if (z < _gardMinZ - pad || z > _gardMaxZ + pad) return false;
       const r2 = pad * pad;
       for (const road of elevatedMotorways) {
         const p = road.p;
@@ -4177,17 +4220,24 @@
     const DATA = MAP.dataBounds ? { x0: MAP.dataBounds[0][0], z0: MAP.dataBounds[0][1], x1: MAP.dataBounds[1][0], z1: MAP.dataBounds[1][1] } : null;
     const inRealData = (x, z) => !!DATA && x > DATA.x0 && x < DATA.x1 && z > DATA.z0 && z < DATA.z1;
     function lotIsFree(rect) {
-      const probes = rect.slice();
+      const [cx, cz] = centroid(rect);
+      const probes = [[cx, cz]];
       for (let i = 0; i < rect.length; i++) {
         const a = rect[i], b = rect[(i + 1) % rect.length];
+        probes.push(a);
         probes.push([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]);
-        probes.push([(a[0] * 3 + b[0]) / 4, (a[1] * 3 + b[1]) / 4]);
-        probes.push([(a[0] + b[0] * 3) / 4, (a[1] + b[1] * 3) / 4]);
+        if (!LITE_HW) {
+          probes.push([(a[0] * 3 + b[0]) / 4, (a[1] * 3 + b[1]) / 4]);
+          probes.push([(a[0] + b[0] * 3) / 4, (a[1] + b[1] * 3) / 4]);
+        }
       }
-      const [cx, cz] = centroid(rect);
-      probes.push([cx, cz]);
-      if (probes.some(([x, z]) => isReservedParkOrLandmark(x, z))) return false;
-      return probes.every(([x, z]) => !onRoad(x, z, -2.5, -1) && !nearGardiner(x, z, 18) && canMoveTo(x, z, 0.8) && !nearSanctuary(x, z) && (x < TRENCH_X0 - 20 || x > TRENCH_X1 + 20 || Math.abs(z - getUsrcZ(x)) > TRENCH_HALF_W + 6));
+      for (let i = 0; i < probes.length; i++) {
+        const x = probes[i][0], z = probes[i][1];
+        if (isReservedParkOrLandmark(x, z) || nearSanctuary(x, z)) return false;
+        if (x >= TRENCH_X0 - 20 && x <= TRENCH_X1 + 20 && Math.abs(z - getUsrcZ(x)) <= TRENCH_HALF_W + 6) return false;
+        if (nearGardiner(x, z, 18) || onRoad(x, z, -2.5, -1) || !canMoveTo(x, z, 0.8)) return false;
+      }
+      return true;
     }
     function addLot(rect, h, style, seed, opts) {
       if (polyArea(rect) < 0) rect.reverse();
@@ -4199,7 +4249,8 @@
         tint: bTint,
         podiumStyle: podStyle,
         podiumTint: wantPod ? buildingColorTint(podStyle, lcx, lcz, seed + 13) : null,
-        uOff: hash(seed * 7.7) * TILE_W
+        uOff: hash(seed * 7.7) * TILE_W,
+        fastWall: true
       }, opts || {}));
       addSolid({ type: 'poly', pts: rect, h });
       if (h > 70 && roofLights.length < 90) { roofLights.push(new THREE.Vector3(lcx, h + 1.5, lcz)); }
@@ -4529,7 +4580,20 @@
       });
       // Interior Downtown Superblock Courtyard Infill (fills hollow grey blocks between widely spaced avenues)
       const GA = -17 * Math.PI / 180, gca = Math.cos(GA), gsa = Math.sin(GA);
-      const CPITCH = 44;
+      const CPITCH = LITE_HW ? 68 : 44;
+      const hasPolyOverlap = (x0, z0, x1, z1) => {
+        for (let cx = Math.floor(x0 / CELL); cx <= Math.floor(x1 / CELL); cx++) {
+          for (let cz = Math.floor(z0 / CELL); cz <= Math.floor(z1 / CELL); cz++) {
+            const arr = grid.get(cellKey(cx, cz));
+            if (!arr) continue;
+            for (let si = 0; si < arr.length; si++) {
+              const o = arr[si];
+              if (o.type === 'poly' && !(x1 < o.bb[0] || x0 > o.bb[2] || z1 < o.bb[1] || z0 > o.bb[3])) return true;
+            }
+          }
+        }
+        return false;
+      };
       for (let gu = -2750; gu <= 2250; gu += CPITCH) {
         for (let gv = -2100; gv <= 1100; gv += CPITCH) {
           const jx = gu * gca - gv * gsa + (hash(gu * 0.19 + gv * 0.31) - 0.5) * 10;
@@ -4543,13 +4607,13 @@
           const rect = [[-sx * 0.5, sz * 0.5], [sx * 0.5, sz * 0.5], [sx * 0.5, -sz * 0.5], [-sx * 0.5, -sz * 0.5]]
             .map(([u, v]) => [jx + u * gca - v * gsa, jz + u * gsa + v * gca]);
           if (wellBlockPoly && rect.some(([rx, rz]) => pointInPoly(rx, rz, wellBlockPoly))) continue;
-          if (!lotIsFree(rect)) continue;
           let bx0 = Infinity, bz0 = Infinity, bx1 = -Infinity, bz1 = -Infinity;
           rect.forEach(([rx, rz]) => {
             if (rx < bx0) bx0 = rx; if (rx > bx1) bx1 = rx;
             if (rz < bz0) bz0 = rz; if (rz > bz1) bz1 = rz;
           });
-          if (solids.some(o => o.type === 'poly' && !(bx1 + 5 < o.bb[0] || bx0 - 5 > o.bb[2] || bz1 + 5 < o.bb[1] || bz0 - 5 > o.bb[3]))) continue;
+          if (hasPolyOverlap(bx0 - 5, bz0 - 5, bx1 + 5, bz1 + 5)) continue;
+          if (!lotIsFree(rect)) continue;
           const rSeed = jx * 2.1 + jz * 3.7;
           const h = 10 + hash(rSeed * 4.3) * 18;
           const style = ['victorian', 'brick', 'warehouse', 'stone'][Math.floor(hash(rSeed * 6.1) * 4)];
@@ -4935,12 +4999,25 @@
     // ---------- Distant skyline: procedural blocks beyond the OSM data ----------
     // The real data covers ~1.4 x 0.95 km; without this the city just stops at the fog.
     {
-      const PITCH = 68, REACH = 650;
+      const PITCH = LITE_HW ? 92 : 68, REACH = 650;
       let n = 0;
       // Lay the filler out on Toronto's street grid (rotated ~17°) instead of an axis-aligned one
       const GA = -17 * Math.PI / 180, gca = Math.cos(GA), gsa = Math.sin(GA);
       const gcx = (minX + maxX) / 2, gcz = (minZ + maxZ) / 2;
       const GH = Math.hypot(maxX - minX, maxZ - minZ) / 2 + REACH;
+      const skyPolyOverlap = (x0, z0, x1, z1) => {
+        for (let cx = Math.floor(x0 / CELL); cx <= Math.floor(x1 / CELL); cx++) {
+          for (let cz = Math.floor(z0 / CELL); cz <= Math.floor(z1 / CELL); cz++) {
+            const arr = grid.get(cellKey(cx, cz));
+            if (!arr) continue;
+            for (let si = 0; si < arr.length; si++) {
+              const o = arr[si];
+              if (o.type === 'poly' && !(x1 < o.bb[0] || x0 > o.bb[2] || z1 < o.bb[1] || z0 > o.bb[3])) return true;
+            }
+          }
+        }
+        return false;
+      };
       for (let gu = -GH; gu < GH; gu += PITCH) {
         for (let gv = -GH; gv < GH; gv += PITCH) {
           const gx = gcx + gu * gca - gv * gsa, gz = gcz + gu * gsa + gv * gca;
@@ -4953,7 +5030,7 @@
           if (onRoad(jx, jz, -Math.max(sx, sz) * 0.75, -1)) continue;
           if (jx > TRENCH_X0 - 40 && jx < TRENCH_X1 + 40 && Math.abs(jz - getUsrcZ(jx)) < TRENCH_HALF_W + Math.max(sx, sz) * 0.75) continue;  // keep the rail cut open
           if (reservedLines.some(L => { const dx = L.b[0] - L.a[0], dz = L.b[1] - L.a[1], L2 = dx * dx + dz * dz; const t = Math.max(0, Math.min(1, ((jx - L.a[0]) * dx + (jz - L.a[1]) * dz) / L2)); return Math.hypot(L.a[0] + dx * t - jx, L.a[1] + dz * t - jz) < L.hw + Math.max(sx, sz) * 0.71; })) continue;
-          if (solids.some(o => o.type === 'poly' && !(jx + sx / 2 + 4 < o.bb[0] || jx - sx / 2 - 4 > o.bb[2] || jz + sz / 2 + 4 < o.bb[1] || jz - sz / 2 - 4 > o.bb[3]))) continue;
+          if (skyPolyOverlap(jx - sx / 2 - 4, jz - sz / 2 - 4, jx + sx / 2 + 4, jz + sz / 2 + 4)) continue;
           // taller toward the Financial District (north-east of the origin)
           const fidi = Math.exp(-(((jx - 350) ** 2) + ((jz + 600) ** 2)) / (2 * 380 * 380));
           const r = hash(jx * 1.31 + jz * 0.77);
@@ -4962,7 +5039,7 @@
           const rect = [[-sx / 2, sz / 2], [sx / 2, sz / 2], [sx / 2, -sz / 2], [-sx / 2, -sz / 2]].map(([u, v]) => [jx + u * gca - v * gsa, jz + u * gsa + v * gca]);
           if (polyArea(rect) < 0) rect.reverse();
           const tb = 0.7 + hash(jx * 3.3) * 0.35;
-          addBuilding(rect, h, style, 0, { tint: [tb, tb, tb], uOff: hash(jz) * TILE_W, shops: false, roof: false });
+          addBuilding(rect, h, style, 0, { tint: [tb, tb, tb], uOff: hash(jz) * TILE_W, shops: false, roof: false, fastWall: true });
           addSolid({ type: 'poly', pts: rect, h });
           if (h > 70) roofLights.push(new THREE.Vector3(jx, h + 1.5, jz));
           n++;
@@ -16870,7 +16947,7 @@
         // Recycling and waste bins
         const trash1 = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.4, 1.1, 10), islandRedMat);
         trash1.position.set(248, 0.55, 1212);
-        const trash2 = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.4, 1.1, islandCyanMat.color.getHex()), islandCyanMat);
+        const trash2 = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.4, 1.1, 10), islandCyanMat);
         trash2.position.set(250, 0.55, 1212);
         ppBuilding.add(trash1, trash2);
 
@@ -17352,7 +17429,7 @@
     }
 
     // ---------- Minimap pre-render ----------
-    const MM_SCALE = 0.6; // px per metre
+    const MM_SCALE = LITE_HW ? 0.35 : 0.6; // px per metre
     const mmMinX = -2350, mmMaxX = 1360;
     const mmMinZ = -1180, mmMaxZ = 1650;
     const mmCanvas = document.createElement('canvas');
@@ -19154,8 +19231,9 @@
 
         // 8F. Low-Poly Gabled Toronto Neighbourhood Fabric (Annex, Rosedale, Riverdale, Leslieville, Beaches, High Park West - 1 Draw Call!)
         const resSpots = [];
-        for (let gz = -4320; gz <= 420; gz += 62) {
-          for (let gx = -4400; gx <= 4160; gx += 62) {
+        const RPITCH = LITE_HW ? 105 : 62;
+        for (let gz = -4320; gz <= 420; gz += RPITCH) {
+          for (let gx = -4400; gx <= 4160; gx += RPITCH) {
             const jx = gx + (hash(gx * 0.13 + gz * 0.31) - 0.5) * 26;
             const jz = gz + (hash(gx * 0.29 + gz * 0.17) - 0.5) * 26;
             if (!isClearOuterSite(jx, jz, 28)) continue;

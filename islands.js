@@ -49,6 +49,7 @@
 
     const Z_BASE = 1200;
     const Z = o => Z_BASE + o;
+    const LITE_ISL = !!(typeof window !== 'undefined' && window.FOD_HW && window.FOD_HW.lite);
     const GROUND_Y = 0.55; // walking height on the islands
     const WATER_Y = -0.65; // matches city.js Toronto Inner Harbour water level
     let renderedOsmTowers = 0;
@@ -188,12 +189,12 @@
       return x < -880 && z < Z(-35);
     }
 
-    function terrainH(x, z) {
-      const L = landField(x, z);
+    function terrainH(x, z, preL, preZS) {
+      const L = (preL !== undefined) ? preL : landField(x, z);
       if (L <= 0) return WATER_Y + Math.max(-1.85, L * 0.30);
       let h = WATER_Y + Math.min(GROUND_Y - WATER_Y, L * 0.38);
       if (x > -905 && !isAirport(x, z)) {
-        const s = zS(x) - z; // dunes behind the lake beaches
+        const s = ((preZS !== undefined) ? preZS : zS(x)) - z; // dunes behind the lake beaches
         if (s > 0 && s < 75) {
           const dune = Math.max(0, fbm(x / 26, z / 26) - 0.42) * 2.8;
           h += dune * Math.min(1, s / 14) * Math.min(1, (75 - s) / 25);
@@ -401,12 +402,16 @@
         function walkMerge(node, isRoot) {
           if (!node || (!isRoot && node.userData && node.userData.noMerge)) return;
           if (node.isMesh && !node.isInstancedMesh && node.geometry && node.material && !Array.isArray(node.material) && !node.material.map) {
-            const g = node.geometry.index ? node.geometry.toNonIndexed() : node.geometry.clone();
-            g.applyMatrix4(node.matrixWorld);
-            let list = buckets.get(node.material);
-            if (!list) { list = []; buckets.set(node.material, list); }
-            list.push(g);
-            mergedNodes.push(node);
+            const baseGeo = node.geometry.index
+              ? (node.geometry._nonIdx || (node.geometry._nonIdx = node.geometry.toNonIndexed()))
+              : node.geometry;
+            const pos = baseGeo.getAttribute('position');
+            if (pos && pos.count > 0) {
+              let list = buckets.get(node.material);
+              if (!list) { list = []; buckets.set(node.material, list); }
+              list.push({ geo: baseGeo, mw: node.matrixWorld });
+              mergedNodes.push(node);
+            }
           }
           if (node.children) {
             for (let i = 0; i < node.children.length; i++) walkMerge(node.children[i], false);
@@ -414,21 +419,18 @@
         }
         walkMerge(grp, true);
         if (!buckets.size) return;
-        for (let i = 0; i < mergedNodes.length; i++) {
-          const n = mergedNodes[i];
-          if (n.parent) n.parent.remove(n);
-        }
         const invParent = new THREE.Matrix4();
         const hasInv = typeof invParent.copy === 'function' && typeof invParent.invert === 'function';
         if (hasInv) invParent.copy(grp.matrixWorld).invert();
-        buckets.forEach((geos, mat) => {
+        const relMat = new THREE.Matrix4();
+        const normMat = new THREE.Matrix3();
+        buckets.forEach((entries, mat) => {
           let totalVerts = 0;
           let allHaveUv = true;
-          for (let i = 0; i < geos.length; i++) {
-            if (hasInv) geos[i].applyMatrix4(invParent);
-            const pos = geos[i].getAttribute('position');
-            const uv = geos[i].getAttribute('uv');
-            if (!pos) continue;
+          for (let i = 0; i < entries.length; i++) {
+            const g = entries[i].geo;
+            const pos = g.getAttribute('position');
+            const uv = g.getAttribute('uv');
             totalVerts += pos.count;
             if (!uv || uv.array.length !== pos.count * 2) allHaveUv = false;
           }
@@ -438,27 +440,64 @@
           const mergedUv = allHaveUv ? new Float32Array(totalVerts * 2) : null;
           let offset = 0;
           let uvOff = 0;
-          for (let i = 0; i < geos.length; i++) {
-            const pos = geos[i].getAttribute('position');
-            const nor = geos[i].getAttribute('normal');
-            const uv = geos[i].getAttribute('uv');
-            if (!pos) { geos[i].dispose(); continue; }
-            mergedPos.set(pos.array, offset);
-            if (nor && nor.array.length === pos.array.length) mergedNor.set(nor.array, offset);
-            if (mergedUv && uv) mergedUv.set(uv.array, uvOff);
-            offset += pos.count * 3;
+          for (let i = 0; i < entries.length; i++) {
+            const g = entries[i].geo;
+            if (hasInv) relMat.multiplyMatrices(invParent, entries[i].mw);
+            else relMat.copy(entries[i].mw);
+            const me = relMat.elements;
+            const m0 = me[0], m1 = me[1], m2 = me[2],
+                  m4 = me[4], m5 = me[5], m6 = me[6],
+                  m8 = me[8], m9 = me[9], m10 = me[10],
+                  m12 = me[12], m13 = me[13], m14 = me[14];
+            normMat.getNormalMatrix(relMat);
+            const ne = normMat.elements;
+            const n0 = ne[0], n1 = ne[1], n2 = ne[2],
+                  n3 = ne[3], n4 = ne[4], n5 = ne[5],
+                  n6 = ne[6], n7 = ne[7], n8 = ne[8];
+            const pos = g.getAttribute('position');
+            const pa = pos.array;
+            const nor = g.getAttribute('normal');
+            const na = (nor && nor.array.length === pa.length) ? nor.array : null;
+            const pLen = pos.count * 3;
+            for (let k = 0; k < pLen; k += 3) {
+              const x = pa[k], y = pa[k + 1], z = pa[k + 2];
+              const dst = offset + k;
+              mergedPos[dst]     = m0 * x + m4 * y + m8 * z + m12;
+              mergedPos[dst + 1] = m1 * x + m5 * y + m9 * z + m13;
+              mergedPos[dst + 2] = m2 * x + m6 * y + m10 * z + m14;
+              if (na) {
+                const nx = na[k], ny = na[k + 1], nz = na[k + 2];
+                let rx = n0 * nx + n3 * ny + n6 * nz;
+                let ry = n1 * nx + n4 * ny + n7 * nz;
+                let rz = n2 * nx + n5 * ny + n8 * nz;
+                const invL = 1 / (Math.hypot(rx, ry, rz) || 1);
+                mergedNor[dst]     = rx * invL;
+                mergedNor[dst + 1] = ry * invL;
+                mergedNor[dst + 2] = rz * invL;
+              } else {
+                mergedNor[dst + 1] = 1;
+              }
+            }
+            if (mergedUv) {
+              const uv = g.getAttribute('uv');
+              if (uv) mergedUv.set(uv.array, uvOff);
+            }
+            offset += pLen;
             uvOff += pos.count * 2;
-            geos[i].dispose();
           }
           const mergedGeo = new THREE.BufferGeometry();
           mergedGeo.setAttribute('position', new THREE.BufferAttribute(mergedPos, 3));
           mergedGeo.setAttribute('normal', new THREE.BufferAttribute(mergedNor, 3));
           if (mergedUv) mergedGeo.setAttribute('uv', new THREE.BufferAttribute(mergedUv, 2));
           const mergedMesh = new THREE.Mesh(mergedGeo, mat);
-          if (opts && opts.castShadow) mergedMesh.castShadow = true;
-          if (opts && opts.receiveShadow) mergedMesh.receiveShadow = true;
+          if (opts && opts.castShadow && !LITE_ISL) mergedMesh.castShadow = true;
+          if (opts && opts.receiveShadow && !LITE_ISL) mergedMesh.receiveShadow = true;
           grp.add(mergedMesh);
         });
+        for (let i = 0; i < mergedNodes.length; i++) {
+          const n = mergedNodes[i];
+          if (n.parent) n.parent.remove(n);
+        }
       } catch (e) { /* safe fallback in headless mock environments */ }
     }
 
@@ -541,35 +580,71 @@
     }
 
     // ------------------------------------------------------------------------
-    // Terrain (land + shallows) 5m grid
+    // Terrain (land + shallows) 5m grid (8m on Lite/Chromebook hardware)
     // ------------------------------------------------------------------------
-    const GX0 = -1600, GX1 = 1360, GZ0 = Z(-340), GZ1 = Z(560), STEP = 5;
+    const GX0 = -1600, GX1 = 1360, GZ0 = Z(-340), GZ1 = Z(560), STEP = LITE_ISL ? 8 : 5;
     const NX = Math.round((GX1 - GX0) / STEP) + 1, NZ = Math.round((GZ1 - GZ0) / STEP) + 1;
     const Lgrid = new Float32Array(NX * NZ);
     const Hgrid = new Float32Array(NX * NZ);
     {
       const m = new Mesher();
       const vid = new Int32Array(NX * NZ);
+      vid.fill(-1);
+      const zNCol = new Float32Array(NX);
+      const zSCol = new Float32Array(NX);
+      for (let i = 0; i < NX; i++) {
+        const x = GX0 + i * STEP;
+        zNCol[i] = zN(x);
+        zSCol[i] = zS(x);
+      }
+      const airZ0 = Z(-310), airZ1 = Z(-35);
       for (let j = 0; j < NZ; j++) {
+        const z = GZ0 + j * STEP;
+        const nEast = EAST_TIP + n1(z / 60) * 10;
+        const nWest = 905 + n1(z / 45) * 4;
+        const airZ = Math.min(z - airZ0, airZ1 - z);
+        const rowOff = j * NX;
         for (let i = 0; i < NX; i++) {
-          const x = GX0 + i * STEP, z = GZ0 + j * STEP;
-          const L = landField(x, z);
-          const H = terrainH(x, z);
-          const k = j * NX + i;
+          const x = GX0 + i * STEP;
+          let L = -Infinity;
+          if (x >= -905) {
+            L = Math.min(z - zNCol[i], zSCol[i] - z, nEast - x, x + nWest);
+          }
+          const air = Math.min(x + 1575, airZ, -860 - x);
+          if (air > L) L = air;
+          if (L > -12) {
+            const wd = inlandWaterDist(x, z);
+            if (wd < L) L = wd;
+          }
+          const k = rowOff + i;
           Lgrid[k] = L;
-          Hgrid[k] = H;
-          vid[k] = m.v(x, H, z, surfaceColor(x, z, L));
+          Hgrid[k] = terrainH(x, z, L, zSCol[i]);
         }
       }
+      const ensureVert = (idx, i, j) => {
+        let id = vid[idx];
+        if (id < 0) {
+          const gx = GX0 + i * STEP, gz = GZ0 + j * STEP;
+          id = m.v(gx, Hgrid[idx], gz, surfaceColor(gx, gz, Lgrid[idx]));
+          vid[idx] = id;
+        }
+        return id;
+      };
       for (let j = 0; j < NZ - 1; j++) {
+        const rowOff = j * NX;
         for (let i = 0; i < NX - 1; i++) {
-          const k = j * NX + i;
+          const k = rowOff + i;
           if (Math.max(Lgrid[k], Lgrid[k + 1], Lgrid[k + NX], Lgrid[k + NX + 1]) < -7) continue; // open water
-          m.quadUp(vid[k], vid[k + 1], vid[k + NX + 1], vid[k + NX]);
+          m.quadUp(
+            ensureVert(k, i, j),
+            ensureVert(k + 1, i + 1, j),
+            ensureVert(k + NX + 1, i + 1, j + 1),
+            ensureVert(k + NX, i, j + 1)
+          );
         }
       }
       const terrain = new THREE.Mesh(m.build(true), new THREE.MeshLambertMaterial({ vertexColors: true }));
-      terrain.receiveShadow = true;
+      terrain.receiveShadow = !LITE_ISL;
       islandsGroup.add(terrain);
     }
 
@@ -883,7 +958,7 @@
     const shrubs = [];
 
     {
-      const SP = 6.5;
+      const SP = LITE_ISL ? 9.0 : 6.5;
       for (let x = GX0 + 40; x < GX1; x += SP) {
         for (let z = GZ0; z < GZ1; z += SP) {
           const tx = x + (rnd() - 0.5) * SP * 0.9, tz = z + (rnd() - 0.5) * SP * 0.9;
@@ -892,7 +967,7 @@
           if (nearBridge(tx, tz, 7.5)) continue;
           if (nearTrainTrack(tx, tz, 4.0)) continue;
           if (nearPath(tx, tz, 3.8) || inClearing(tx, tz, 2.0)) continue;
-          const wd = inlandWaterDist(tx, tz);
+          const wd = (L > 11) ? L : inlandWaterDist(tx, tz);
           let kind = null;
           if (wd > 1.5 && wd < 10 && rnd() < 0.52) {
             kind = 'willow'; // weeping willows line the water banks
@@ -915,7 +990,7 @@
             }
           }
           if (!kind) continue;
-          const y = terrainH(tx, tz);
+          const y = terrainH(tx, tz, L);
           const s = kind === 'pine' ? 0.8 + rnd() * 0.6 : 0.75 + rnd() * 0.7;
           trees[kind].push({ kind, x: tx, z: tz, y, s, r: rnd() });
           const k = Math.floor(tx / TRUNK_CELL) + ',' + Math.floor(tz / TRUNK_CELL);
@@ -3849,30 +3924,58 @@
       }
 
       // Authentic Muskoka / Adirondack Chair helper
+      const _chairSeatGeo = new THREE.BoxGeometry(0.62, 0.06, 0.58);
+      const _chairBackGeo = new THREE.BoxGeometry(0.58, 0.72, 0.06);
+      const _chairArmGeo = new THREE.BoxGeometry(0.12, 0.05, 0.68);
+      const _chairFLegGeo = new THREE.BoxGeometry(0.07, 0.48, 0.07);
+      const _chairBLegGeo = new THREE.BoxGeometry(0.07, 0.44, 0.07);
       function buildMuskokaChair(mat) {
         const ch = new THREE.Group();
-        const seat = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.06, 0.58), mat);
+        const seat = new THREE.Mesh(_chairSeatGeo, mat);
         seat.position.set(0, 0.34, 0);
         seat.rotation.x = -0.15;
         ch.add(seat);
-        const back = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.72, 0.06), mat);
+        const back = new THREE.Mesh(_chairBackGeo, mat);
         back.position.set(0, 0.64, -0.24);
         back.rotation.x = -0.28;
         ch.add(back);
         [-0.28, 0.28].forEach(ax => {
-          const arm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.05, 0.68), mat);
+          const arm = new THREE.Mesh(_chairArmGeo, mat);
           arm.position.set(ax, 0.50, -0.02);
           ch.add(arm);
-          const fLeg = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.48, 0.07), mat);
+          const fLeg = new THREE.Mesh(_chairFLegGeo, mat);
           fLeg.position.set(ax, 0.24, 0.22);
           ch.add(fLeg);
-          const bLeg = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.44, 0.07), mat);
+          const bLeg = new THREE.Mesh(_chairBLegGeo, mat);
           bLeg.position.set(ax, 0.20, -0.24);
           bLeg.rotation.x = 0.20;
           ch.add(bLeg);
         });
         return ch;
       }
+
+      const _cottVerandaColGeo = new THREE.CylinderGeometry(0.09, 0.11, 2.42, 8);
+      const _cottVerandaBaseGeo = new THREE.BoxGeometry(0.24, 0.32, 0.24);
+      const _cottBalusterGeo = new THREE.BoxGeometry(0.05, 0.46, 0.05);
+      const _cottSconceGeo = new THREE.SphereGeometry(0.13, 8, 8);
+      const _cottWinFrameGeo = new THREE.BoxGeometry(1.28, 1.38, 0.12);
+      const _cottWinGlassGeo = new THREE.BoxGeometry(1.06, 1.16, 0.14);
+      const _cottMuntinVGeo = new THREE.BoxGeometry(0.05, 1.18, 0.16);
+      const _cottMuntinHGeo = new THREE.BoxGeometry(1.08, 0.05, 0.16);
+      const _cottShutterGeo = new THREE.BoxGeometry(0.26, 1.34, 0.08);
+      const _cottWinBoxGeo = new THREE.BoxGeometry(1.32, 0.24, 0.28);
+      const _cottWinLeafGeo = new THREE.SphereGeometry(0.15, 6, 6);
+      const _cottWinBloomGeo = new THREE.SphereGeometry(0.13, 6, 6);
+      const _cottStepStoneGeo = new THREE.CylinderGeometry(0.34, 0.36, 0.07, 7);
+      const _cottArborVineGeo = new THREE.SphereGeometry(0.28, 7, 7);
+      const _cottPicketGeo = new THREE.BoxGeometry(0.09, 0.84, 0.04);
+      const _cottPostGeo = new THREE.BoxGeometry(0.16, 0.96, 0.16);
+      const _cottSideRailGeo = new THREE.BoxGeometry(0.06, 0.72, 2.4);
+      const _cottBushGeo = new THREE.SphereGeometry(0.36, 7, 7);
+      const _cottClusterGeo = new THREE.SphereGeometry(0.24, 6, 6);
+      const _cottStalkGeo = new THREE.CylinderGeometry(0.03, 0.04, 1.15, 6);
+      const _cottTopBloomGeo = new THREE.SphereGeometry(0.16, 6, 6);
+      const _cottCanoeGeo = new THREE.CylinderGeometry(0.26, 0.26, 3.8, 10);
 
       function addUniqueCottage(cDef, idx) {
         const stMats = COTTAGE_STYLE_MATS[idx % COTTAGE_STYLE_MATS.length];
@@ -4047,10 +4150,10 @@
 
         // Turned Veranda Columns with Decorative Brackets
         [-porchW / 2 + 0.22, -1.05, 1.05, porchW / 2 - 0.22].forEach(px => {
-          const pPost = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 2.42, 8), trimMat);
+          const pPost = new THREE.Mesh(_cottVerandaColGeo, trimMat);
           pPost.position.set(px, 1.48, d / 2 + porchD - 0.14);
           c.add(pPost);
-          const pBase = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.32, 0.24), trimMat);
+          const pBase = new THREE.Mesh(_cottVerandaBaseGeo, trimMat);
           pBase.position.set(px, 0.52, d / 2 + porchD - 0.14);
           c.add(pBase);
         });
@@ -4067,7 +4170,7 @@
           botRail.position.set(rCenterX, 0.48, rZ);
           c.add(botRail);
           for (let bx = -rLen / 2 + 0.18; bx <= rLen / 2 - 0.14; bx += 0.24) {
-            const bal = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.46, 0.05), trimMat);
+            const bal = new THREE.Mesh(_cottBalusterGeo, trimMat);
             bal.position.set(rCenterX + bx, 0.72, rZ);
             c.add(bal);
           }
@@ -4095,44 +4198,45 @@
         c.add(doorTransom);
 
         [-0.78, 0.78].forEach(lx => {
-          const sconce = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 8), lampGlowMat);
+          const sconce = new THREE.Mesh(_cottSconceGeo, lampGlowMat);
           sconce.position.set(lx, 2.15, d / 2 + 0.18);
           c.add(sconce);
         });
 
         // Front & Side Multi-Pane Windows with Muntins, Louvered Shutters & Lush Cedar Window Boxes
         [-w * 0.31, w * 0.31].forEach((wx, wi) => {
-          const wFrame = new THREE.Mesh(new THREE.BoxGeometry(1.28, 1.38, 0.12), trimMat);
+          const wFrame = new THREE.Mesh(_cottWinFrameGeo, trimMat);
           wFrame.position.set(wx, 1.80, d / 2 + 0.02);
           c.add(wFrame);
-          const wGlass = new THREE.Mesh(new THREE.BoxGeometry(1.06, 1.16, 0.14), warmWinGlowMat);
+          const wGlass = new THREE.Mesh(_cottWinGlassGeo, warmWinGlowMat);
           wGlass.position.set(wx, 1.80, d / 2 + 0.03);
           c.add(wGlass);
           // Window muntin crossbars
-          const mVert = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.18, 0.16), trimMat);
+          const mVert = new THREE.Mesh(_cottMuntinVGeo, trimMat);
           mVert.position.set(wx, 1.80, d / 2 + 0.04);
           c.add(mVert);
-          const mHoriz = new THREE.Mesh(new THREE.BoxGeometry(1.08, 0.05, 0.16), trimMat);
+          const mHoriz = new THREE.Mesh(_cottMuntinHGeo, trimMat);
           mHoriz.position.set(wx, 1.80, d / 2 + 0.04);
           c.add(mHoriz);
 
           // Louvered painted shutters
           [-0.76, 0.76].forEach(sx => {
-            const shut = new THREE.Mesh(new THREE.BoxGeometry(0.26, 1.34, 0.08), shutterMat);
+            const shut = new THREE.Mesh(_cottShutterGeo, shutterMat);
             shut.position.set(wx + sx, 1.80, d / 2 + 0.05);
             c.add(shut);
           });
 
           // Under-window cedar flower box overflowing with foliage & blooms
-          const fBox = new THREE.Mesh(new THREE.BoxGeometry(1.32, 0.24, 0.28), darkWoodMat);
+          const fBox = new THREE.Mesh(_cottWinBoxGeo, darkWoodMat);
           fBox.position.set(wx, 1.02, d / 2 + 0.16);
           c.add(fBox);
-          for (let fi = -0.48; fi <= 0.48; fi += 0.24) {
-            const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.15, 6, 6), foliageGreenMat);
+          const fStep = LITE_ISL ? 0.48 : 0.24;
+          for (let fi = -0.48; fi <= 0.48; fi += fStep) {
+            const leaf = new THREE.Mesh(_cottWinLeafGeo, foliageGreenMat);
             leaf.position.set(wx + fi, 1.16, d / 2 + 0.18);
             c.add(leaf);
             const bloom = new THREE.Mesh(
-              new THREE.SphereGeometry(0.13, 6, 6),
+              _cottWinBloomGeo,
               flowerMats[(idx + wi + Math.round((fi + 1) * 4)) % flowerMats.length]
             );
             bloom.position.set(wx + fi, 1.24, d / 2 + 0.20);
@@ -4146,7 +4250,7 @@
 
         // Flagstone Stepping-Stone Garden Path from Arbor Gate to Porch Steps
         for (let sz = d / 2 + porchD + 0.95; sz <= fenceZ + 0.35; sz += 0.52) {
-          const stone = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.36, 0.07, 7), flagstoneMat);
+          const stone = new THREE.Mesh(_cottStepStoneGeo, flagstoneMat);
           stone.position.set(Math.sin(sz * 3.1 + idx) * 0.08, 0.04, sz);
           c.add(stone);
         }
@@ -4166,11 +4270,11 @@
 
         // Climbing Roses & Green Vines on the Garden Arbor
         [-gateHalfW - 0.05, -0.45, 0, 0.45, gateHalfW + 0.05].forEach((vx, vi) => {
-          const vine = new THREE.Mesh(new THREE.SphereGeometry(0.28, 7, 7), lushLeafMat);
+          const vine = new THREE.Mesh(_cottArborVineGeo, lushLeafMat);
           vine.position.set(vx, vi === 0 || vi === 4 ? 1.85 : 2.38, fenceZ);
           c.add(vine);
           const rose = new THREE.Mesh(
-            new THREE.SphereGeometry(0.15, 6, 6),
+            _cottWinLeafGeo,
             flowerMats[(idx + vi) % flowerMats.length]
           );
           rose.position.set(vx + 0.06, (vi === 0 || vi === 4 ? 1.92 : 2.48), fenceZ + 0.14);
@@ -4191,16 +4295,17 @@
             c.add(fRail);
           });
           // Individual vertical pickets
-          for (let px = fStart; px <= fEnd; px += 0.24) {
-            const picket = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.84, 0.04), trimMat);
+          const pStep = LITE_ISL ? 0.36 : 0.24;
+          for (let px = fStart; px <= fEnd; px += pStep) {
+            const picket = new THREE.Mesh(_cottPicketGeo, trimMat);
             picket.position.set(fs * px, 0.42, fenceZ);
             c.add(picket);
           }
           // Corner fence post & side garden return rail
-          const cPost = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.96, 0.16), trimMat);
+          const cPost = new THREE.Mesh(_cottPostGeo, trimMat);
           cPost.position.set(fs * fEnd, 0.48, fenceZ);
           c.add(cPost);
-          const sideRail = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.72, 2.4), trimMat);
+          const sideRail = new THREE.Mesh(_cottSideRailGeo, trimMat);
           sideRail.position.set(fs * fEnd, 0.40, fenceZ - 1.2);
           c.add(sideRail);
         });
@@ -4220,25 +4325,26 @@
           c.add(bedSoil);
 
           // Blooming Hydrangea / Peony Shrubs & Tall Hollyhock / Sunflower Stalks
-          for (let bx = -bedW * 0.36; bx <= bedW * 0.36; bx += 0.58) {
-            const bush = new THREE.Mesh(new THREE.SphereGeometry(0.36, 7, 7), foliageGreenMat);
+          const bStep = LITE_ISL ? 0.85 : 0.58;
+          for (let bx = -bedW * 0.36; bx <= bedW * 0.36; bx += bStep) {
+            const bush = new THREE.Mesh(_cottBushGeo, foliageGreenMat);
             bush.scale.set(1.1, 0.85, 1.1);
             bush.position.set(bedX + bx, 0.38, bedZ - 0.12);
             c.add(bush);
 
             const bCluster = new THREE.Mesh(
-              new THREE.SphereGeometry(0.24, 6, 6),
+              _cottClusterGeo,
               flowerMats[(idx * 2 + gi + Math.round((bx + 2) * 3)) % flowerMats.length]
             );
             bCluster.position.set(bedX + bx, 0.58, bedZ - 0.08);
             c.add(bCluster);
 
             // Tall Hollyhock / Delphinium flower spike behind the shrubs
-            const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 1.15, 6), lushLeafMat);
+            const stalk = new THREE.Mesh(_cottStalkGeo, lushLeafMat);
             stalk.position.set(bedX + bx * 0.85, 0.72, bedZ - 0.42);
             c.add(stalk);
             const topBloom = new THREE.Mesh(
-              new THREE.SphereGeometry(0.16, 6, 6),
+              _cottTopBloomGeo,
               flowerMats[(idx + gi + 2) % flowerMats.length]
             );
             topBloom.position.set(bedX + bx * 0.85, 1.28, bedZ - 0.42);
@@ -4249,7 +4355,7 @@
         // Authentic Toronto Island Yard Props: Painted Cedar-Strip Canoe/Kayak on Rack or Stone Birdbath!
         const canoeMat = canoeMats[idx % canoeMats.length];
         const canoeSide = -sideSign;
-        const canoeHull = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 3.8, 10), canoeMat);
+        const canoeHull = new THREE.Mesh(_cottCanoeGeo, canoeMat);
         canoeHull.rotation.x = Math.PI / 2;
         canoeHull.scale.set(1.25, 0.75, 1.0);
         canoeHull.position.set(canoeSide * (w / 2 + 0.95), 0.52, 0.4);

@@ -1178,15 +1178,17 @@ const _knockDir = new THREE.Vector3();
 const container = document.getElementById('game-container');
 const scene = new THREE.Scene();
 
-// Far clip increased to 4500m to render full Toronto Islands archipelago and downtown skyline across the harbour
-const camera = new THREE.PerspectiveCamera(78, window.innerWidth / window.innerHeight, 0.14, 4500);
+const IS_LITE_HW = !!(typeof window !== 'undefined' && window.FOD_HW && window.FOD_HW.lite);
+
+// Far clip increased to 4500m (2600m on Lite/Chromebook hardware) to render Toronto Islands and skyline
+const camera = new THREE.PerspectiveCamera(78, window.innerWidth / window.innerHeight, 0.14, IS_LITE_HW ? 2600 : 4500);
 camera.position.set(0, 1.7, 0);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+const renderer = new THREE.WebGLRenderer({ antialias: !IS_LITE_HW, powerPreference: 'high-performance' });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2.0));
+renderer.setPixelRatio(IS_LITE_HW ? 1.0 : Math.min(window.devicePixelRatio || 1, 2.0));
 if (THREE.sRGBEncoding !== undefined) renderer.outputEncoding = THREE.sRGBEncoding;
-renderer.shadowMap.enabled = true;
+renderer.shadowMap.enabled = !IS_LITE_HW;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 container.insertBefore(renderer.domElement, container.firstChild);
 
@@ -1316,15 +1318,17 @@ function setCityTimeOfDay(mode, fromNet, byName) {
     if (isDay) document.body.classList.add('day-mode');
     else document.body.classList.remove('day-mode');
   }
-  try {
-    if (isDay) {
-      if (!dayEnvMap) dayEnvMap = buildCityEnvMap(renderer, true);
-      scene.environment = dayEnvMap;
-    } else {
-      if (!nightEnvMap) nightEnvMap = buildCityEnvMap(renderer, false);
-      scene.environment = nightEnvMap;
-    }
-  } catch (e) {}
+  if (!IS_LITE_HW) {
+    try {
+      if (isDay) {
+        if (!dayEnvMap) dayEnvMap = buildCityEnvMap(renderer, true);
+        scene.environment = dayEnvMap;
+      } else {
+        if (!nightEnvMap) nightEnvMap = buildCityEnvMap(renderer, false);
+        scene.environment = nightEnvMap;
+      }
+    } catch (e) {}
+  }
   if (renderer && typeof renderer.toneMappingExposure === 'number') {
     renderer.toneMappingExposure = isDay ? 0.86 : 1.0;
   }
@@ -1352,6 +1356,7 @@ function setCityTimeOfDay(mode, fromNet, byName) {
 // --- Bloom post-processing (lit windows, neon, lamps, CN Tower LEDs glow) ---
 let composer = null, bloomPass = null, outputEncodingPass = null;
 function setupPostFX() {
+  if (IS_LITE_HW) return; // Keep Chromebook / ARM GPU fill-rate fast and single-pass
   if (!THREE.EffectComposer || !THREE.RenderPass || !THREE.UnrealBloomPass) return; // scripts not loaded: plain render
   const pr = (renderer && typeof renderer.getPixelRatio === 'function') ? renderer.getPixelRatio() : 1;
   const size = (renderer && typeof renderer.getDrawingBufferSize === 'function')
@@ -1414,10 +1419,33 @@ function setupPostFX() {
 
 // Build Toronto City from real OpenStreetMap data with CN Tower Peace Sanctuary
 const city = (typeof window.buildTorontoCity === 'function') ? window.buildTorontoCity(scene) : null;
-// Build Dedicated Toronto Islands Archipelago (Hanlan's, Airport, Centre, Olympic, Algonquin, Ward's)
-const islands = (typeof window.buildTorontoIslands === 'function') ? window.buildTorontoIslands(scene) : null;
-if (typeof window !== 'undefined') window.islands = islands;
+// Build Dedicated Toronto Islands Archipelago asynchronously after initial UI paint (or on demand)
+let islands = null;
+if (typeof window !== 'undefined') window.islands = null;
 let traffic = null;
+let _initialEnemiesSpawned = false;
+
+function ensureIslandsLoaded() {
+  if (islands || typeof window.buildTorontoIslands !== 'function') return islands;
+  islands = window.buildTorontoIslands(scene);
+  if (typeof window !== 'undefined') window.islands = islands;
+  if (islands && islands.setTimeOfDay) {
+    islands.setTimeOfDay(getCityTimeOfDay() === 'day');
+  }
+  if (IS_LITE_HW && islands && islands.group) {
+    islands.group.visible = !!(player.pos.z > 220 || player.pos.y > 30 || state.onFerry || state.onIsland || state.onPlane);
+  }
+  return islands;
+}
+
+function ensureTrafficLoaded() {
+  if (traffic || !city || typeof window.createTraffic !== 'function') return traffic;
+  traffic = window.createTraffic(scene, city, audio, { count: IS_LITE_HW ? 18 : 30 });
+  if (traffic && traffic.setTimeOfDay) {
+    traffic.setTimeOfDay(getCityTimeOfDay() === 'day');
+  }
+  return traffic;
+}
 
 const player = {
   pos: camera.position,
@@ -1508,7 +1536,7 @@ function createProceduralTexture(type) {
 function upgradeSceneTextureQuality() {
   if (!scene || typeof scene.traverse !== 'function') return;
   const caps = (renderer && renderer.capabilities) ? renderer.capabilities : {};
-  const maxAniso = (typeof caps.getMaxAnisotropy === 'function')
+  const maxAniso = (!IS_LITE_HW && typeof caps.getMaxAnisotropy === 'function')
     ? Math.max(1, Math.min(16, caps.getMaxAnisotropy() || 1))
     : 1;
   const srgbOn = (THREE.sRGBEncoding !== undefined && renderer && renderer.outputEncoding === THREE.sRGBEncoding);
@@ -1544,8 +1572,6 @@ const crateTex = createProceduralTexture('crate');
 
 if (city) {
   // Lighting, fog and sky are owned by city.js (buildTorontoCity).
-  // Live traffic on the real street network (traffic.js)
-  if (typeof window.createTraffic === 'function') traffic = window.createTraffic(scene, city, audio, { count: 30 });
   setCityTimeOfDay(city.getTimeOfDay ? city.getTimeOfDay() : 'night', true);
   upgradeSceneTextureQuality();
   const todBadgeEl = document.getElementById('tod-badge');
@@ -3418,6 +3444,7 @@ function spawnAdditionalEnemies(count) {
 let islandLeaveUnloadTimer = 0;
 function ensureIslandCitizensPopulated() {
   if (!city) return;
+  ensureIslandsLoaded();
   if (!enemies.some(e => e.isIslandCitizen)) {
     populateCentreIslandCitizens();
   }
@@ -3605,7 +3632,11 @@ function cycleDifficulty(dir) {
   }
 }
 
-populateEnemies();
+function ensureInitialEnemiesLoaded() {
+  if (_initialEnemiesSpawned) return;
+  _initialEnemiesSpawned = true;
+  populateEnemies();
+}
 
 // ============================================================================
 // CITY EXPLORATION MISSIONS (BOXES, GUARDS & LANDMARK GOALS)
@@ -7784,6 +7815,7 @@ window.addEventListener('keydown', (e) => {
       showAnnouncement("🏙️ CHEAT: TELEPORTED TO MAINLAND FERRY DOCK (JACK LAYTON TERMINAL)!", 3200);
     } else if (dMainDock < 22) {
       // Already at mainland dock: teleport across to Dedicated Toronto Islands Archipelago!
+      ensureIslandsLoaded();
       const islFloor = islands ? islands.floorAt(0, 1200) : 0.55;
       player.pos.set(0, islFloor + EYE_HEIGHT, 1200);
       player.yaw = 0; // facing south down Avenue of the Island
@@ -7971,6 +8003,8 @@ function pauseGame() {
 }
 
 function resumeGame(usePointerLock = true) {
+  ensureTrafficLoaded();
+  ensureInitialEnemiesLoaded();
   state.isPaused = false;
   state.inGame = true;
   state.freeMouseMode = !usePointerLock;
@@ -9368,6 +9402,7 @@ function pushMinimapDot(x, z, c, r, isPlayer, initial, yaw, isMission) {
 let _minimapTimer = 1.0;
 let _hudNbrTimer = 1.0;
 let _hudSquadTimer = 1.0;
+let _menuRenderAccum = 1.0;
 const _kickOff = new THREE.Vector3();
 
 function animate(now) {
@@ -9377,6 +9412,13 @@ function animate(now) {
 
   const dt = Math.min((now - lastTime) / 1000, 0.1);
   lastTime = now;
+
+  // On Chromebook / Lite hardware, throttle background 3D rendering to ~10 FPS while the menu overlay is open
+  if (IS_LITE_HW && (!state.inGame || state.isPaused)) {
+    _menuRenderAccum += dt;
+    if (_menuRenderAccum < 0.10) return;
+    _menuRenderAccum = 0;
+  }
 
   // FPS Counter
   fpsCount++;
@@ -9438,8 +9480,16 @@ function animate(now) {
   if (state.inGame && !state.isDead && !state.isPaused && state.onSubway) {
     updateSubwayRide(simDt);
   }
+  if (!islands && IS_LITE_HW && (player.pos.z > 180 || player.pos.y > 30 || state.onFerry || state.onIsland || state.onPlane)) {
+    ensureIslandsLoaded();
+  }
   if (islands) {
-    try { islands.update(dt, player.pos); } catch (e) { console.warn('islands.update error:', e); }
+    if (IS_LITE_HW && islands.group) {
+      islands.group.visible = !!(player.pos.z > 220 || player.pos.y > 30 || state.onFerry || state.onIsland || state.onPlane);
+    }
+    if (!islands.group || islands.group.visible) {
+      try { islands.update(dt, player.pos); } catch (e) { console.warn('islands.update error:', e); }
+    }
   }
 
   // Draw Toronto GPS Minimap & Sanctuary Radar (Retina DPR scaled, throttled to ~15 Hz)
@@ -11006,6 +11056,7 @@ function resetGame() {
     const host = window.multiplayer.remotePlayers.get(window.multiplayer.hostId) || window.multiplayer.remotePlayers.values().next().value;
     if (host) syncSpawnNearHost(host);
   }
+  _initialEnemiesSpawned = true;
   populateEnemies();
   spawnCrates();
   startNextMission();
@@ -11019,7 +11070,7 @@ function resetGame() {
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
-  const pr = Math.min(window.devicePixelRatio || 1, 2.0);
+  const pr = IS_LITE_HW ? 1.0 : Math.min(window.devicePixelRatio || 1, 2.0);
   renderer.setPixelRatio(pr);
   renderer.setSize(window.innerWidth, window.innerHeight);
   if (composer) {
@@ -11356,7 +11407,22 @@ if (window.multiplayer && window.multiplayer.init) {
   window.multiplayer.init(scene, player, state);
 }
 
-// Init HUD & Start Loop
+// Init HUD & Progressive Non-Blocking World Boot
 updateHUDWeapon();
 updateHUDHealth();
-requestAnimationFrame(animate);
+
+setTimeout(() => {
+  lastTime = performance.now();
+  requestAnimationFrame(animate);
+  setTimeout(() => {
+    ensureTrafficLoaded();
+    setTimeout(() => {
+      ensureInitialEnemiesLoaded();
+      if (!IS_LITE_HW) {
+        setTimeout(() => {
+          ensureIslandsLoaded();
+        }, 180);
+      }
+    }, IS_LITE_HW ? 180 : 60);
+  }, IS_LITE_HW ? 120 : 40);
+}, IS_LITE_HW ? 80 : 16);

@@ -3113,16 +3113,37 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     return g;
   };
 
+  // ---------- Hardware profile (Chromebook / ARM / low-RAM adaptive scaling) ----------
+  const FOD_HW = (function () {
+    const ua = (typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent : '';
+    const mem = (typeof navigator !== 'undefined' && navigator.deviceMemory) ? navigator.deviceMemory : 8;
+    const cores = (typeof navigator !== 'undefined' && navigator.hardwareConcurrency) ? navigator.hardwareConcurrency : 8;
+    const qp = (typeof window !== 'undefined' && window.location && window.location.search)
+      ? new URLSearchParams(window.location.search).get('quality')
+      : null;
+    const lite = qp === 'low' || (qp !== 'ultra' && (
+      /\bCrOS\b|Linux aarch64|Linux arm|Android|Mobile/i.test(ua) || mem <= 4 || cores <= 4
+    ));
+    const hw = { lite, texScale: lite ? 0.25 : 0.5 };
+    if (typeof window !== 'undefined') window.FOD_HW = hw;
+    return hw;
+  })();
+  const LITE_HW = FOD_HW.lite;
+
   // ---------- Procedural facade textures (night city) ----------
   // One tile = 8 window columns x 8 floors -> 32 m wide x 28 m tall.
   // A bigger tile + per-building U offset hides the "checkerboard" repetition.
   const TILE_W = 32, TILE_H = 28;
   const STOREFRONT_H = 4.5; // ground-floor retail band height (m)
 
-  function canvas2(w, h) {
+  function canvas2(w, h, scale) {
     const c = document.createElement('canvas');
-    c.width = w; c.height = h;
-    return [c, c.getContext('2d')];
+    const sc = (scale !== undefined) ? scale : (LITE_HW && Math.max(w, h) >= 512 ? 0.5 : 1);
+    c.width = Math.max(4, Math.round(w * sc));
+    c.height = Math.max(4, Math.round(h * sc));
+    const ctx = c.getContext('2d');
+    if (sc !== 1 && ctx && typeof ctx.scale === 'function') ctx.scale(sc, sc);
+    return [c, ctx];
   }
 
   let _canadianFlagMat = null;
@@ -3242,9 +3263,10 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
 
   function makeFacade(style, seed) {
     const SZ = 1024, CELL = SZ / 8;
-    const [c, ctx] = canvas2(SZ, SZ);   // albedo
-    const [e, ectx] = canvas2(SZ, SZ);  // emissive (lit interiors)
-    const [r, rctx] = canvas2(SZ, SZ);  // roughness (glass glossy, walls rough)
+    const fScale = FOD_HW.texScale;
+    const [c, ctx] = canvas2(SZ, SZ, fScale);   // albedo
+    const [e, ectx] = canvas2(SZ, SZ, fScale);  // emissive (lit interiors)
+    const [r, rctx] = LITE_HW ? [null, { fillStyle: '', fillRect: function () {} }] : canvas2(SZ, SZ, fScale);
     ectx.fillStyle = '#000'; ectx.fillRect(0, 0, SZ, SZ);
 
     const S = {
@@ -3272,8 +3294,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     rctx.fillStyle = `rgb(${S.wallRough},${S.wallRough},${S.wallRough})`; rctx.fillRect(0, 0, SZ, SZ);
 
     // Wall material grain: brick courses / stone blocks / concrete stains
-    if (style === 'brick' || style === 'stone' || S.masonry) {
-      const bh = style === 'stone' ? 20 : 10, bw = style === 'stone' ? 52 : 24;
+    if (!LITE_HW && (style === 'brick' || style === 'stone' || S.masonry)) {
+      const bh = style === 'stone' ? 20 : 16, bw = style === 'stone' ? 52 : 32;
       for (let y = 0; y < SZ; y += bh) {
         for (let x = ((y / bh) % 2) ? 0 : bw / 2; x < SZ; x += bw) {
           ctx.fillStyle = `rgba(${hash(seed + x * 3 + y) > 0.5 ? '255,230,210' : '0,0,0'},${0.03 + hash(seed + x * 7 + y * 3) * 0.1})`;
@@ -3394,15 +3416,15 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     const bumpKind = S.balcony ? 'balcony' : (S.masonry ? 'masonry' : (S.full ? 'curtain' : 'stone'));
     const tex = new THREE.CanvasTexture(c);
     const etex = new THREE.CanvasTexture(e);
-    const rtex = new THREE.CanvasTexture(r);
-    const btex = getFacadeBumpTex(bumpKind, SZ);
-    [tex, etex, rtex].forEach(t => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; });
+    const rtex = r ? new THREE.CanvasTexture(r) : null;
+    const btex = LITE_HW ? null : getFacadeBumpTex(bumpKind, 512);
+    [tex, etex, rtex].forEach(t => { if (!t) return; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = LITE_HW ? 1 : 4; });
     return new THREE.MeshStandardMaterial({
       map: tex,
       emissive: 0xffffff,
       emissiveMap: etex,
       emissiveIntensity: 1.0,
-      roughness: 1.0,
+      roughness: rtex ? 1.0 : (S.wallRough / 255),
       roughnessMap: rtex,
       bumpMap: btex,
       bumpScale: S.full ? 0.08 : 0.14,
@@ -3417,8 +3439,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
   // Ground-floor shops & restaurants: vibrant 16-bay Toronto streetscape (King St bistros, St. Lawrence cafes, pubs, awnings & neon)
   function makeStorefront(seed) {
     const W = 4096, H = 384, BAY = 256, NBAYS = 16; // 16 hi-res bays per 64 m tile, 4.5 m tall
-    const [c, ctx] = canvas2(W, H);
-    const [e, ectx] = canvas2(W, H);
+    const [c, ctx] = canvas2(W, H, FOD_HW.texScale);
+    const [e, ectx] = canvas2(W, H, FOD_HW.texScale);
     ectx.fillStyle = '#000'; ectx.fillRect(0, 0, W, H);
     ctx.fillStyle = '#2d2622'; ctx.fillRect(0, 0, W, H);
 
@@ -3883,14 +3905,13 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     opts = opts || {};
     const cw = opts.w || (lines.length > 1 ? 1024 : 512);
     const ch = opts.h || (lines.length > 1 ? 256 : 128);
+    const lScale = LITE_HW ? 0.35 : 0.5;
     const cacheKey = opts.noCache ? '' : `${cw}x${ch}|${lines.join('\n')}|${opts.bg || ''}|${opts.fg || ''}|${opts.subFg || ''}|${opts.borderColor || ''}|${opts.border !== false}|${opts.size || ''}`;
     if (cacheKey && _labelTexCache.has(cacheKey)) return _labelTexCache.get(cacheKey);
-    const c = document.createElement('canvas');
-    c.width = cw; c.height = ch;
-    const ctx = c.getContext('2d');
+    const [c, ctx] = canvas2(cw, ch, opts.noCache ? (LITE_HW ? 0.5 : 1) : lScale);
     drawLabelToCtx(ctx, 0, 0, cw, ch, lines, opts);
     const t = new THREE.CanvasTexture(c);
-    t.anisotropy = 4;
+    t.anisotropy = LITE_HW ? 1 : 4;
     if (cacheKey) _labelTexCache.set(cacheKey, t);
     return t;
   }
@@ -4903,8 +4924,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     const MOON_DIR = new THREE.Vector3(-0.45, 0.8, -0.38).normalize();
     const ACTIVE_LIGHT_DIR = MOON_DIR.clone();
     const moon = new THREE.DirectionalLight(0xbcd0f0, 0.70);
-    moon.castShadow = true;
-    moon.shadow.mapSize.set(2048, 2048);
+    moon.castShadow = !LITE_HW;
+    moon.shadow.mapSize.set(LITE_HW ? 512 : 2048, LITE_HW ? 512 : 2048);
     moon.shadow.camera.left = -75; moon.shadow.camera.right = 75;
     moon.shadow.camera.top = 75; moon.shadow.camera.bottom = -75;
     moon.shadow.camera.near = 25; moon.shadow.camera.far = 1350;
@@ -5027,8 +5048,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       pushFace(c000, c100, c101, c001, [0, -1, 0]);
     }
 
-    // Batched SignAtlas pool (packs static street/shop/landmark signs into 2048x2048 RGBA atlases)
-    const SIGN_ATLAS_W = 2048, SIGN_ATLAS_H = 2048, SIGN_CELL_W = 512, SIGN_CELL_H = 128;
+    // Batched SignAtlas pool (packs static street/shop/landmark signs into RGBA atlases)
+    const SIGN_ATLAS_W = LITE_HW ? 1024 : 2048, SIGN_ATLAS_H = LITE_HW ? 1024 : 2048, SIGN_CELL_W = LITE_HW ? 256 : 512, SIGN_CELL_H = LITE_HW ? 64 : 128;
     const SIGN_COLS = SIGN_ATLAS_W / SIGN_CELL_W, SIGN_ROWS = SIGN_ATLAS_H / SIGN_CELL_H;
     const SIGN_PER_SHEET = SIGN_COLS * SIGN_ROWS;
     const signSheets = [];
@@ -5043,7 +5064,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       if (signSlotCache.has(key)) return signSlotCache.get(key);
       let sheet = signSheets.length ? signSheets[signSheets.length - 1] : null;
       if (!sheet || sheet.count >= SIGN_PER_SHEET) {
-        const [canvas, ctx] = canvas2(SIGN_ATLAS_W, SIGN_ATLAS_H);
+        const [canvas, ctx] = canvas2(SIGN_ATLAS_W, SIGN_ATLAS_H, 1);
         ctx.fillStyle = '#0f172a';
         ctx.fillRect(0, 0, SIGN_ATLAS_W, SIGN_ATLAS_H);
         sheet = { canvas, ctx, count: 0, gb: new GeoBuilder() };
@@ -6195,17 +6216,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
 
     const wallBuckets = new Map();
     const WALL_CELL = 24;
-    function wallBucketKeys(x0, z0, x1, z1) {
-      const gx0 = Math.floor(Math.min(x0, x1) / WALL_CELL) - 1;
-      const gx1 = Math.floor(Math.max(x0, x1) / WALL_CELL) + 1;
-      const gz0 = Math.floor(Math.min(z0, z1) / WALL_CELL) - 1;
-      const gz1 = Math.floor(Math.max(z0, z1) / WALL_CELL) + 1;
-      const keys = [];
-      for (let gx = gx0; gx <= gx1; gx++) {
-        for (let gz = gz0; gz <= gz1; gz++) keys.push(gx + ',' + gz);
-      }
-      return keys;
-    }
+    let _wallStamp = 0;
+    function wallCellInt(gx, gz) { return (gx * 65536) + (gz & 0xffff); }
     function analyzeCoplanarConflicts(candPts, yLo, yHi) {
       let maxSpan = 0, score = 0;
       for (let i = 0; i < candPts.length; i++) {
@@ -6213,32 +6225,35 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         const dx = bx - ax, dz = bz - az, len = Math.hypot(dx, dz);
         if (len < 0.2) continue;
         const nx = dz / len, nz = -dx / len, tx = dx / len, tz = dz / len;
-        const seen = new Set();
-        const keys = wallBucketKeys(ax, az, bx, bz);
-        for (let ki = 0; ki < keys.length; ki++) {
-          const arr = wallBuckets.get(keys[ki]);
-          if (!arr) continue;
-          for (let wi = 0; wi < arr.length; wi++) {
-            const w = arr[wi];
-            if (seen.has(w)) continue;
-            seen.add(w);
-            const hOv = Math.min(yHi, w.y1) - Math.max(yLo, w.y0);
-            if (hOv <= 0.05) continue;
-            if (nx * w.nx + nz * w.nz < 0.992) continue;
-            const t0 = (w.ax - ax) * tx + (w.az - az) * tz;
-            const t1 = (w.bx - ax) * tx + (w.bz - az) * tz;
-            const sMin = Math.max(0, Math.min(t0, t1)), sMax = Math.min(len, Math.max(t0, t1));
-            const tOv = sMax - sMin;
-            if (tOv <= 0.2) continue;
-            const d0 = (w.ax - ax) * nx + (w.az - az) * nz;
-            const d1 = (w.bx - ax) * nx + (w.bz - az) * nz;
-            const dt = t1 - t0;
-            const o0 = Math.abs(dt) > 1e-4 ? d0 + (d1 - d0) * ((sMin - t0) / dt) : d0;
-            const o1 = Math.abs(dt) > 1e-4 ? d0 + (d1 - d0) * ((sMax - t0) / dt) : d1;
-            const minOverlapDist = (o0 * o1 <= 0) ? 0 : Math.min(Math.abs(o0), Math.abs(o1));
-            if (minOverlapDist > 0.22) continue;
-            score += tOv * hOv;
-            if ((w.y1 - w.y0) > maxSpan) maxSpan = w.y1 - w.y0;
+        const stamp = ++_wallStamp;
+        const gx0 = Math.floor(Math.min(ax, bx) / WALL_CELL) - 1, gx1 = Math.floor(Math.max(ax, bx) / WALL_CELL) + 1;
+        const gz0 = Math.floor(Math.min(az, bz) / WALL_CELL) - 1, gz1 = Math.floor(Math.max(az, bz) / WALL_CELL) + 1;
+        for (let gx = gx0; gx <= gx1; gx++) {
+          for (let gz = gz0; gz <= gz1; gz++) {
+            const arr = wallBuckets.get(wallCellInt(gx, gz));
+            if (!arr) continue;
+            for (let wi = 0; wi < arr.length; wi++) {
+              const w = arr[wi];
+              if (w._q === stamp) continue;
+              w._q = stamp;
+              const hOv = Math.min(yHi, w.y1) - Math.max(yLo, w.y0);
+              if (hOv <= 0.05) continue;
+              if (nx * w.nx + nz * w.nz < 0.992) continue;
+              const t0 = (w.ax - ax) * tx + (w.az - az) * tz;
+              const t1 = (w.bx - ax) * tx + (w.bz - az) * tz;
+              const sMin = Math.max(0, Math.min(t0, t1)), sMax = Math.min(len, Math.max(t0, t1));
+              const tOv = sMax - sMin;
+              if (tOv <= 0.2) continue;
+              const d0 = (w.ax - ax) * nx + (w.az - az) * nz;
+              const d1 = (w.bx - ax) * nx + (w.bz - az) * nz;
+              const dt = t1 - t0;
+              const o0 = Math.abs(dt) > 1e-4 ? d0 + (d1 - d0) * ((sMin - t0) / dt) : d0;
+              const o1 = Math.abs(dt) > 1e-4 ? d0 + (d1 - d0) * ((sMax - t0) / dt) : d1;
+              const minOverlapDist = (o0 * o1 <= 0) ? 0 : Math.min(Math.abs(o0), Math.abs(o1));
+              if (minOverlapDist > 0.22) continue;
+              score += tOv * hOv;
+              if ((w.y1 - w.y0) > maxSpan) maxSpan = w.y1 - w.y0;
+            }
           }
         }
       }
@@ -6249,48 +6264,61 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       let rects = [{ s0: 0, s1: len, y0: yLo, y1: yHi }];
       if (len < 0.25 || yHi - yLo < 0.25) return [];
       const nx = dz / len, nz = -dx / len, tx = dx / len, tz = dz / len;
-      const seen = new Set();
-      const keys = wallBucketKeys(ax, az, bx, bz);
-      for (let ki = 0; ki < keys.length; ki++) {
-        const arr = wallBuckets.get(keys[ki]);
-        if (!arr) continue;
-        for (let wi = 0; wi < arr.length; wi++) {
-          const w = arr[wi];
-          if (seen.has(w)) continue;
-          seen.add(w);
-          const cy0 = Math.max(yLo, w.y0), cy1 = Math.min(yHi, w.y1);
-          if (cy1 - cy0 <= 0.18) continue;
-          if (nx * w.nx + nz * w.nz < 0.992) continue;
-          const t0 = (w.ax - ax) * tx + (w.az - az) * tz;
-          const t1 = (w.bx - ax) * tx + (w.bz - az) * tz;
-          const bs0 = Math.max(0, Math.min(t0, t1)), bs1 = Math.min(len, Math.max(t0, t1));
-          if (bs1 - bs0 <= 0.25) continue;
-          const d0 = (w.ax - ax) * nx + (w.az - az) * nz;
-          const d1 = (w.bx - ax) * nx + (w.bz - az) * nz;
-          const dt = t1 - t0;
-          const o0 = Math.abs(dt) > 1e-4 ? d0 + (d1 - d0) * ((bs0 - t0) / dt) : d0;
-          const o1 = Math.abs(dt) > 1e-4 ? d0 + (d1 - d0) * ((bs1 - t0) / dt) : d1;
-          const minOverlapDist = (o0 * o1 <= 0) ? 0 : Math.min(Math.abs(o0), Math.abs(o1));
-          if (minOverlapDist > 0.16) continue;
-          const next = [];
-          for (let ri = 0; ri < rects.length; ri++) {
-            const r = rects[ri];
-            const is0 = Math.max(r.s0, bs0), is1 = Math.min(r.s1, bs1);
-            const iy0 = Math.max(r.y0, w.y0), iy1 = Math.min(r.y1, w.y1);
-            if (is1 - is0 <= 0.25 || iy1 - iy0 <= 0.18) { next.push(r); continue; }
-            if (is0 - r.s0 > 0.25) next.push({ s0: r.s0, s1: is0, y0: r.y0, y1: r.y1 });
-            if (r.s1 - is1 > 0.25) next.push({ s0: is1, s1: r.s1, y0: r.y0, y1: r.y1 });
-            if (iy0 - r.y0 > 0.25) next.push({ s0: is0, s1: is1, y0: r.y0, y1: iy0 });
-            if (r.y1 - iy1 > 0.25) next.push({ s0: is0, s1: is1, y0: iy1, y1: r.y1 });
+      const stamp = ++_wallStamp;
+      const gx0 = Math.floor(Math.min(ax, bx) / WALL_CELL) - 1, gx1 = Math.floor(Math.max(ax, bx) / WALL_CELL) + 1;
+      const gz0 = Math.floor(Math.min(az, bz) / WALL_CELL) - 1, gz1 = Math.floor(Math.max(az, bz) / WALL_CELL) + 1;
+      for (let gx = gx0; gx <= gx1; gx++) {
+        for (let gz = gz0; gz <= gz1; gz++) {
+          const arr = wallBuckets.get(wallCellInt(gx, gz));
+          if (!arr) continue;
+          for (let wi = 0; wi < arr.length; wi++) {
+            const w = arr[wi];
+            if (w._q === stamp) continue;
+            w._q = stamp;
+            const cy0 = Math.max(yLo, w.y0), cy1 = Math.min(yHi, w.y1);
+            if (cy1 - cy0 <= 0.18) continue;
+            if (nx * w.nx + nz * w.nz < 0.992) continue;
+            const t0 = (w.ax - ax) * tx + (w.az - az) * tz;
+            const t1 = (w.bx - ax) * tx + (w.bz - az) * tz;
+            const bs0 = Math.max(0, Math.min(t0, t1)), bs1 = Math.min(len, Math.max(t0, t1));
+            if (bs1 - bs0 <= 0.25) continue;
+            const d0 = (w.ax - ax) * nx + (w.az - az) * nz;
+            const d1 = (w.bx - ax) * nx + (w.bz - az) * nz;
+            const dt = t1 - t0;
+            const o0 = Math.abs(dt) > 1e-4 ? d0 + (d1 - d0) * ((bs0 - t0) / dt) : d0;
+            const o1 = Math.abs(dt) > 1e-4 ? d0 + (d1 - d0) * ((bs1 - t0) / dt) : d1;
+            const minOverlapDist = (o0 * o1 <= 0) ? 0 : Math.min(Math.abs(o0), Math.abs(o1));
+            if (minOverlapDist > 0.16) continue;
+            const next = [];
+            for (let ri = 0; ri < rects.length; ri++) {
+              const r = rects[ri];
+              const is0 = Math.max(r.s0, bs0), is1 = Math.min(r.s1, bs1);
+              const iy0 = Math.max(r.y0, w.y0), iy1 = Math.min(r.y1, w.y1);
+              if (is1 - is0 <= 0.25 || iy1 - iy0 <= 0.18) { next.push(r); continue; }
+              if (is0 - r.s0 > 0.25) next.push({ s0: r.s0, s1: is0, y0: r.y0, y1: r.y1 });
+              if (r.s1 - is1 > 0.25) next.push({ s0: is1, s1: r.s1, y0: r.y0, y1: r.y1 });
+              if (iy0 - r.y0 > 0.25) next.push({ s0: is0, s1: is1, y0: r.y0, y1: iy0 });
+              if (r.y1 - iy1 > 0.25) next.push({ s0: is0, s1: is1, y0: iy1, y1: r.y1 });
+            }
+            rects = next;
+            if (!rects.length) return rects;
           }
-          rects = next;
-          if (!rects.length) return rects;
         }
       }
       return rects;
     }
-    function emitClippedWallQuads(targetGB, ax, az, dx, dz, len, nx, nz, yLo, yHi, uBase, uScale, vScale) {
+    function emitClippedWallQuads(targetGB, ax, az, dx, dz, len, nx, nz, yLo, yHi, uBase, uScale, vScale, fast) {
       if (yHi - yLo < 0.25) return;
+      if (fast) {
+        const u0 = uBase / uScale, u1 = (uBase + len) / uScale;
+        const v0 = yLo / vScale, v1 = yHi / vScale;
+        const a = targetGB.vert(ax, yLo, az, nx, 0, nz, u0, v0);
+        const b = targetGB.vert(ax + dx, yLo, az + dz, nx, 0, nz, u1, v0);
+        const c = targetGB.vert(ax + dx, yHi, az + dz, nx, 0, nz, u1, v1);
+        const d = targetGB.vert(ax, yHi, az, nx, 0, nz, u0, v1);
+        targetGB.quad(a, d, c, b);
+        return;
+      }
       const rects = subtractWallRects(ax, az, ax + dx, az + dz, yLo, yHi);
       for (let ri = 0; ri < rects.length; ri++) {
         const r = rects[ri];
@@ -6311,12 +6339,16 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         const [ax, az] = candPts[i], [bx, bz] = candPts[(i + 1) % candPts.length];
         const dx = bx - ax, dz = bz - az, len = Math.hypot(dx, dz);
         if (len < 0.2) continue;
-        const rec = { ax, az, bx, bz, nx: dz / len, nz: -dx / len, y0: yLo, y1: yHi };
-        const keys = wallBucketKeys(ax, az, bx, bz);
-        for (let ki = 0; ki < keys.length; ki++) {
-          let arr = wallBuckets.get(keys[ki]);
-          if (!arr) { arr = []; wallBuckets.set(keys[ki], arr); }
-          arr.push(rec);
+        const rec = { ax, az, bx, bz, nx: dz / len, nz: -dx / len, y0: yLo, y1: yHi, _q: 0 };
+        const gx0 = Math.floor(Math.min(ax, bx) / WALL_CELL) - 1, gx1 = Math.floor(Math.max(ax, bx) / WALL_CELL) + 1;
+        const gz0 = Math.floor(Math.min(az, bz) / WALL_CELL) - 1, gz1 = Math.floor(Math.max(az, bz) / WALL_CELL) + 1;
+        for (let gx = gx0; gx <= gx1; gx++) {
+          for (let gz = gz0; gz <= gz1; gz++) {
+            const k = wallCellInt(gx, gz);
+            let arr = wallBuckets.get(k);
+            if (!arr) { arr = []; wallBuckets.set(k, arr); }
+            arr.push(rec);
+          }
         }
       }
     }
@@ -6331,12 +6363,15 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       const shops = opts.shops !== false && y0 === 0 && baseH >= 9;
       const hasPodium = !!opts.podiumStyle && y0 === 0 && baseH > 24;
       const podiumH = hasPodium ? Math.min(16.5, baseH * 0.42) : 0;
-      const initConf = analyzeCoplanarConflicts(pts, y0, vh);
+      const fastWall = !!opts.fastWall;
+      const initConf = fastWall ? { score: 0, maxSpan: 0 } : analyzeCoplanarConflicts(pts, y0, vh);
       if (initConf.score > 0 && origArea > 4) {
         const span = vh - y0;
-        const tryOffs = span > initConf.maxSpan + 0.2
-          ? [-0.26, 0.26, -0.41, 0.41, -0.57, 0.57, -0.73, 0.73, 1.04]
-          : [0.26, 0.41, 0.57, -0.26, 0.73, 0.91, -0.41, 1.15, -0.57];
+        const tryOffs = LITE_HW
+          ? (span > initConf.maxSpan + 0.2 ? [-0.26, 0.26, -0.57] : [0.26, 0.57, -0.26])
+          : (span > initConf.maxSpan + 0.2
+            ? [-0.26, 0.26, -0.41, 0.41, -0.57, 0.57, -0.73, 0.73, 1.04]
+            : [0.26, 0.41, 0.57, -0.26, 0.73, 0.91, -0.41, 1.15, -0.57]);
         let bestPts = pts, bestScore = initConf.score, bestOff = 0;
         for (let oi = 0; oi < tryOffs.length; oi++) {
           const off = tryOffs[oi];
@@ -6373,12 +6408,12 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         const len = Math.hypot(dx, dz);
         if (len < 0.01) continue;
         const nx = dz / len, nz = -dx / len; // outward for CCW (positive area)
-        emitClippedWallQuads(gb, ax, az, dx, dz, len, nx, nz, fy0, h, u, TILE_W, TILE_H);
-        if (podGB) emitClippedWallQuads(podGB, ax, az, dx, dz, len, nx, nz, shops ? STOREFRONT_H : 0, podiumH, u, TILE_W, TILE_H);
-        if (shops) emitClippedWallQuads(shopGB, ax, az, dx, dz, len, nx, nz, 0, STOREFRONT_H, u, 64, STOREFRONT_H);
+        emitClippedWallQuads(gb, ax, az, dx, dz, len, nx, nz, fy0, h, u, TILE_W, TILE_H, fastWall);
+        if (podGB) emitClippedWallQuads(podGB, ax, az, dx, dz, len, nx, nz, shops ? STOREFRONT_H : 0, podiumH, u, TILE_W, TILE_H, fastWall);
+        if (shops) emitClippedWallQuads(shopGB, ax, az, dx, dz, len, nx, nz, 0, STOREFRONT_H, u, 64, STOREFRONT_H, fastWall);
         u += len;
       }
-      registerWallFootprint(pts, y0, h);
+      if (!fastWall) registerWallFootprint(pts, y0, h);
       gb.color = [1, 1, 1];
       if (podGB) {
         podGB.color = [1, 1, 1];
@@ -7197,7 +7232,15 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     }
 
     const elevatedMotorways = MAP.roads.filter(r => r.l >= 3 && (r.t === 'motorway' || r.t === 'motorway_link'));
+    let _gardMinZ = Infinity, _gardMaxZ = -Infinity;
+    for (const road of elevatedMotorways) {
+      for (let i = 1; i < road.p.length; i += 2) {
+        if (road.p[i] < _gardMinZ) _gardMinZ = road.p[i];
+        if (road.p[i] > _gardMaxZ) _gardMaxZ = road.p[i];
+      }
+    }
     function nearGardiner(x, z, pad) {
+      if (z < _gardMinZ - pad || z > _gardMaxZ + pad) return false;
       const r2 = pad * pad;
       for (const road of elevatedMotorways) {
         const p = road.p;
@@ -7216,17 +7259,24 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     const DATA = MAP.dataBounds ? { x0: MAP.dataBounds[0][0], z0: MAP.dataBounds[0][1], x1: MAP.dataBounds[1][0], z1: MAP.dataBounds[1][1] } : null;
     const inRealData = (x, z) => !!DATA && x > DATA.x0 && x < DATA.x1 && z > DATA.z0 && z < DATA.z1;
     function lotIsFree(rect) {
-      const probes = rect.slice();
+      const [cx, cz] = centroid(rect);
+      const probes = [[cx, cz]];
       for (let i = 0; i < rect.length; i++) {
         const a = rect[i], b = rect[(i + 1) % rect.length];
+        probes.push(a);
         probes.push([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]);
-        probes.push([(a[0] * 3 + b[0]) / 4, (a[1] * 3 + b[1]) / 4]);
-        probes.push([(a[0] + b[0] * 3) / 4, (a[1] + b[1] * 3) / 4]);
+        if (!LITE_HW) {
+          probes.push([(a[0] * 3 + b[0]) / 4, (a[1] * 3 + b[1]) / 4]);
+          probes.push([(a[0] + b[0] * 3) / 4, (a[1] + b[1] * 3) / 4]);
+        }
       }
-      const [cx, cz] = centroid(rect);
-      probes.push([cx, cz]);
-      if (probes.some(([x, z]) => isReservedParkOrLandmark(x, z))) return false;
-      return probes.every(([x, z]) => !onRoad(x, z, -2.5, -1) && !nearGardiner(x, z, 18) && canMoveTo(x, z, 0.8) && !nearSanctuary(x, z) && (x < TRENCH_X0 - 20 || x > TRENCH_X1 + 20 || Math.abs(z - getUsrcZ(x)) > TRENCH_HALF_W + 6));
+      for (let i = 0; i < probes.length; i++) {
+        const x = probes[i][0], z = probes[i][1];
+        if (isReservedParkOrLandmark(x, z) || nearSanctuary(x, z)) return false;
+        if (x >= TRENCH_X0 - 20 && x <= TRENCH_X1 + 20 && Math.abs(z - getUsrcZ(x)) <= TRENCH_HALF_W + 6) return false;
+        if (nearGardiner(x, z, 18) || onRoad(x, z, -2.5, -1) || !canMoveTo(x, z, 0.8)) return false;
+      }
+      return true;
     }
     function addLot(rect, h, style, seed, opts) {
       if (polyArea(rect) < 0) rect.reverse();
@@ -7238,7 +7288,8 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         tint: bTint,
         podiumStyle: podStyle,
         podiumTint: wantPod ? buildingColorTint(podStyle, lcx, lcz, seed + 13) : null,
-        uOff: hash(seed * 7.7) * TILE_W
+        uOff: hash(seed * 7.7) * TILE_W,
+        fastWall: true
       }, opts || {}));
       addSolid({ type: 'poly', pts: rect, h });
       if (h > 70 && roofLights.length < 90) { roofLights.push(new THREE.Vector3(lcx, h + 1.5, lcz)); }
@@ -7568,7 +7619,20 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       });
       // Interior Downtown Superblock Courtyard Infill (fills hollow grey blocks between widely spaced avenues)
       const GA = -17 * Math.PI / 180, gca = Math.cos(GA), gsa = Math.sin(GA);
-      const CPITCH = 44;
+      const CPITCH = LITE_HW ? 68 : 44;
+      const hasPolyOverlap = (x0, z0, x1, z1) => {
+        for (let cx = Math.floor(x0 / CELL); cx <= Math.floor(x1 / CELL); cx++) {
+          for (let cz = Math.floor(z0 / CELL); cz <= Math.floor(z1 / CELL); cz++) {
+            const arr = grid.get(cellKey(cx, cz));
+            if (!arr) continue;
+            for (let si = 0; si < arr.length; si++) {
+              const o = arr[si];
+              if (o.type === 'poly' && !(x1 < o.bb[0] || x0 > o.bb[2] || z1 < o.bb[1] || z0 > o.bb[3])) return true;
+            }
+          }
+        }
+        return false;
+      };
       for (let gu = -2750; gu <= 2250; gu += CPITCH) {
         for (let gv = -2100; gv <= 1100; gv += CPITCH) {
           const jx = gu * gca - gv * gsa + (hash(gu * 0.19 + gv * 0.31) - 0.5) * 10;
@@ -7582,13 +7646,13 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           const rect = [[-sx * 0.5, sz * 0.5], [sx * 0.5, sz * 0.5], [sx * 0.5, -sz * 0.5], [-sx * 0.5, -sz * 0.5]]
             .map(([u, v]) => [jx + u * gca - v * gsa, jz + u * gsa + v * gca]);
           if (wellBlockPoly && rect.some(([rx, rz]) => pointInPoly(rx, rz, wellBlockPoly))) continue;
-          if (!lotIsFree(rect)) continue;
           let bx0 = Infinity, bz0 = Infinity, bx1 = -Infinity, bz1 = -Infinity;
           rect.forEach(([rx, rz]) => {
             if (rx < bx0) bx0 = rx; if (rx > bx1) bx1 = rx;
             if (rz < bz0) bz0 = rz; if (rz > bz1) bz1 = rz;
           });
-          if (solids.some(o => o.type === 'poly' && !(bx1 + 5 < o.bb[0] || bx0 - 5 > o.bb[2] || bz1 + 5 < o.bb[1] || bz0 - 5 > o.bb[3]))) continue;
+          if (hasPolyOverlap(bx0 - 5, bz0 - 5, bx1 + 5, bz1 + 5)) continue;
+          if (!lotIsFree(rect)) continue;
           const rSeed = jx * 2.1 + jz * 3.7;
           const h = 10 + hash(rSeed * 4.3) * 18;
           const style = ['victorian', 'brick', 'warehouse', 'stone'][Math.floor(hash(rSeed * 6.1) * 4)];
@@ -7974,12 +8038,25 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     // ---------- Distant skyline: procedural blocks beyond the OSM data ----------
     // The real data covers ~1.4 x 0.95 km; without this the city just stops at the fog.
     {
-      const PITCH = 68, REACH = 650;
+      const PITCH = LITE_HW ? 92 : 68, REACH = 650;
       let n = 0;
       // Lay the filler out on Toronto's street grid (rotated ~17°) instead of an axis-aligned one
       const GA = -17 * Math.PI / 180, gca = Math.cos(GA), gsa = Math.sin(GA);
       const gcx = (minX + maxX) / 2, gcz = (minZ + maxZ) / 2;
       const GH = Math.hypot(maxX - minX, maxZ - minZ) / 2 + REACH;
+      const skyPolyOverlap = (x0, z0, x1, z1) => {
+        for (let cx = Math.floor(x0 / CELL); cx <= Math.floor(x1 / CELL); cx++) {
+          for (let cz = Math.floor(z0 / CELL); cz <= Math.floor(z1 / CELL); cz++) {
+            const arr = grid.get(cellKey(cx, cz));
+            if (!arr) continue;
+            for (let si = 0; si < arr.length; si++) {
+              const o = arr[si];
+              if (o.type === 'poly' && !(x1 < o.bb[0] || x0 > o.bb[2] || z1 < o.bb[1] || z0 > o.bb[3])) return true;
+            }
+          }
+        }
+        return false;
+      };
       for (let gu = -GH; gu < GH; gu += PITCH) {
         for (let gv = -GH; gv < GH; gv += PITCH) {
           const gx = gcx + gu * gca - gv * gsa, gz = gcz + gu * gsa + gv * gca;
@@ -7992,7 +8069,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           if (onRoad(jx, jz, -Math.max(sx, sz) * 0.75, -1)) continue;
           if (jx > TRENCH_X0 - 40 && jx < TRENCH_X1 + 40 && Math.abs(jz - getUsrcZ(jx)) < TRENCH_HALF_W + Math.max(sx, sz) * 0.75) continue;  // keep the rail cut open
           if (reservedLines.some(L => { const dx = L.b[0] - L.a[0], dz = L.b[1] - L.a[1], L2 = dx * dx + dz * dz; const t = Math.max(0, Math.min(1, ((jx - L.a[0]) * dx + (jz - L.a[1]) * dz) / L2)); return Math.hypot(L.a[0] + dx * t - jx, L.a[1] + dz * t - jz) < L.hw + Math.max(sx, sz) * 0.71; })) continue;
-          if (solids.some(o => o.type === 'poly' && !(jx + sx / 2 + 4 < o.bb[0] || jx - sx / 2 - 4 > o.bb[2] || jz + sz / 2 + 4 < o.bb[1] || jz - sz / 2 - 4 > o.bb[3]))) continue;
+          if (skyPolyOverlap(jx - sx / 2 - 4, jz - sz / 2 - 4, jx + sx / 2 + 4, jz + sz / 2 + 4)) continue;
           // taller toward the Financial District (north-east of the origin)
           const fidi = Math.exp(-(((jx - 350) ** 2) + ((jz + 600) ** 2)) / (2 * 380 * 380));
           const r = hash(jx * 1.31 + jz * 0.77);
@@ -8001,7 +8078,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           const rect = [[-sx / 2, sz / 2], [sx / 2, sz / 2], [sx / 2, -sz / 2], [-sx / 2, -sz / 2]].map(([u, v]) => [jx + u * gca - v * gsa, jz + u * gsa + v * gca]);
           if (polyArea(rect) < 0) rect.reverse();
           const tb = 0.7 + hash(jx * 3.3) * 0.35;
-          addBuilding(rect, h, style, 0, { tint: [tb, tb, tb], uOff: hash(jz) * TILE_W, shops: false, roof: false });
+          addBuilding(rect, h, style, 0, { tint: [tb, tb, tb], uOff: hash(jz) * TILE_W, shops: false, roof: false, fastWall: true });
           addSolid({ type: 'poly', pts: rect, h });
           if (h > 70) roofLights.push(new THREE.Vector3(jx, h + 1.5, jz));
           n++;
@@ -19909,7 +19986,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         // Recycling and waste bins
         const trash1 = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.4, 1.1, 10), islandRedMat);
         trash1.position.set(248, 0.55, 1212);
-        const trash2 = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.4, 1.1, islandCyanMat.color.getHex()), islandCyanMat);
+        const trash2 = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.4, 1.1, 10), islandCyanMat);
         trash2.position.set(250, 0.55, 1212);
         ppBuilding.add(trash1, trash2);
 
@@ -20391,7 +20468,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     }
 
     // ---------- Minimap pre-render ----------
-    const MM_SCALE = 0.6; // px per metre
+    const MM_SCALE = LITE_HW ? 0.35 : 0.6; // px per metre
     const mmMinX = -2350, mmMaxX = 1360;
     const mmMinZ = -1180, mmMaxZ = 1650;
     const mmCanvas = document.createElement('canvas');
@@ -22193,8 +22270,9 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
 
         // 8F. Low-Poly Gabled Toronto Neighbourhood Fabric (Annex, Rosedale, Riverdale, Leslieville, Beaches, High Park West - 1 Draw Call!)
         const resSpots = [];
-        for (let gz = -4320; gz <= 420; gz += 62) {
-          for (let gx = -4400; gx <= 4160; gx += 62) {
+        const RPITCH = LITE_HW ? 105 : 62;
+        for (let gz = -4320; gz <= 420; gz += RPITCH) {
+          for (let gx = -4400; gx <= 4160; gx += RPITCH) {
             const jx = gx + (hash(gx * 0.13 + gz * 0.31) - 0.5) * 26;
             const jz = gz + (hash(gx * 0.29 + gz * 0.17) - 0.5) * 26;
             if (!isClearOuterSite(jx, jz, 28)) continue;
@@ -24232,6 +24310,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
 
     const Z_BASE = 1200;
     const Z = o => Z_BASE + o;
+    const LITE_ISL = !!(typeof window !== 'undefined' && window.FOD_HW && window.FOD_HW.lite);
     const GROUND_Y = 0.55; // walking height on the islands
     const WATER_Y = -0.65; // matches city.js Toronto Inner Harbour water level
     let renderedOsmTowers = 0;
@@ -24371,12 +24450,12 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       return x < -880 && z < Z(-35);
     }
 
-    function terrainH(x, z) {
-      const L = landField(x, z);
+    function terrainH(x, z, preL, preZS) {
+      const L = (preL !== undefined) ? preL : landField(x, z);
       if (L <= 0) return WATER_Y + Math.max(-1.85, L * 0.30);
       let h = WATER_Y + Math.min(GROUND_Y - WATER_Y, L * 0.38);
       if (x > -905 && !isAirport(x, z)) {
-        const s = zS(x) - z; // dunes behind the lake beaches
+        const s = ((preZS !== undefined) ? preZS : zS(x)) - z; // dunes behind the lake beaches
         if (s > 0 && s < 75) {
           const dune = Math.max(0, fbm(x / 26, z / 26) - 0.42) * 2.8;
           h += dune * Math.min(1, s / 14) * Math.min(1, (75 - s) / 25);
@@ -24584,12 +24663,16 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         function walkMerge(node, isRoot) {
           if (!node || (!isRoot && node.userData && node.userData.noMerge)) return;
           if (node.isMesh && !node.isInstancedMesh && node.geometry && node.material && !Array.isArray(node.material) && !node.material.map) {
-            const g = node.geometry.index ? node.geometry.toNonIndexed() : node.geometry.clone();
-            g.applyMatrix4(node.matrixWorld);
-            let list = buckets.get(node.material);
-            if (!list) { list = []; buckets.set(node.material, list); }
-            list.push(g);
-            mergedNodes.push(node);
+            const baseGeo = node.geometry.index
+              ? (node.geometry._nonIdx || (node.geometry._nonIdx = node.geometry.toNonIndexed()))
+              : node.geometry;
+            const pos = baseGeo.getAttribute('position');
+            if (pos && pos.count > 0) {
+              let list = buckets.get(node.material);
+              if (!list) { list = []; buckets.set(node.material, list); }
+              list.push({ geo: baseGeo, mw: node.matrixWorld });
+              mergedNodes.push(node);
+            }
           }
           if (node.children) {
             for (let i = 0; i < node.children.length; i++) walkMerge(node.children[i], false);
@@ -24597,21 +24680,18 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         }
         walkMerge(grp, true);
         if (!buckets.size) return;
-        for (let i = 0; i < mergedNodes.length; i++) {
-          const n = mergedNodes[i];
-          if (n.parent) n.parent.remove(n);
-        }
         const invParent = new THREE.Matrix4();
         const hasInv = typeof invParent.copy === 'function' && typeof invParent.invert === 'function';
         if (hasInv) invParent.copy(grp.matrixWorld).invert();
-        buckets.forEach((geos, mat) => {
+        const relMat = new THREE.Matrix4();
+        const normMat = new THREE.Matrix3();
+        buckets.forEach((entries, mat) => {
           let totalVerts = 0;
           let allHaveUv = true;
-          for (let i = 0; i < geos.length; i++) {
-            if (hasInv) geos[i].applyMatrix4(invParent);
-            const pos = geos[i].getAttribute('position');
-            const uv = geos[i].getAttribute('uv');
-            if (!pos) continue;
+          for (let i = 0; i < entries.length; i++) {
+            const g = entries[i].geo;
+            const pos = g.getAttribute('position');
+            const uv = g.getAttribute('uv');
             totalVerts += pos.count;
             if (!uv || uv.array.length !== pos.count * 2) allHaveUv = false;
           }
@@ -24621,27 +24701,64 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           const mergedUv = allHaveUv ? new Float32Array(totalVerts * 2) : null;
           let offset = 0;
           let uvOff = 0;
-          for (let i = 0; i < geos.length; i++) {
-            const pos = geos[i].getAttribute('position');
-            const nor = geos[i].getAttribute('normal');
-            const uv = geos[i].getAttribute('uv');
-            if (!pos) { geos[i].dispose(); continue; }
-            mergedPos.set(pos.array, offset);
-            if (nor && nor.array.length === pos.array.length) mergedNor.set(nor.array, offset);
-            if (mergedUv && uv) mergedUv.set(uv.array, uvOff);
-            offset += pos.count * 3;
+          for (let i = 0; i < entries.length; i++) {
+            const g = entries[i].geo;
+            if (hasInv) relMat.multiplyMatrices(invParent, entries[i].mw);
+            else relMat.copy(entries[i].mw);
+            const me = relMat.elements;
+            const m0 = me[0], m1 = me[1], m2 = me[2],
+                  m4 = me[4], m5 = me[5], m6 = me[6],
+                  m8 = me[8], m9 = me[9], m10 = me[10],
+                  m12 = me[12], m13 = me[13], m14 = me[14];
+            normMat.getNormalMatrix(relMat);
+            const ne = normMat.elements;
+            const n0 = ne[0], n1 = ne[1], n2 = ne[2],
+                  n3 = ne[3], n4 = ne[4], n5 = ne[5],
+                  n6 = ne[6], n7 = ne[7], n8 = ne[8];
+            const pos = g.getAttribute('position');
+            const pa = pos.array;
+            const nor = g.getAttribute('normal');
+            const na = (nor && nor.array.length === pa.length) ? nor.array : null;
+            const pLen = pos.count * 3;
+            for (let k = 0; k < pLen; k += 3) {
+              const x = pa[k], y = pa[k + 1], z = pa[k + 2];
+              const dst = offset + k;
+              mergedPos[dst]     = m0 * x + m4 * y + m8 * z + m12;
+              mergedPos[dst + 1] = m1 * x + m5 * y + m9 * z + m13;
+              mergedPos[dst + 2] = m2 * x + m6 * y + m10 * z + m14;
+              if (na) {
+                const nx = na[k], ny = na[k + 1], nz = na[k + 2];
+                let rx = n0 * nx + n3 * ny + n6 * nz;
+                let ry = n1 * nx + n4 * ny + n7 * nz;
+                let rz = n2 * nx + n5 * ny + n8 * nz;
+                const invL = 1 / (Math.hypot(rx, ry, rz) || 1);
+                mergedNor[dst]     = rx * invL;
+                mergedNor[dst + 1] = ry * invL;
+                mergedNor[dst + 2] = rz * invL;
+              } else {
+                mergedNor[dst + 1] = 1;
+              }
+            }
+            if (mergedUv) {
+              const uv = g.getAttribute('uv');
+              if (uv) mergedUv.set(uv.array, uvOff);
+            }
+            offset += pLen;
             uvOff += pos.count * 2;
-            geos[i].dispose();
           }
           const mergedGeo = new THREE.BufferGeometry();
           mergedGeo.setAttribute('position', new THREE.BufferAttribute(mergedPos, 3));
           mergedGeo.setAttribute('normal', new THREE.BufferAttribute(mergedNor, 3));
           if (mergedUv) mergedGeo.setAttribute('uv', new THREE.BufferAttribute(mergedUv, 2));
           const mergedMesh = new THREE.Mesh(mergedGeo, mat);
-          if (opts && opts.castShadow) mergedMesh.castShadow = true;
-          if (opts && opts.receiveShadow) mergedMesh.receiveShadow = true;
+          if (opts && opts.castShadow && !LITE_ISL) mergedMesh.castShadow = true;
+          if (opts && opts.receiveShadow && !LITE_ISL) mergedMesh.receiveShadow = true;
           grp.add(mergedMesh);
         });
+        for (let i = 0; i < mergedNodes.length; i++) {
+          const n = mergedNodes[i];
+          if (n.parent) n.parent.remove(n);
+        }
       } catch (e) { /* safe fallback in headless mock environments */ }
     }
 
@@ -24724,35 +24841,71 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     }
 
     // ------------------------------------------------------------------------
-    // Terrain (land + shallows) 5m grid
+    // Terrain (land + shallows) 5m grid (8m on Lite/Chromebook hardware)
     // ------------------------------------------------------------------------
-    const GX0 = -1600, GX1 = 1360, GZ0 = Z(-340), GZ1 = Z(560), STEP = 5;
+    const GX0 = -1600, GX1 = 1360, GZ0 = Z(-340), GZ1 = Z(560), STEP = LITE_ISL ? 8 : 5;
     const NX = Math.round((GX1 - GX0) / STEP) + 1, NZ = Math.round((GZ1 - GZ0) / STEP) + 1;
     const Lgrid = new Float32Array(NX * NZ);
     const Hgrid = new Float32Array(NX * NZ);
     {
       const m = new Mesher();
       const vid = new Int32Array(NX * NZ);
+      vid.fill(-1);
+      const zNCol = new Float32Array(NX);
+      const zSCol = new Float32Array(NX);
+      for (let i = 0; i < NX; i++) {
+        const x = GX0 + i * STEP;
+        zNCol[i] = zN(x);
+        zSCol[i] = zS(x);
+      }
+      const airZ0 = Z(-310), airZ1 = Z(-35);
       for (let j = 0; j < NZ; j++) {
+        const z = GZ0 + j * STEP;
+        const nEast = EAST_TIP + n1(z / 60) * 10;
+        const nWest = 905 + n1(z / 45) * 4;
+        const airZ = Math.min(z - airZ0, airZ1 - z);
+        const rowOff = j * NX;
         for (let i = 0; i < NX; i++) {
-          const x = GX0 + i * STEP, z = GZ0 + j * STEP;
-          const L = landField(x, z);
-          const H = terrainH(x, z);
-          const k = j * NX + i;
+          const x = GX0 + i * STEP;
+          let L = -Infinity;
+          if (x >= -905) {
+            L = Math.min(z - zNCol[i], zSCol[i] - z, nEast - x, x + nWest);
+          }
+          const air = Math.min(x + 1575, airZ, -860 - x);
+          if (air > L) L = air;
+          if (L > -12) {
+            const wd = inlandWaterDist(x, z);
+            if (wd < L) L = wd;
+          }
+          const k = rowOff + i;
           Lgrid[k] = L;
-          Hgrid[k] = H;
-          vid[k] = m.v(x, H, z, surfaceColor(x, z, L));
+          Hgrid[k] = terrainH(x, z, L, zSCol[i]);
         }
       }
+      const ensureVert = (idx, i, j) => {
+        let id = vid[idx];
+        if (id < 0) {
+          const gx = GX0 + i * STEP, gz = GZ0 + j * STEP;
+          id = m.v(gx, Hgrid[idx], gz, surfaceColor(gx, gz, Lgrid[idx]));
+          vid[idx] = id;
+        }
+        return id;
+      };
       for (let j = 0; j < NZ - 1; j++) {
+        const rowOff = j * NX;
         for (let i = 0; i < NX - 1; i++) {
-          const k = j * NX + i;
+          const k = rowOff + i;
           if (Math.max(Lgrid[k], Lgrid[k + 1], Lgrid[k + NX], Lgrid[k + NX + 1]) < -7) continue; // open water
-          m.quadUp(vid[k], vid[k + 1], vid[k + NX + 1], vid[k + NX]);
+          m.quadUp(
+            ensureVert(k, i, j),
+            ensureVert(k + 1, i + 1, j),
+            ensureVert(k + NX + 1, i + 1, j + 1),
+            ensureVert(k + NX, i, j + 1)
+          );
         }
       }
       const terrain = new THREE.Mesh(m.build(true), new THREE.MeshLambertMaterial({ vertexColors: true }));
-      terrain.receiveShadow = true;
+      terrain.receiveShadow = !LITE_ISL;
       islandsGroup.add(terrain);
     }
 
@@ -25066,7 +25219,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
     const shrubs = [];
 
     {
-      const SP = 6.5;
+      const SP = LITE_ISL ? 9.0 : 6.5;
       for (let x = GX0 + 40; x < GX1; x += SP) {
         for (let z = GZ0; z < GZ1; z += SP) {
           const tx = x + (rnd() - 0.5) * SP * 0.9, tz = z + (rnd() - 0.5) * SP * 0.9;
@@ -25075,7 +25228,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           if (nearBridge(tx, tz, 7.5)) continue;
           if (nearTrainTrack(tx, tz, 4.0)) continue;
           if (nearPath(tx, tz, 3.8) || inClearing(tx, tz, 2.0)) continue;
-          const wd = inlandWaterDist(tx, tz);
+          const wd = (L > 11) ? L : inlandWaterDist(tx, tz);
           let kind = null;
           if (wd > 1.5 && wd < 10 && rnd() < 0.52) {
             kind = 'willow'; // weeping willows line the water banks
@@ -25098,7 +25251,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
             }
           }
           if (!kind) continue;
-          const y = terrainH(tx, tz);
+          const y = terrainH(tx, tz, L);
           const s = kind === 'pine' ? 0.8 + rnd() * 0.6 : 0.75 + rnd() * 0.7;
           trees[kind].push({ kind, x: tx, z: tz, y, s, r: rnd() });
           const k = Math.floor(tx / TRUNK_CELL) + ',' + Math.floor(tz / TRUNK_CELL);
@@ -28032,30 +28185,58 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
       }
 
       // Authentic Muskoka / Adirondack Chair helper
+      const _chairSeatGeo = new THREE.BoxGeometry(0.62, 0.06, 0.58);
+      const _chairBackGeo = new THREE.BoxGeometry(0.58, 0.72, 0.06);
+      const _chairArmGeo = new THREE.BoxGeometry(0.12, 0.05, 0.68);
+      const _chairFLegGeo = new THREE.BoxGeometry(0.07, 0.48, 0.07);
+      const _chairBLegGeo = new THREE.BoxGeometry(0.07, 0.44, 0.07);
       function buildMuskokaChair(mat) {
         const ch = new THREE.Group();
-        const seat = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.06, 0.58), mat);
+        const seat = new THREE.Mesh(_chairSeatGeo, mat);
         seat.position.set(0, 0.34, 0);
         seat.rotation.x = -0.15;
         ch.add(seat);
-        const back = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.72, 0.06), mat);
+        const back = new THREE.Mesh(_chairBackGeo, mat);
         back.position.set(0, 0.64, -0.24);
         back.rotation.x = -0.28;
         ch.add(back);
         [-0.28, 0.28].forEach(ax => {
-          const arm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.05, 0.68), mat);
+          const arm = new THREE.Mesh(_chairArmGeo, mat);
           arm.position.set(ax, 0.50, -0.02);
           ch.add(arm);
-          const fLeg = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.48, 0.07), mat);
+          const fLeg = new THREE.Mesh(_chairFLegGeo, mat);
           fLeg.position.set(ax, 0.24, 0.22);
           ch.add(fLeg);
-          const bLeg = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.44, 0.07), mat);
+          const bLeg = new THREE.Mesh(_chairBLegGeo, mat);
           bLeg.position.set(ax, 0.20, -0.24);
           bLeg.rotation.x = 0.20;
           ch.add(bLeg);
         });
         return ch;
       }
+
+      const _cottVerandaColGeo = new THREE.CylinderGeometry(0.09, 0.11, 2.42, 8);
+      const _cottVerandaBaseGeo = new THREE.BoxGeometry(0.24, 0.32, 0.24);
+      const _cottBalusterGeo = new THREE.BoxGeometry(0.05, 0.46, 0.05);
+      const _cottSconceGeo = new THREE.SphereGeometry(0.13, 8, 8);
+      const _cottWinFrameGeo = new THREE.BoxGeometry(1.28, 1.38, 0.12);
+      const _cottWinGlassGeo = new THREE.BoxGeometry(1.06, 1.16, 0.14);
+      const _cottMuntinVGeo = new THREE.BoxGeometry(0.05, 1.18, 0.16);
+      const _cottMuntinHGeo = new THREE.BoxGeometry(1.08, 0.05, 0.16);
+      const _cottShutterGeo = new THREE.BoxGeometry(0.26, 1.34, 0.08);
+      const _cottWinBoxGeo = new THREE.BoxGeometry(1.32, 0.24, 0.28);
+      const _cottWinLeafGeo = new THREE.SphereGeometry(0.15, 6, 6);
+      const _cottWinBloomGeo = new THREE.SphereGeometry(0.13, 6, 6);
+      const _cottStepStoneGeo = new THREE.CylinderGeometry(0.34, 0.36, 0.07, 7);
+      const _cottArborVineGeo = new THREE.SphereGeometry(0.28, 7, 7);
+      const _cottPicketGeo = new THREE.BoxGeometry(0.09, 0.84, 0.04);
+      const _cottPostGeo = new THREE.BoxGeometry(0.16, 0.96, 0.16);
+      const _cottSideRailGeo = new THREE.BoxGeometry(0.06, 0.72, 2.4);
+      const _cottBushGeo = new THREE.SphereGeometry(0.36, 7, 7);
+      const _cottClusterGeo = new THREE.SphereGeometry(0.24, 6, 6);
+      const _cottStalkGeo = new THREE.CylinderGeometry(0.03, 0.04, 1.15, 6);
+      const _cottTopBloomGeo = new THREE.SphereGeometry(0.16, 6, 6);
+      const _cottCanoeGeo = new THREE.CylinderGeometry(0.26, 0.26, 3.8, 10);
 
       function addUniqueCottage(cDef, idx) {
         const stMats = COTTAGE_STYLE_MATS[idx % COTTAGE_STYLE_MATS.length];
@@ -28230,10 +28411,10 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
 
         // Turned Veranda Columns with Decorative Brackets
         [-porchW / 2 + 0.22, -1.05, 1.05, porchW / 2 - 0.22].forEach(px => {
-          const pPost = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 2.42, 8), trimMat);
+          const pPost = new THREE.Mesh(_cottVerandaColGeo, trimMat);
           pPost.position.set(px, 1.48, d / 2 + porchD - 0.14);
           c.add(pPost);
-          const pBase = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.32, 0.24), trimMat);
+          const pBase = new THREE.Mesh(_cottVerandaBaseGeo, trimMat);
           pBase.position.set(px, 0.52, d / 2 + porchD - 0.14);
           c.add(pBase);
         });
@@ -28250,7 +28431,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           botRail.position.set(rCenterX, 0.48, rZ);
           c.add(botRail);
           for (let bx = -rLen / 2 + 0.18; bx <= rLen / 2 - 0.14; bx += 0.24) {
-            const bal = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.46, 0.05), trimMat);
+            const bal = new THREE.Mesh(_cottBalusterGeo, trimMat);
             bal.position.set(rCenterX + bx, 0.72, rZ);
             c.add(bal);
           }
@@ -28278,44 +28459,45 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         c.add(doorTransom);
 
         [-0.78, 0.78].forEach(lx => {
-          const sconce = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 8), lampGlowMat);
+          const sconce = new THREE.Mesh(_cottSconceGeo, lampGlowMat);
           sconce.position.set(lx, 2.15, d / 2 + 0.18);
           c.add(sconce);
         });
 
         // Front & Side Multi-Pane Windows with Muntins, Louvered Shutters & Lush Cedar Window Boxes
         [-w * 0.31, w * 0.31].forEach((wx, wi) => {
-          const wFrame = new THREE.Mesh(new THREE.BoxGeometry(1.28, 1.38, 0.12), trimMat);
+          const wFrame = new THREE.Mesh(_cottWinFrameGeo, trimMat);
           wFrame.position.set(wx, 1.80, d / 2 + 0.02);
           c.add(wFrame);
-          const wGlass = new THREE.Mesh(new THREE.BoxGeometry(1.06, 1.16, 0.14), warmWinGlowMat);
+          const wGlass = new THREE.Mesh(_cottWinGlassGeo, warmWinGlowMat);
           wGlass.position.set(wx, 1.80, d / 2 + 0.03);
           c.add(wGlass);
           // Window muntin crossbars
-          const mVert = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.18, 0.16), trimMat);
+          const mVert = new THREE.Mesh(_cottMuntinVGeo, trimMat);
           mVert.position.set(wx, 1.80, d / 2 + 0.04);
           c.add(mVert);
-          const mHoriz = new THREE.Mesh(new THREE.BoxGeometry(1.08, 0.05, 0.16), trimMat);
+          const mHoriz = new THREE.Mesh(_cottMuntinHGeo, trimMat);
           mHoriz.position.set(wx, 1.80, d / 2 + 0.04);
           c.add(mHoriz);
 
           // Louvered painted shutters
           [-0.76, 0.76].forEach(sx => {
-            const shut = new THREE.Mesh(new THREE.BoxGeometry(0.26, 1.34, 0.08), shutterMat);
+            const shut = new THREE.Mesh(_cottShutterGeo, shutterMat);
             shut.position.set(wx + sx, 1.80, d / 2 + 0.05);
             c.add(shut);
           });
 
           // Under-window cedar flower box overflowing with foliage & blooms
-          const fBox = new THREE.Mesh(new THREE.BoxGeometry(1.32, 0.24, 0.28), darkWoodMat);
+          const fBox = new THREE.Mesh(_cottWinBoxGeo, darkWoodMat);
           fBox.position.set(wx, 1.02, d / 2 + 0.16);
           c.add(fBox);
-          for (let fi = -0.48; fi <= 0.48; fi += 0.24) {
-            const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.15, 6, 6), foliageGreenMat);
+          const fStep = LITE_ISL ? 0.48 : 0.24;
+          for (let fi = -0.48; fi <= 0.48; fi += fStep) {
+            const leaf = new THREE.Mesh(_cottWinLeafGeo, foliageGreenMat);
             leaf.position.set(wx + fi, 1.16, d / 2 + 0.18);
             c.add(leaf);
             const bloom = new THREE.Mesh(
-              new THREE.SphereGeometry(0.13, 6, 6),
+              _cottWinBloomGeo,
               flowerMats[(idx + wi + Math.round((fi + 1) * 4)) % flowerMats.length]
             );
             bloom.position.set(wx + fi, 1.24, d / 2 + 0.20);
@@ -28329,7 +28511,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
 
         // Flagstone Stepping-Stone Garden Path from Arbor Gate to Porch Steps
         for (let sz = d / 2 + porchD + 0.95; sz <= fenceZ + 0.35; sz += 0.52) {
-          const stone = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.36, 0.07, 7), flagstoneMat);
+          const stone = new THREE.Mesh(_cottStepStoneGeo, flagstoneMat);
           stone.position.set(Math.sin(sz * 3.1 + idx) * 0.08, 0.04, sz);
           c.add(stone);
         }
@@ -28349,11 +28531,11 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
 
         // Climbing Roses & Green Vines on the Garden Arbor
         [-gateHalfW - 0.05, -0.45, 0, 0.45, gateHalfW + 0.05].forEach((vx, vi) => {
-          const vine = new THREE.Mesh(new THREE.SphereGeometry(0.28, 7, 7), lushLeafMat);
+          const vine = new THREE.Mesh(_cottArborVineGeo, lushLeafMat);
           vine.position.set(vx, vi === 0 || vi === 4 ? 1.85 : 2.38, fenceZ);
           c.add(vine);
           const rose = new THREE.Mesh(
-            new THREE.SphereGeometry(0.15, 6, 6),
+            _cottWinLeafGeo,
             flowerMats[(idx + vi) % flowerMats.length]
           );
           rose.position.set(vx + 0.06, (vi === 0 || vi === 4 ? 1.92 : 2.48), fenceZ + 0.14);
@@ -28374,16 +28556,17 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
             c.add(fRail);
           });
           // Individual vertical pickets
-          for (let px = fStart; px <= fEnd; px += 0.24) {
-            const picket = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.84, 0.04), trimMat);
+          const pStep = LITE_ISL ? 0.36 : 0.24;
+          for (let px = fStart; px <= fEnd; px += pStep) {
+            const picket = new THREE.Mesh(_cottPicketGeo, trimMat);
             picket.position.set(fs * px, 0.42, fenceZ);
             c.add(picket);
           }
           // Corner fence post & side garden return rail
-          const cPost = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.96, 0.16), trimMat);
+          const cPost = new THREE.Mesh(_cottPostGeo, trimMat);
           cPost.position.set(fs * fEnd, 0.48, fenceZ);
           c.add(cPost);
-          const sideRail = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.72, 2.4), trimMat);
+          const sideRail = new THREE.Mesh(_cottSideRailGeo, trimMat);
           sideRail.position.set(fs * fEnd, 0.40, fenceZ - 1.2);
           c.add(sideRail);
         });
@@ -28403,25 +28586,26 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
           c.add(bedSoil);
 
           // Blooming Hydrangea / Peony Shrubs & Tall Hollyhock / Sunflower Stalks
-          for (let bx = -bedW * 0.36; bx <= bedW * 0.36; bx += 0.58) {
-            const bush = new THREE.Mesh(new THREE.SphereGeometry(0.36, 7, 7), foliageGreenMat);
+          const bStep = LITE_ISL ? 0.85 : 0.58;
+          for (let bx = -bedW * 0.36; bx <= bedW * 0.36; bx += bStep) {
+            const bush = new THREE.Mesh(_cottBushGeo, foliageGreenMat);
             bush.scale.set(1.1, 0.85, 1.1);
             bush.position.set(bedX + bx, 0.38, bedZ - 0.12);
             c.add(bush);
 
             const bCluster = new THREE.Mesh(
-              new THREE.SphereGeometry(0.24, 6, 6),
+              _cottClusterGeo,
               flowerMats[(idx * 2 + gi + Math.round((bx + 2) * 3)) % flowerMats.length]
             );
             bCluster.position.set(bedX + bx, 0.58, bedZ - 0.08);
             c.add(bCluster);
 
             // Tall Hollyhock / Delphinium flower spike behind the shrubs
-            const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 1.15, 6), lushLeafMat);
+            const stalk = new THREE.Mesh(_cottStalkGeo, lushLeafMat);
             stalk.position.set(bedX + bx * 0.85, 0.72, bedZ - 0.42);
             c.add(stalk);
             const topBloom = new THREE.Mesh(
-              new THREE.SphereGeometry(0.16, 6, 6),
+              _cottTopBloomGeo,
               flowerMats[(idx + gi + 2) % flowerMats.length]
             );
             topBloom.position.set(bedX + bx * 0.85, 1.28, bedZ - 0.42);
@@ -28432,7 +28616,7 @@ window.TORONTO_MAP = {"attribution":"Map data © OpenStreetMap contributors (ODb
         // Authentic Toronto Island Yard Props: Painted Cedar-Strip Canoe/Kayak on Rack or Stone Birdbath!
         const canoeMat = canoeMats[idx % canoeMats.length];
         const canoeSide = -sideSign;
-        const canoeHull = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 3.8, 10), canoeMat);
+        const canoeHull = new THREE.Mesh(_cottCanoeGeo, canoeMat);
         canoeHull.rotation.x = Math.PI / 2;
         canoeHull.scale.set(1.25, 0.75, 1.0);
         canoeHull.position.set(canoeSide * (w / 2 + 0.95), 0.52, 0.4);
@@ -36203,15 +36387,17 @@ const _knockDir = new THREE.Vector3();
 const container = document.getElementById('game-container');
 const scene = new THREE.Scene();
 
-// Far clip increased to 4500m to render full Toronto Islands archipelago and downtown skyline across the harbour
-const camera = new THREE.PerspectiveCamera(78, window.innerWidth / window.innerHeight, 0.14, 4500);
+const IS_LITE_HW = !!(typeof window !== 'undefined' && window.FOD_HW && window.FOD_HW.lite);
+
+// Far clip increased to 4500m (2600m on Lite/Chromebook hardware) to render Toronto Islands and skyline
+const camera = new THREE.PerspectiveCamera(78, window.innerWidth / window.innerHeight, 0.14, IS_LITE_HW ? 2600 : 4500);
 camera.position.set(0, 1.7, 0);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+const renderer = new THREE.WebGLRenderer({ antialias: !IS_LITE_HW, powerPreference: 'high-performance' });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2.0));
+renderer.setPixelRatio(IS_LITE_HW ? 1.0 : Math.min(window.devicePixelRatio || 1, 2.0));
 if (THREE.sRGBEncoding !== undefined) renderer.outputEncoding = THREE.sRGBEncoding;
-renderer.shadowMap.enabled = true;
+renderer.shadowMap.enabled = !IS_LITE_HW;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 container.insertBefore(renderer.domElement, container.firstChild);
 
@@ -36341,15 +36527,17 @@ function setCityTimeOfDay(mode, fromNet, byName) {
     if (isDay) document.body.classList.add('day-mode');
     else document.body.classList.remove('day-mode');
   }
-  try {
-    if (isDay) {
-      if (!dayEnvMap) dayEnvMap = buildCityEnvMap(renderer, true);
-      scene.environment = dayEnvMap;
-    } else {
-      if (!nightEnvMap) nightEnvMap = buildCityEnvMap(renderer, false);
-      scene.environment = nightEnvMap;
-    }
-  } catch (e) {}
+  if (!IS_LITE_HW) {
+    try {
+      if (isDay) {
+        if (!dayEnvMap) dayEnvMap = buildCityEnvMap(renderer, true);
+        scene.environment = dayEnvMap;
+      } else {
+        if (!nightEnvMap) nightEnvMap = buildCityEnvMap(renderer, false);
+        scene.environment = nightEnvMap;
+      }
+    } catch (e) {}
+  }
   if (renderer && typeof renderer.toneMappingExposure === 'number') {
     renderer.toneMappingExposure = isDay ? 0.86 : 1.0;
   }
@@ -36377,6 +36565,7 @@ function setCityTimeOfDay(mode, fromNet, byName) {
 // --- Bloom post-processing (lit windows, neon, lamps, CN Tower LEDs glow) ---
 let composer = null, bloomPass = null, outputEncodingPass = null;
 function setupPostFX() {
+  if (IS_LITE_HW) return; // Keep Chromebook / ARM GPU fill-rate fast and single-pass
   if (!THREE.EffectComposer || !THREE.RenderPass || !THREE.UnrealBloomPass) return; // scripts not loaded: plain render
   const pr = (renderer && typeof renderer.getPixelRatio === 'function') ? renderer.getPixelRatio() : 1;
   const size = (renderer && typeof renderer.getDrawingBufferSize === 'function')
@@ -36439,10 +36628,33 @@ function setupPostFX() {
 
 // Build Toronto City from real OpenStreetMap data with CN Tower Peace Sanctuary
 const city = (typeof window.buildTorontoCity === 'function') ? window.buildTorontoCity(scene) : null;
-// Build Dedicated Toronto Islands Archipelago (Hanlan's, Airport, Centre, Olympic, Algonquin, Ward's)
-const islands = (typeof window.buildTorontoIslands === 'function') ? window.buildTorontoIslands(scene) : null;
-if (typeof window !== 'undefined') window.islands = islands;
+// Build Dedicated Toronto Islands Archipelago asynchronously after initial UI paint (or on demand)
+let islands = null;
+if (typeof window !== 'undefined') window.islands = null;
 let traffic = null;
+let _initialEnemiesSpawned = false;
+
+function ensureIslandsLoaded() {
+  if (islands || typeof window.buildTorontoIslands !== 'function') return islands;
+  islands = window.buildTorontoIslands(scene);
+  if (typeof window !== 'undefined') window.islands = islands;
+  if (islands && islands.setTimeOfDay) {
+    islands.setTimeOfDay(getCityTimeOfDay() === 'day');
+  }
+  if (IS_LITE_HW && islands && islands.group) {
+    islands.group.visible = !!(player.pos.z > 220 || player.pos.y > 30 || state.onFerry || state.onIsland || state.onPlane);
+  }
+  return islands;
+}
+
+function ensureTrafficLoaded() {
+  if (traffic || !city || typeof window.createTraffic !== 'function') return traffic;
+  traffic = window.createTraffic(scene, city, audio, { count: IS_LITE_HW ? 18 : 30 });
+  if (traffic && traffic.setTimeOfDay) {
+    traffic.setTimeOfDay(getCityTimeOfDay() === 'day');
+  }
+  return traffic;
+}
 
 const player = {
   pos: camera.position,
@@ -36533,7 +36745,7 @@ function createProceduralTexture(type) {
 function upgradeSceneTextureQuality() {
   if (!scene || typeof scene.traverse !== 'function') return;
   const caps = (renderer && renderer.capabilities) ? renderer.capabilities : {};
-  const maxAniso = (typeof caps.getMaxAnisotropy === 'function')
+  const maxAniso = (!IS_LITE_HW && typeof caps.getMaxAnisotropy === 'function')
     ? Math.max(1, Math.min(16, caps.getMaxAnisotropy() || 1))
     : 1;
   const srgbOn = (THREE.sRGBEncoding !== undefined && renderer && renderer.outputEncoding === THREE.sRGBEncoding);
@@ -36569,8 +36781,6 @@ const crateTex = createProceduralTexture('crate');
 
 if (city) {
   // Lighting, fog and sky are owned by city.js (buildTorontoCity).
-  // Live traffic on the real street network (traffic.js)
-  if (typeof window.createTraffic === 'function') traffic = window.createTraffic(scene, city, audio, { count: 30 });
   setCityTimeOfDay(city.getTimeOfDay ? city.getTimeOfDay() : 'night', true);
   upgradeSceneTextureQuality();
   const todBadgeEl = document.getElementById('tod-badge');
@@ -38443,6 +38653,7 @@ function spawnAdditionalEnemies(count) {
 let islandLeaveUnloadTimer = 0;
 function ensureIslandCitizensPopulated() {
   if (!city) return;
+  ensureIslandsLoaded();
   if (!enemies.some(e => e.isIslandCitizen)) {
     populateCentreIslandCitizens();
   }
@@ -38630,7 +38841,11 @@ function cycleDifficulty(dir) {
   }
 }
 
-populateEnemies();
+function ensureInitialEnemiesLoaded() {
+  if (_initialEnemiesSpawned) return;
+  _initialEnemiesSpawned = true;
+  populateEnemies();
+}
 
 // ============================================================================
 // CITY EXPLORATION MISSIONS (BOXES, GUARDS & LANDMARK GOALS)
@@ -42809,6 +43024,7 @@ window.addEventListener('keydown', (e) => {
       showAnnouncement("🏙️ CHEAT: TELEPORTED TO MAINLAND FERRY DOCK (JACK LAYTON TERMINAL)!", 3200);
     } else if (dMainDock < 22) {
       // Already at mainland dock: teleport across to Dedicated Toronto Islands Archipelago!
+      ensureIslandsLoaded();
       const islFloor = islands ? islands.floorAt(0, 1200) : 0.55;
       player.pos.set(0, islFloor + EYE_HEIGHT, 1200);
       player.yaw = 0; // facing south down Avenue of the Island
@@ -42996,6 +43212,8 @@ function pauseGame() {
 }
 
 function resumeGame(usePointerLock = true) {
+  ensureTrafficLoaded();
+  ensureInitialEnemiesLoaded();
   state.isPaused = false;
   state.inGame = true;
   state.freeMouseMode = !usePointerLock;
@@ -44393,6 +44611,7 @@ function pushMinimapDot(x, z, c, r, isPlayer, initial, yaw, isMission) {
 let _minimapTimer = 1.0;
 let _hudNbrTimer = 1.0;
 let _hudSquadTimer = 1.0;
+let _menuRenderAccum = 1.0;
 const _kickOff = new THREE.Vector3();
 
 function animate(now) {
@@ -44402,6 +44621,13 @@ function animate(now) {
 
   const dt = Math.min((now - lastTime) / 1000, 0.1);
   lastTime = now;
+
+  // On Chromebook / Lite hardware, throttle background 3D rendering to ~10 FPS while the menu overlay is open
+  if (IS_LITE_HW && (!state.inGame || state.isPaused)) {
+    _menuRenderAccum += dt;
+    if (_menuRenderAccum < 0.10) return;
+    _menuRenderAccum = 0;
+  }
 
   // FPS Counter
   fpsCount++;
@@ -44463,8 +44689,16 @@ function animate(now) {
   if (state.inGame && !state.isDead && !state.isPaused && state.onSubway) {
     updateSubwayRide(simDt);
   }
+  if (!islands && IS_LITE_HW && (player.pos.z > 180 || player.pos.y > 30 || state.onFerry || state.onIsland || state.onPlane)) {
+    ensureIslandsLoaded();
+  }
   if (islands) {
-    try { islands.update(dt, player.pos); } catch (e) { console.warn('islands.update error:', e); }
+    if (IS_LITE_HW && islands.group) {
+      islands.group.visible = !!(player.pos.z > 220 || player.pos.y > 30 || state.onFerry || state.onIsland || state.onPlane);
+    }
+    if (!islands.group || islands.group.visible) {
+      try { islands.update(dt, player.pos); } catch (e) { console.warn('islands.update error:', e); }
+    }
   }
 
   // Draw Toronto GPS Minimap & Sanctuary Radar (Retina DPR scaled, throttled to ~15 Hz)
@@ -46031,6 +46265,7 @@ function resetGame() {
     const host = window.multiplayer.remotePlayers.get(window.multiplayer.hostId) || window.multiplayer.remotePlayers.values().next().value;
     if (host) syncSpawnNearHost(host);
   }
+  _initialEnemiesSpawned = true;
   populateEnemies();
   spawnCrates();
   startNextMission();
@@ -46044,7 +46279,7 @@ function resetGame() {
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
-  const pr = Math.min(window.devicePixelRatio || 1, 2.0);
+  const pr = IS_LITE_HW ? 1.0 : Math.min(window.devicePixelRatio || 1, 2.0);
   renderer.setPixelRatio(pr);
   renderer.setSize(window.innerWidth, window.innerHeight);
   if (composer) {
@@ -46381,10 +46616,25 @@ if (window.multiplayer && window.multiplayer.init) {
   window.multiplayer.init(scene, player, state);
 }
 
-// Init HUD & Start Loop
+// Init HUD & Progressive Non-Blocking World Boot
 updateHUDWeapon();
 updateHUDHealth();
-requestAnimationFrame(animate);
+
+setTimeout(() => {
+  lastTime = performance.now();
+  requestAnimationFrame(animate);
+  setTimeout(() => {
+    ensureTrafficLoaded();
+    setTimeout(() => {
+      ensureInitialEnemiesLoaded();
+      if (!IS_LITE_HW) {
+        setTimeout(() => {
+          ensureIslandsLoaded();
+        }, 180);
+      }
+    }, IS_LITE_HW ? 180 : 60);
+  }, IS_LITE_HW ? 120 : 40);
+}, IS_LITE_HW ? 80 : 16);
 
 </script>
 </body>
