@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.2
+- **Windows 11 Clean Reinstall & Windowless Updater Polish (`install.ps1`, `updater.py`, `launch.py`):**
+  - `install.ps1` now gracefully stops any running local server (`/api/quit`) before replacing files so Windows never hits file-in-use locks, and `updater.py` uses `CREATE_NO_WINDOW` during silent dependency updates.
+
 ## 1.0.1
 - **Chromebook / ARM64 Startup & Performance Fix ("Page Unresponsive" Resolved):**
   - Added automatic Chromebook / ARM / low-RAM hardware profile (`FOD_HW.lite`) that cuts procedural Canvas2D texture VRAM by **4.6x** (~474 MB → ~103 MB RGBA) and disables expensive multi-pass post-processing (`UnrealBloomPass`), shadow maps, and cubemap `PMREMGenerator` passes on integrated mobile GPUs.

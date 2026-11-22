@@ -182,12 +182,13 @@ def apply() -> dict:
                     pass
     req_file = ROOT / "requirements.txt"
     if req_file.exists():
+        run_kw = {"creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)} if os.name == "nt" else {}
         uv = _uv()
         venv_py = _venv_python()
         if uv and venv_py:
-            subprocess.run([uv, "pip", "install", "--python", str(venv_py), "-q", "-r", str(req_file)], check=False)
+            subprocess.run([uv, "pip", "install", "--python", str(venv_py), "-q", "-r", str(req_file)], check=False, **run_kw)
         elif venv_py:
-            subprocess.run([str(venv_py), "-m", "pip", "install", "-q", "-r", str(req_file)], check=False)
+            subprocess.run([str(venv_py), "-m", "pip", "install", "-q", "-r", str(req_file)], check=False, **run_kw)
     return {"ok": True, "version": local_version()}
 
 

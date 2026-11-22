@@ -1,4 +1,4 @@
-# Fists of Doom: Toronto installer for Windows PC (PowerShell)
+﻿# Fists of Doom: Toronto installer for Windows PC (PowerShell)
 #   irm https://raw.githubusercontent.com/wacunn/toronto-fight-game/main/install.ps1 | iex
 # Safe to run again: updates the game while keeping your local data.
 
@@ -26,6 +26,10 @@ if (-not $Uv) {
 
 # 2) Download Fists of Doom (preserving data/ and .env if updating)
 Write-Host "Step 2 of 4: Downloading Fists of Doom..." -ForegroundColor White
+try {
+    Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8788/api/quit" -TimeoutSec 2 | Out-Null
+    Start-Sleep -Milliseconds 700
+} catch {}
 New-Item -ItemType Directory -Force -Path $Dir | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $Dir "data") | Out-Null
 $Tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("fod_" + [guid]::NewGuid().ToString("N"))
