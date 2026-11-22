@@ -105,4 +105,5 @@ EOF
 fi
 
 say "Done! Opening Fists of Doom now. Next time, click the Fists of Doom icon $WHERE."
+curl -fsS -X POST "http://127.0.0.1:${PORT:-8788}/api/quit" >/dev/null 2>&1 && sleep 0.7 || true
 [[ -n "${FOD_NO_LAUNCH:-}" ]] || "$DIR/start.sh"
