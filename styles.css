@@ -2392,5 +2392,149 @@ body.telescope-mode #crosshair-wrapper {
   white-space: nowrap;
 }
 
+/* ==========================================================================
+   LOCAL INSTALL UPDATE CHECKER & SINGLE-BUTTON UPDATE BAR (START SCREEN)
+   ========================================================================== */
+.local-update-bar {
+  margin: -6px 0 20px 0;
+  padding: 11px 15px;
+  background: rgba(12, 18, 28, 0.92);
+  border: 1px solid #263248;
+  border-left: 3px solid #10b981;
+  border-radius: 6px;
+}
+
+.local-update-bar.has-update {
+  background: linear-gradient(90deg, rgba(6, 46, 36, 0.92), rgba(12, 24, 38, 0.94));
+  border-color: #10b981;
+  box-shadow: 0 0 22px rgba(16, 185, 129, 0.35);
+}
+
+.upd-bar-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.upd-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.upd-ver-badge {
+  font-family: 'Chakra Petch', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  padding: 3px 9px;
+  border-radius: 4px;
+}
+
+.upd-msg {
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: #cbd5e1;
+}
+
+.local-update-bar.has-update .upd-msg {
+  color: #6ee7b7;
+}
+
+.upd-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.upd-check-btn {
+  background: rgba(30, 41, 59, 0.85);
+  border: 1px solid #475569;
+  color: #cbd5e1;
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  padding: 7px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.upd-check-btn:hover {
+  border-color: #38bdf8;
+  color: #ffffff;
+}
+
+.upd-apply-btn {
+  background: linear-gradient(180deg, #10b981, #059669);
+  border: 1px solid #6ee7b7;
+  color: #ffffff;
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  box-shadow: 0 0 16px rgba(16, 185, 129, 0.55);
+  transition: all 0.15s ease;
+}
+
+.upd-apply-btn:hover:not(:disabled) {
+  background: linear-gradient(180deg, #34d399, #10b981);
+  box-shadow: 0 0 24px rgba(52, 211, 153, 0.8);
+  transform: translateY(-1px);
+}
+
+.upd-apply-btn:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.upd-notes {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(71, 85, 105, 0.4);
+  font-family: 'Chakra Petch', monospace;
+  font-size: 11px;
+  color: #94a3b8;
+  max-height: 96px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+
+.arcade-lock-card {
+  margin: 0 0 20px 0;
+  padding: 18px 20px;
+  background: rgba(30, 16, 22, 0.92);
+  border: 1px solid #f43f5e;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.arcade-lock-title {
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: #fda4af;
+  margin-bottom: 6px;
+}
+
+.arcade-lock-desc {
+  font-size: 13px;
+  color: #e2e8f0;
+  line-height: 1.45;
+}
+
+
 
 

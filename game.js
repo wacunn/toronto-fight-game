@@ -10841,6 +10841,123 @@ if (startFreeBtn) {
   });
 }
 
+// ============================================================================
+// LOCAL INSTALL UPDATE CHECKER & SINGLE-BUTTON UPDATER + ARCADE LOCK CHECK
+// ============================================================================
+(function initLocalInstallFeatures() {
+  const updBar = document.getElementById('local-update-bar');
+  const verBadge = document.getElementById('local-ver-badge');
+  const updMsg = document.getElementById('local-update-msg');
+  const checkBtn = document.getElementById('local-check-upd-btn');
+  const applyBtn = document.getElementById('local-apply-upd-btn');
+  const notesEl = document.getElementById('local-update-notes');
+  const lockCard = document.getElementById('arcade-lock-card');
+  const openTutorLink = document.getElementById('arcade-open-tutor-link');
+  const menuActions = document.querySelector('.menu-actions');
+  const isEmbeddedInTutor = new URLSearchParams(window.location.search).get('embedded') === 'tutor';
+
+  if (!updBar || window.location.protocol === 'file:') return;
+
+  async function checkForUpdates(manual) {
+    if (manual && updMsg) updMsg.textContent = 'Checking GitHub for updates…';
+    if (checkBtn) checkBtn.disabled = true;
+    try {
+      const r = await fetch('/api/update/check', { cache: 'no-store' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const d = await r.json();
+      if (d.current && verBadge) verBadge.textContent = 'v' + d.current;
+      if (d.available && d.latest) {
+        updBar.classList.add('has-update');
+        if (updMsg) updMsg.textContent = `✨ New update v${d.latest} is ready!`;
+        if (applyBtn) {
+          applyBtn.textContent = `⬆ UPDATE TO v${d.latest} NOW`;
+          applyBtn.classList.remove('hidden');
+          applyBtn.disabled = false;
+        }
+        if (notesEl && d.notes) {
+          notesEl.textContent = d.notes.trim();
+          notesEl.classList.remove('hidden');
+        }
+      } else if (d.error) {
+        updBar.classList.remove('has-update');
+        if (applyBtn) applyBtn.classList.add('hidden');
+        if (updMsg) updMsg.textContent = manual ? d.error : 'Local install ready (offline)';
+      } else {
+        updBar.classList.remove('has-update');
+        if (applyBtn) applyBtn.classList.add('hidden');
+        if (notesEl) notesEl.classList.add('hidden');
+        if (updMsg) updMsg.textContent = '✓ Game is up to date';
+      }
+    } catch (_) {
+      if (manual && updMsg) updMsg.textContent = 'Could not reach GitHub right now.';
+    } finally {
+      if (checkBtn) checkBtn.disabled = false;
+    }
+  }
+
+  async function applySingleButtonUpdate() {
+    if (!applyBtn) return;
+    applyBtn.disabled = true;
+    if (checkBtn) checkBtn.disabled = true;
+    applyBtn.textContent = '⏳ UPDATING…';
+    if (updMsg) updMsg.textContent = 'Downloading update & restarting… Page reloads automatically!';
+    try {
+      const r = await fetch('/api/update/apply', { method: 'POST' });
+      if (!r.ok) {
+        const errText = await r.text();
+        if (updMsg) updMsg.textContent = 'Update failed: ' + errText.slice(0, 120);
+        applyBtn.disabled = false;
+        applyBtn.textContent = '⬆ RETRY UPDATE';
+        if (checkBtn) checkBtn.disabled = false;
+        return;
+      }
+      for (let i = 0; i < 90; i++) {
+        await new Promise((res) => setTimeout(res, 1200));
+        try {
+          const vr = await fetch('/api/version?t=' + Date.now(), { cache: 'no-store' });
+          if (vr.ok) {
+            window.location.reload();
+            return;
+          }
+        } catch (_) { /* server restarting */ }
+      }
+      if (updMsg) updMsg.textContent = 'Updated! Click the Fists of Doom icon if this window does not reload.';
+    } catch (err) {
+      if (updMsg) updMsg.textContent = 'Update connection interrupted — reloading…';
+      setTimeout(() => window.location.reload(), 2000);
+    }
+  }
+
+  if (checkBtn) checkBtn.addEventListener('click', (e) => { e.stopPropagation(); checkForUpdates(true); });
+  if (applyBtn) applyBtn.addEventListener('click', (e) => { e.stopPropagation(); applySingleButtonUpdate(); });
+
+  (async () => {
+    try {
+      const vr = await fetch('/api/version', { cache: 'no-store' });
+      if (!vr.ok) return;
+      const vd = await vr.json();
+      if (!vd || vd.app !== 'fists-of-doom') return;
+      if (verBadge && vd.version) verBadge.textContent = 'v' + vd.version;
+      updBar.classList.remove('hidden');
+      checkForUpdates(false);
+
+      if (!isEmbeddedInTutor && lockCard && menuActions) {
+        const ar = await fetch('/api/arcade-status', { cache: 'no-store' });
+        if (ar.ok) {
+          const ad = await ar.json();
+          if (ad && ad.locked) {
+            lockCard.classList.remove('hidden');
+            menuActions.classList.add('hidden');
+            if (openTutorLink && ad.tutor_url) openTutorLink.href = ad.tutor_url;
+          }
+        }
+      }
+    } catch (_) {
+      // Static hosting (e.g. GitHub Pages) — keep local update bar hidden.
+    }
+  })();
+})();
+
 function resetGame() {
   if (taxiPanel && taxiPanel.open) closeTaxiPanel();
   if (streetcarPanel && streetcarPanel.open) closeStreetcarPanel();

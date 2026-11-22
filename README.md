@@ -4,6 +4,24 @@ A first-person 3D retro-modern superhero street defense game set in an authentic
 
 Live GitHub Pages: [https://wacunn.github.io/toronto-fight-game/](https://wacunn.github.io/toronto-fight-game/)
 
+## 💻 One-Line Local Install (Mac, Chromebook & Windows PC)
+
+For step-by-step instructions, see **[SETUP.md](SETUP.md)**. Installing locally adds a Desktop / Launcher app icon, **automatic Start Screen updates with one button**, and links seamlessly with **Gemini Tutor** so students can earn Fists of Doom game time through active writing!
+
+- **Mac or Chromebook (Terminal):**
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/wacunn/toronto-fight-game/main/install.sh | bash
+  ```
+- **Windows PC (PowerShell):**
+  ```powershell
+  irm https://raw.githubusercontent.com/wacunn/toronto-fight-game/main/install.ps1 | iex
+  ```
+- **Running Locally from Source:**
+  ```bash
+  ./start.sh          # Mac / Chromebook / Linux -> http://localhost:8788
+  start.cmd           # Windows PC -> http://localhost:8788
+  ```
+
 ---
 
 ## 🛡️ Defender of the 6ix Mechanics

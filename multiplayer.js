@@ -136,7 +136,8 @@
       savedServer.includes('localhost') ||
       savedServer.includes('127.0.0.1') ||
       savedServer.includes(':8000') ||
-      savedServer.includes(':8080')
+      savedServer.includes(':8080') ||
+      savedServer.includes(':8788')
     )) {
       savedServer = null;
       localStorage.removeItem('toronto_mp_server');

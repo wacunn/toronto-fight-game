@@ -4,8 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FISTS OF DOOM: TORONTO — DEFENDER OF THE 6IX</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🥊</text></svg>">
-  <link rel="stylesheet" href="styles.css?v=15">
+  <link rel="manifest" href="static/manifest.json">
+  <link rel="icon" type="image/png" href="static/icon-192.png">
+  <link rel="stylesheet" href="styles.css?v=16">
   <!-- Three.js + Postprocessing + Tween.js for ultra-smooth dynamic combat -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <!-- Bloom post-processing (same three.js r128 version, loaded as plain scripts) -->
@@ -358,6 +359,28 @@
           <p id="menu-subtitle" class="hero-desc">PROTECT TORONTO CITIZENS FROM ROGUE ROBOTS &amp; DISGUISED BODY SNATCHERS • DO NOT ATTACK INNOCENTS!</p>
         </div>
 
+        <!-- Local App Update Checker & Single-Button Updater (shown automatically on local installs) -->
+        <div id="local-update-bar" class="local-update-bar hidden">
+          <div class="upd-bar-main">
+            <div class="upd-bar-left">
+              <span id="local-ver-badge" class="upd-ver-badge">v1.0.0</span>
+              <span id="local-update-msg" class="upd-msg">Checking for updates…</span>
+            </div>
+            <div class="upd-bar-actions">
+              <button id="local-apply-upd-btn" class="upd-apply-btn hidden" type="button">⬆ UPDATE NOW</button>
+              <button id="local-check-upd-btn" class="upd-check-btn" type="button">↻ CHECK UPDATES</button>
+            </div>
+          </div>
+          <pre id="local-update-notes" class="upd-notes hidden"></pre>
+        </div>
+
+        <!-- Optional Gemini Tutor Standalone Lock Notice (only when parent turns on standalone lock) -->
+        <div id="arcade-lock-card" class="arcade-lock-card hidden">
+          <div class="arcade-lock-title">🔒 EARN GAME TIME IN GEMINI TUTOR</div>
+          <div class="arcade-lock-desc">Your Fists of Doom game bank is currently at <b>0:00</b>. Do active solid writing in Gemini Tutor to unlock your next session!</div>
+          <a id="arcade-open-tutor-link" href="http://localhost:8787" class="action-btn primary-btn" style="display:inline-block;text-align:center;text-decoration:none;margin-top:10px">OPEN GEMINI TUTOR →</a>
+        </div>
+
         <div class="menu-content-grid">
           <div class="menu-card">
             <h3>🕹️ HERO CONTROLS</h3>
@@ -469,9 +492,9 @@
   <script src="city.js?v=14"></script>
   <script src="islands.js?v=14"></script>
   <script src="traffic.js?v=14"></script>
-  <script src="multiplayer.js?v=14"></script>
+  <script src="multiplayer.js?v=16"></script>
   <script src="ai_grid.js?v=14"></script>
   <script src="ai_copilot.js?v=15"></script>
-  <script src="game.js?v=15"></script>
+  <script src="game.js?v=16"></script>
 </body>
 </html>
