@@ -4,21 +4,21 @@ A first-person 3D retro-modern superhero street defense game set in an authentic
 
 Live GitHub Pages: [https://wacunn.github.io/toronto-fight-game/](https://wacunn.github.io/toronto-fight-game/)
 
-## 💻 One-Line Local Install (Mac, Chromebook & Windows PC)
+## 💻 One-Line Local Install (Windows, Mac, ChromeOS & Linux)
 
-For step-by-step instructions, see **[SETUP.md](SETUP.md)**. Installing locally adds a Desktop / Launcher app icon, **automatic Start Screen updates with one button**, and links seamlessly with **Gemini Tutor** so students can earn Fists of Doom game time through active writing!
+For step-by-step instructions, see **[SETUP.md](SETUP.md)**. Installing locally adds a Desktop / App Launcher icon, **automatic Start Screen updates with one button**, and links automatically with **[Gemini Tutor](https://github.com/wacunn/gemini-tutor)** so students can earn *Fists of Doom* play time through active, verified writing (with parent conversion & lock controls on Gemini Tutor's `/parent` dashboard)!
 
-- **Mac or Chromebook (Terminal):**
-  ```bash
-  curl -fsSL https://raw.githubusercontent.com/wacunn/toronto-fight-game/main/install.sh | bash
-  ```
-- **Windows PC (PowerShell):**
+- **Windows 11 / 10 (PowerShell):**
   ```powershell
   irm https://raw.githubusercontent.com/wacunn/toronto-fight-game/main/install.ps1 | iex
   ```
+- **macOS, ChromeOS (Chromebook), or Linux (Terminal):**
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/wacunn/toronto-fight-game/main/install.sh | bash
+  ```
 - **Running Locally from Source:**
   ```bash
-  ./start.sh          # Mac / Chromebook / Linux -> http://localhost:8788
+  ./start.sh          # Mac / ChromeOS / Linux -> http://localhost:8788
   start.cmd           # Windows PC -> http://localhost:8788
   ```
 
