@@ -208,10 +208,14 @@ def api_arcade_status():
         enabled = bool(arc.get("enabled", True))
         lock_standalone = bool(arc.get("lock_standalone", False))
         rem = max(0.0, float(arc.get("game_seconds_available") or 0.0))
+        ov = float(arc.get("parent_override_until") or 0.0)
+        import time as _t
+        override_on = (ov < 0) or (ov > _t.time())
         return {
             "tutor_installed": True,
-            "locked": bool(enabled and lock_standalone and rem <= 0),
+            "locked": bool(enabled and lock_standalone and rem <= 0 and not override_on),
             "remaining_seconds": round(rem, 1),
+            "parent_override_active": override_on,
             "tutor_url": f"http://localhost:{tutor_port}",
         }
     except Exception:

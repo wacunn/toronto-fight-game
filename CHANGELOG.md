@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.3
+- **Gemini Tutor Parent Override Support (`server_multiplayer.py`):**
+  - `/api/arcade-status` now honors Gemini Tutor's `parent_override_until` (`30m`, `1 hr`, `Rest of Today`, or `Until Turned Off`) so standalone *Fists of Doom* unlocks automatically during Parent Free Play Override even when banked game time is `0:00` and `lock_standalone` is enabled.
+
 ## 1.0.2
 - **Windows 11 Clean Reinstall & Windowless Updater Polish (`install.ps1`, `updater.py`, `launch.py`):**
   - `install.ps1` now gracefully stops any running local server (`/api/quit`) before replacing files so Windows never hits file-in-use locks, and `updater.py` uses `CREATE_NO_WINDOW` during silent dependency updates.

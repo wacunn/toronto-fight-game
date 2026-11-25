@@ -1,4 +1,4 @@
-﻿# Fists of Doom: Toronto installer for Windows PC (PowerShell)
+# Fists of Doom: Toronto installer for Windows PC (PowerShell)
 #   irm https://raw.githubusercontent.com/wacunn/toronto-fight-game/main/install.ps1 | iex
 # Safe to run again: updates the game while keeping your local data.
 
@@ -9,7 +9,7 @@ $Dir    = if ($env:FOD_DIR)    { $env:FOD_DIR }    else { Join-Path $HOME "Fists
 
 Write-Host "`nInstalling Fists of Doom: Toronto into $Dir..." -ForegroundColor Cyan
 
-# 1) Install uv (brings Python 3.12 automatically—no manual Python install needed)
+# 1) Install uv (brings Python 3.12 automatically--no manual Python install needed)
 $Uv = Get-Command uv -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
 if (-not $Uv) {
     $Candidate = Join-Path $HOME ".local\bin\uv.exe"
