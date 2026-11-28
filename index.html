@@ -6,7 +6,7 @@
   <title>FISTS OF DOOM: TORONTO — DEFENDER OF THE 6IX</title>
   <link rel="manifest" href="static/manifest.json">
   <link rel="icon" type="image/png" href="static/icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=16">
+  <link rel="stylesheet" href="styles.css?v=18">
   <!-- Three.js + Postprocessing + Tween.js for ultra-smooth dynamic combat -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <!-- Bloom post-processing (same three.js r128 version, loaded as plain scripts) -->
@@ -34,6 +34,7 @@
         </div>
         <span id="mouse-status-tag" class="tag tag-green">MOUSE: UNLOCKED</span>
         <span id="tod-badge" class="tag tag-dim" title="Click to toggle Daytime / Nighttime in Toronto" style="cursor:pointer;">🌙 NIGHTTIME</span>
+        <span id="gfx-tier-badge" class="tag tag-dim" title="Click to switch Graphics Mode (Laptop / Lite / Ultra)" style="cursor:pointer;">⚡ GFX: AUTO</span>
         <span id="mp-status-badge" class="tag tag-dim" title="Multiplayer Status">🌐 SOLO / OFFLINE</span>
         <span id="fps-counter" class="tag tag-dim">60 FPS</span>
       </div>
@@ -483,18 +484,19 @@
 
         <div class="menu-footer">
           <span>💡 Mouse safety: Pressing <b>ESC</b> or clicking the top button always releases your cursor instantly.</span>
+          <span style="display:block;margin-top:4px;opacity:0.85;">💻 Laptop / Trackpad tip: Drag to look in Free Mouse Mode, use <b>J/L/I/K</b> or Arrows to aim while walking, and press <b>- / +</b> to tune sensitivity.</span>
         </div>
       </div>
     </div>
   </div>
 
   <script src="toronto_map.js?v=14"></script>
-  <script src="city.js?v=17"></script>
+  <script src="city.js?v=18"></script>
   <script src="islands.js?v=17"></script>
   <script src="traffic.js?v=14"></script>
   <script src="multiplayer.js?v=16"></script>
   <script src="ai_grid.js?v=14"></script>
   <script src="ai_copilot.js?v=15"></script>
-  <script src="game.js?v=17"></script>
+  <script src="game.js?v=18"></script>
 </body>
 </html>

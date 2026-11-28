@@ -1179,16 +1179,20 @@ const container = document.getElementById('game-container');
 const scene = new THREE.Scene();
 
 const IS_LITE_HW = !!(typeof window !== 'undefined' && window.FOD_HW && window.FOD_HW.lite);
+const IS_BALANCED_HW = !!(typeof window !== 'undefined' && window.FOD_HW && window.FOD_HW.balanced);
+const IS_PERF_HW = !!(typeof window !== 'undefined' && window.FOD_HW && window.FOD_HW.perfMode);
+const IS_WINDOWS = !!(typeof window !== 'undefined' && window.FOD_HW && window.FOD_HW.isWindows);
 
-// Far clip increased to 4500m (2600m on Lite/Chromebook hardware) to render Toronto Islands and skyline
-const camera = new THREE.PerspectiveCamera(78, window.innerWidth / window.innerHeight, 0.14, IS_LITE_HW ? 2600 : 4500);
+// Keep far clip at 4500m on all tiers so the 3600m sky dome never clips!
+const camera = new THREE.PerspectiveCamera(78, window.innerWidth / window.innerHeight, 0.14, 4500);
 camera.position.set(0, 1.7, 0);
 
-const renderer = new THREE.WebGLRenderer({ antialias: !IS_LITE_HW, powerPreference: 'high-performance' });
+const renderer = new THREE.WebGLRenderer({ antialias: !IS_PERF_HW, powerPreference: 'high-performance' });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(IS_LITE_HW ? 1.0 : Math.min(window.devicePixelRatio || 1, 2.0));
+let _adaptivePr = IS_LITE_HW ? 0.85 : (IS_BALANCED_HW ? 1.0 : Math.min(window.devicePixelRatio || 1, 1.5));
+renderer.setPixelRatio(_adaptivePr);
 if (THREE.sRGBEncoding !== undefined) renderer.outputEncoding = THREE.sRGBEncoding;
-renderer.shadowMap.enabled = !IS_LITE_HW;
+renderer.shadowMap.enabled = !IS_PERF_HW;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 container.insertBefore(renderer.domElement, container.firstChild);
 
@@ -1356,7 +1360,7 @@ function setCityTimeOfDay(mode, fromNet, byName) {
 // --- Bloom post-processing (lit windows, neon, lamps, CN Tower LEDs glow) ---
 let composer = null, bloomPass = null, outputEncodingPass = null;
 function setupPostFX() {
-  if (IS_LITE_HW) return; // Keep Chromebook / ARM GPU fill-rate fast and single-pass
+  if (IS_PERF_HW) return; // Keep Windows integrated GPU / Chromebook fill-rate fast and single-pass
   if (!THREE.EffectComposer || !THREE.RenderPass || !THREE.UnrealBloomPass) return; // scripts not loaded: plain render
   const pr = (renderer && typeof renderer.getPixelRatio === 'function') ? renderer.getPixelRatio() : 1;
   const size = (renderer && typeof renderer.getDrawingBufferSize === 'function')
@@ -1440,7 +1444,7 @@ function ensureIslandsLoaded() {
 
 function ensureTrafficLoaded() {
   if (traffic || !city || typeof window.createTraffic !== 'function') return traffic;
-  traffic = window.createTraffic(scene, city, audio, { count: IS_LITE_HW ? 18 : 30 });
+  traffic = window.createTraffic(scene, city, audio, { count: IS_LITE_HW ? 16 : (IS_BALANCED_HW ? 22 : 30) });
   if (traffic && traffic.setTimeOfDay) {
     traffic.setTimeOfDay(getCityTimeOfDay() === 'day');
   }
@@ -1536,7 +1540,7 @@ function createProceduralTexture(type) {
 function upgradeSceneTextureQuality() {
   if (!scene || typeof scene.traverse !== 'function') return;
   const caps = (renderer && renderer.capabilities) ? renderer.capabilities : {};
-  const maxAniso = (!IS_LITE_HW && typeof caps.getMaxAnisotropy === 'function')
+  const maxAniso = (!IS_PERF_HW && typeof caps.getMaxAnisotropy === 'function')
     ? Math.max(1, Math.min(16, caps.getMaxAnisotropy() || 1))
     : 1;
   const srgbOn = (THREE.sRGBEncoding !== undefined && renderer && renderer.outputEncoding === THREE.sRGBEncoding);
@@ -4214,7 +4218,7 @@ function closeFerryPanel() {
   if (el) el.classList.add('hidden');
 
   if (state.inGame && !state.freeMouseMode && !state.isPaused && !state.isDead && !state.onFerry && !state.inElevator) {
-    container.requestPointerLock();
+    requestSafePointerLock(container);
   }
 }
 
@@ -4606,7 +4610,7 @@ function closeTaxiPanel() {
   const el = document.getElementById('taxi-panel');
   if (el) el.classList.add('hidden');
   if (state.inGame && !state.freeMouseMode && !state.isPaused && !state.isDead && !state.onTaxi && !state.onFerry && !state.inElevator && container && container.requestPointerLock && !document.pointerLockElement) {
-    try { container.requestPointerLock(); } catch (_) {}
+    requestSafePointerLock(container);
   }
 }
 
@@ -5548,7 +5552,7 @@ function closeStreetcarPanel() {
   const el = document.getElementById('streetcar-panel');
   if (el) el.classList.add('hidden');
   if (state.inGame && !state.freeMouseMode && !state.isPaused && !state.isDead && !state.onTaxi && !state.onFerry && !state.inElevator && container && container.requestPointerLock && typeof document !== 'undefined' && !document.pointerLockElement) {
-    try { container.requestPointerLock(); } catch (_) {}
+    requestSafePointerLock(container);
   }
 }
 
@@ -6266,7 +6270,7 @@ function closeElevatorPanel() {
 
   // Re-acquire pointer lock if playing in mouse-look mode and not paused
   if (state.inGame && !state.freeMouseMode && !state.isPaused && !state.isDead && !state.inElevator) {
-    container.requestPointerLock();
+    requestSafePointerLock(container);
   }
 }
 
@@ -7474,7 +7478,55 @@ function updateFireworks(dt) {
 // CONTROLS & POINTER LOCK MANAGEMENT (NEVER TRAPS CURSOR!)
 // ============================================================================
 const keys = {};
-let mouseSensitivity = 0.0024;
+let mouseSensitivity = IS_WINDOWS ? 0.0020 : 0.0024;
+try {
+  const savedSens = parseFloat(localStorage.getItem('fod_sens') || '');
+  if (Number.isFinite(savedSens) && savedSens >= 0.0006 && savedSens <= 0.008) mouseSensitivity = savedSens;
+} catch (_) {}
+
+// Request Pointer Lock with unadjustedMovement on Windows Chrome/Edge (bypasses erratic Windows touchpad acceleration!)
+function requestSafePointerLock(el) {
+  if (!el || !el.requestPointerLock) return;
+  try {
+    const res = el.requestPointerLock({ unadjustedMovement: true });
+    if (res && typeof res.catch === 'function') {
+      res.catch(() => { try { el.requestPointerLock(); } catch (_) {} });
+    }
+  } catch (_) {
+    try { el.requestPointerLock(); } catch (_) {}
+  }
+}
+
+let _dragLooking = false;
+let _dragMoved = 0;
+let _lastDragMoved = 0;
+let _dragLastX = 0;
+let _dragLastY = 0;
+let _touchLookId = null;
+let _touchMoved = 0;
+let _touchLastX = 0;
+let _touchLastY = 0;
+
+function applyLookDelta(dx, dy, scale = 1.0) {
+  // Reject bogus Windows 11 Precision Touchpad pointer-lock jump spikes (>160px in a single event)
+  if (Math.abs(dx) > 160 || Math.abs(dy) > 160) return;
+  const cx = Math.max(-65, Math.min(65, dx));
+  const cy = Math.max(-65, Math.min(65, dy));
+  const s = mouseSensitivity * scale;
+  if (state.telescopeActive) {
+    const zoomRatio = (camera.fov / 78);
+    const ts = s * zoomRatio * 0.9;
+    state.telescopeOffsetYaw = Math.max(-0.65, Math.min(0.65, state.telescopeOffsetYaw - cx * ts));
+    state.telescopeOffsetPitch = Math.max(-0.45, Math.min(0.35, state.telescopeOffsetPitch - cy * ts));
+    player.yaw = state.telescopeBaseYaw + state.telescopeOffsetYaw;
+    player.pitch = state.telescopeBasePitch + state.telescopeOffsetPitch;
+    updateTelescopeTelemetry();
+    return;
+  }
+  player.yaw -= cx * s;
+  player.pitch -= cy * s;
+  player.pitch = Math.max(-Math.PI / 2.3, Math.min(Math.PI / 2.3, player.pitch));
+}
 
 // Pointer Lock Change Listener
 document.addEventListener('pointerlockchange', () => {
@@ -7496,9 +7548,17 @@ document.addEventListener('pointerlockchange', () => {
   }
 });
 
-// Canvas Click & Mousedown: Executes attacks during gameplay with zero dropped inputs
+// Canvas Mousedown / Drag-Look / Punch: in Free Mouse Mode, left-or-right drag looks around cleanly on laptop trackpads; quick tap punches!
 container.addEventListener('mousedown', (e) => {
   if (!state.inGame || state.isPaused || state.isDead || elevatorPanel.open || ferryPanel.open || taxiPanel.open || streetcarPanel.open) return;
+  if (e.target && e.target.closest && e.target.closest('button, input, select, a, #top-bar, #bottom-hud, .overlay, #deck-action-prompt')) return;
+  if (state.freeMouseMode && (e.button === 0 || e.button === 2)) {
+    _dragLooking = true;
+    _dragMoved = 0;
+    _dragLastX = e.clientX;
+    _dragLastY = e.clientY;
+    return;
+  }
   if (e.button === 0) {
     // If near the active mission box, instantly crack it open!
     if (missionState.active && missionState.state === 'active' && missionState.boxObj) {
@@ -7512,6 +7572,20 @@ container.addEventListener('mousedown', (e) => {
   }
 });
 
+window.addEventListener('mouseup', (e) => {
+  if (!_dragLooking) return;
+  _lastDragMoved = _dragMoved;
+  const wasQuickTap = (_dragMoved < 6 && e.button === 0);
+  _dragLooking = false;
+  if (wasQuickTap && state.inGame && !state.isPaused && !state.isDead && !state.telescopeActive) {
+    if (missionState.active && missionState.state === 'active' && missionState.boxObj) {
+      const dBox = Math.hypot(missionState.pos.x - player.pos.x, missionState.pos.z - player.pos.z);
+      if (dBox <= 6.5) { completeMission(); return; }
+    }
+    triggerAttack();
+  }
+});
+
 container.addEventListener('click', (e) => {
   if (!state.inGame || state.isPaused || state.isDead || elevatorPanel.open || ferryPanel.open || taxiPanel.open || streetcarPanel.open) return;
   if (state.telescopeActive) {
@@ -7520,36 +7594,89 @@ container.addEventListener('click', (e) => {
     }
     return;
   }
+  if (state.freeMouseMode) return;
   if (e.button === 0 && state.attackTimer <= 0) {
     triggerAttack();
   }
 });
 
-// Mouse wheel zoom cycling in telescope view
+// Native Lenovo Yoga Touchscreen 1-finger drag-look & tap-to-punch
+container.addEventListener('touchstart', (e) => {
+  if (!state.inGame || state.isPaused || state.isDead || elevatorPanel.open || ferryPanel.open || taxiPanel.open || streetcarPanel.open) return;
+  if (e.target && e.target.closest && e.target.closest('button, input, select, #top-bar, .overlay')) return;
+  if (_touchLookId === null && e.changedTouches && e.changedTouches.length) {
+    const t = e.changedTouches[0];
+    _touchLookId = t.identifier;
+    _touchMoved = 0;
+    _touchLastX = t.clientX;
+    _touchLastY = t.clientY;
+  }
+}, { passive: true });
+
+container.addEventListener('touchmove', (e) => {
+  if (_touchLookId === null || !state.inGame || state.isPaused || state.isDead) return;
+  for (let i = 0; i < e.changedTouches.length; i++) {
+    const t = e.changedTouches[i];
+    if (t.identifier === _touchLookId) {
+      const dx = t.clientX - _touchLastX;
+      const dy = t.clientY - _touchLastY;
+      _touchLastX = t.clientX;
+      _touchLastY = t.clientY;
+      _touchMoved += Math.hypot(dx, dy);
+      applyLookDelta(dx, dy, 1.45);
+      e.preventDefault();
+      break;
+    }
+  }
+}, { passive: false });
+
+container.addEventListener('touchend', (e) => {
+  if (_touchLookId === null) return;
+  for (let i = 0; i < e.changedTouches.length; i++) {
+    if (e.changedTouches[i].identifier === _touchLookId) {
+      const wasTap = _touchMoved < 8;
+      _touchLookId = null;
+      if (wasTap && state.inGame && !state.isPaused && !state.isDead && !state.telescopeActive) {
+        triggerAttack();
+      }
+      break;
+    }
+  }
+}, { passive: true });
+
+// Mouse wheel: zoom in telescope, or smooth 2-finger trackpad look without triggering browser back-swipe!
 window.addEventListener('wheel', (e) => {
   if (state.telescopeActive) {
     e.preventDefault();
     cycleTelescopeZoom(e.deltaY < 0 ? 1 : -1);
+    return;
+  }
+  if (state.inGame && !state.isPaused && !state.isDead && !elevatorPanel.open && !ferryPanel.open && !taxiPanel.open && !streetcarPanel.open) {
+    if (Math.abs(e.deltaX) > 1.5) {
+      e.preventDefault();
+      applyLookDelta(e.deltaX * 0.45, 0, 1.0);
+    }
   }
 }, { passive: false });
 
-// Mouse Movement: Rotates camera or swivels telescope
+// Mouse Movement: Rotates camera or swivels telescope (Windows spike-clamped + Free Mouse 1-finger drag!)
 document.addEventListener('mousemove', (e) => {
   if (state.isDead || state.isPaused || elevatorPanel.open || ferryPanel.open || taxiPanel.open || streetcarPanel.open) return;
   if (state.telescopeActive) {
-    const zoomRatio = (camera.fov / 78);
-    const sens = mouseSensitivity * zoomRatio * 0.9;
-    state.telescopeOffsetYaw = Math.max(-0.65, Math.min(0.65, state.telescopeOffsetYaw - e.movementX * sens));
-    state.telescopeOffsetPitch = Math.max(-0.45, Math.min(0.35, state.telescopeOffsetPitch - e.movementY * sens));
-    player.yaw = state.telescopeBaseYaw + state.telescopeOffsetYaw;
-    player.pitch = state.telescopeBasePitch + state.telescopeOffsetPitch;
-    updateTelescopeTelemetry();
+    applyLookDelta(e.movementX || 0, e.movementY || 0, 1.0);
     return;
   }
-  if (state.isPointerLocked || (state.freeMouseMode && e.buttons === 2)) {
-    player.yaw -= e.movementX * mouseSensitivity;
-    player.pitch -= e.movementY * mouseSensitivity;
-    player.pitch = Math.max(-Math.PI / 2.3, Math.min(Math.PI / 2.3, player.pitch));
+  if (state.isPointerLocked) {
+    applyLookDelta(e.movementX || 0, e.movementY || 0, 1.0);
+  } else if (state.freeMouseMode && (_dragLooking || e.buttons === 2 || e.buttons === 1)) {
+    const dx = _dragLooking ? (e.clientX - _dragLastX) : (e.movementX || 0);
+    const dy = _dragLooking ? (e.clientY - _dragLastY) : (e.movementY || 0);
+    _dragLastX = e.clientX;
+    _dragLastY = e.clientY;
+    _dragMoved += Math.hypot(dx, dy);
+    if (_dragMoved >= 3 || e.buttons === 2) {
+      applyLookDelta(dx, dy, 1.35);
+    }
   }
 });
 
@@ -7567,7 +7694,7 @@ if (deckPromptEl) {
       } else {
         handleDeckAction();
         if (!state.freeMouseMode && !elevatorPanel.open && !ferryPanel.open && !taxiPanel.open && !streetcarPanel.open && container && container.requestPointerLock && !state.isPointerLocked) {
-          container.requestPointerLock();
+          requestSafePointerLock(container);
         }
       }
     }
@@ -7975,7 +8102,7 @@ window.addEventListener('blur', () => {
 
 window.addEventListener('contextmenu', (e) => {
   e.preventDefault();
-  if (state.inGame && !state.isPaused && state.unlocked[ATTACKS.KICK.id]) {
+  if (state.inGame && !state.isPaused && !(state.freeMouseMode && _lastDragMoved >= 6) && state.unlocked[ATTACKS.KICK.id]) {
     triggerQuickKick();
   }
 });
@@ -8014,7 +8141,7 @@ function resumeGame(usePointerLock = true) {
 
   try {
     if (usePointerLock && container && container.requestPointerLock) {
-      container.requestPointerLock();
+      requestSafePointerLock(container);
     } else if (!usePointerLock && document.pointerLockElement && document.exitPointerLock) {
       document.exitPointerLock();
     }
@@ -9676,7 +9803,29 @@ function animate(now) {
   if (projChanged) camera.updateProjectionMatrix();
 
   updateArmsRig(simDt);
-  drawFace();
+  if (!window._fodPerfTick) window._fodPerfTick = { f: 0 };
+  if ((window._fodPerfTick.f++ & 3) === 0) drawFace();
+
+  // Live Adaptive FPS Resolution Governor: if any laptop dips <34 FPS for 2.2s, smoothly step down pixel ratio
+  if (state.inGame && !state.isPaused && dt > 0.001 && dt < 0.25) {
+    if (!window._fodAdapt) window._fodAdapt = { t: 0, n: 0, lowStreak: 0 };
+    const ad = window._fodAdapt;
+    ad.t += dt; ad.n++;
+    if (ad.t >= 2.2) {
+      const avgFps = ad.n / ad.t;
+      ad.t = 0; ad.n = 0;
+      if (avgFps < 34) {
+        ad.lowStreak++;
+        if (_adaptivePr > 0.72) {
+          _adaptivePr = Math.max(0.72, Math.round((_adaptivePr - 0.14) * 100) / 100);
+          renderer.setPixelRatio(_adaptivePr);
+          if (composer) composer.setPixelRatio(_adaptivePr);
+        }
+      } else {
+        ad.lowStreak = 0;
+      }
+    }
+  }
 
   if (composer && getCityTimeOfDay() !== 'day') composer.render(dt);
   else renderer.render(scene, camera);
@@ -9687,11 +9836,11 @@ const _pRight = new THREE.Vector3();
 const _pMoveDir = new THREE.Vector3();
 
 function updatePlayer(dt) {
-  // Turning: ArrowLeft / ArrowRight or Q (E is reserved for kick)
-  if (keys['ArrowLeft'] || keys['KeyQ']) player.yaw += 2.6 * dt;
-  if (keys['ArrowRight']) player.yaw -= 2.6 * dt;
-  if (keys['PageUp']) player.pitch = Math.min(Math.PI / 2.3, player.pitch + 2.0 * dt);
-  if (keys['PageDown']) player.pitch = Math.max(-Math.PI / 2.3, player.pitch - 2.0 * dt);
+  // Turning & Pitch: ArrowLeft/Right, Q, or J/L (100% immune to Windows WASD touchpad palm-rejection!)
+  if (keys['ArrowLeft'] || keys['KeyQ'] || keys['KeyJ']) player.yaw += 2.5 * dt;
+  if (keys['ArrowRight'] || keys['KeyL']) player.yaw -= 2.5 * dt;
+  if (keys['PageUp'] || keys['KeyI']) player.pitch = Math.min(Math.PI / 2.3, player.pitch + 1.8 * dt);
+  if (keys['PageDown'] || keys['KeyK']) player.pitch = Math.max(-Math.PI / 2.3, player.pitch - 1.8 * dt);
 
   camera.rotation.order = 'YXZ';
   camera.rotation.y = player.yaw;
@@ -11070,7 +11219,7 @@ function resetGame() {
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
-  const pr = IS_LITE_HW ? 1.0 : Math.min(window.devicePixelRatio || 1, 2.0);
+  const pr = _adaptivePr;
   renderer.setPixelRatio(pr);
   renderer.setSize(window.innerWidth, window.innerHeight);
   if (composer) {
@@ -11084,6 +11233,36 @@ window.addEventListener('resize', () => {
     );
   }
 });
+
+// Graphics Tier Badge & Trackpad Sensitivity Hotkeys (- / +)
+(function initGfxAndSensControls() {
+  const badge = document.getElementById('gfx-tier-badge');
+  const tier = (window.FOD_HW && window.FOD_HW.tier) || 'ultra';
+  if (badge) {
+    const labels = { ultra: '⚡ GFX: ULTRA', balanced: '⚡ GFX: LAPTOP', lite: '⚡ GFX: LITE' };
+    badge.innerText = labels[tier] || '⚡ GFX: AUTO';
+    badge.className = 'tag ' + (tier === 'ultra' ? 'tag-cyan' : (tier === 'balanced' ? 'tag-green' : 'tag-dim'));
+    badge.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const order = ['balanced', 'lite', 'ultra'];
+      const next = order[(order.indexOf(tier) + 1) % order.length];
+      try { localStorage.setItem('fod_quality', next); } catch (_) {}
+      const url = new URL(window.location.href);
+      url.searchParams.set('quality', next);
+      window.location.href = url.toString();
+    });
+  }
+  window.addEventListener('keydown', (e) => {
+    if (!state.inGame || state.isPaused || state.telescopeActive || (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA'))) return;
+    if (e.code === 'Minus' || e.code === 'Equal') {
+      const mult = e.code === 'Equal' ? 1.18 : 0.85;
+      mouseSensitivity = Math.max(0.0007, Math.min(0.0065, mouseSensitivity * mult));
+      try { localStorage.setItem('fod_sens', String(mouseSensitivity)); } catch (_) {}
+      const pct = Math.round((mouseSensitivity / 0.0022) * 100);
+      if (typeof showAnnouncement === 'function') showAnnouncement(`TRACKPAD / MOUSE SENSITIVITY: ${pct}%`, 1200);
+    }
+  });
+})();
 
 // Difficulty Selection Event Listeners
 const prevDiffBtn = document.getElementById('diff-prev-btn');

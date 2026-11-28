@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.0
+- **Windows Laptop / Lenovo Yoga GPU & Precision Trackpad Optimization (`launch.py`, `city.js`, `game.js`, `styles.css`, `index.html`):**
+  - **Windows GPU Auto-Tiering (`⚡ GFX: LAPTOP`)**: Added live WebGL `UNMASKED_RENDERER_WEBGL` probing in `FOD_HW` (`ultra` / `balanced` / `lite`), auto-selecting `balanced` on Windows integrated GPUs (Lenovo Yoga Intel UHD / Iris Xe / Arc / AMD Radeon iGPU / Adreno) to skip shadows, MSAA, offscreen bloom, and DWM `backdrop-filter` blur readbacks (`html.win-perf`), cap pixel ratio at `1.0` with a Live Adaptive FPS Resolution Governor, and launch Chrome/Edge on Windows with `--ignore-gpu-blocklist`, `--enable-gpu-rasterization`, and `--disable-features=OverscrollHistoryNavigation`.
+  - **Windows Precision Trackpad, Yoga Touchscreen & Keyboard Aim**: Added `requestSafePointerLock({ unadjustedMovement: true })` with graceful fallback, spike-rejected `applyLookDelta()` (`>160px` ignored, clamped `±65px`), 1-finger left-click drag-look + quick tap-to-punch in Free Mouse Mode, native touchscreen drag-look & tap-to-punch, 2-finger horizontal trackpad pan, `overscroll-behavior: none; touch-action: none;`, `J/L/I/K` keyboard aim (immune to Windows WASD touchpad palm-rejection), clickable `#gfx-tier-badge` switcher, and `-` / `+` live sensitivity tuning.
+
 ## 1.0.3
 - **Gemini Tutor Parent Override Support (`server_multiplayer.py`):**
   - `/api/arcade-status` now honors Gemini Tutor's `parent_override_until` (`30m`, `1 hr`, `Rest of Today`, or `Until Turned Off`) so standalone *Fists of Doom* unlocks automatically during Parent Free Play Override even when banked game time is `0:00` and `lock_standalone` is enabled.

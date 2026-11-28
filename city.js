@@ -74,22 +74,63 @@
     return g;
   };
 
-  // ---------- Hardware profile (Chromebook / ARM / low-RAM adaptive scaling) ----------
+  // ---------- Hardware profile (Windows Yoga / Intel iGPU / Chromebook / Apple Silicon auto-tiering) ----------
   const FOD_HW = (function () {
     const ua = (typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent : '';
     const mem = (typeof navigator !== 'undefined' && navigator.deviceMemory) ? navigator.deviceMemory : 8;
     const cores = (typeof navigator !== 'undefined' && navigator.hardwareConcurrency) ? navigator.hardwareConcurrency : 8;
+    const isWindows = /Windows/i.test(ua);
     const qp = (typeof window !== 'undefined' && window.location && window.location.search)
       ? new URLSearchParams(window.location.search).get('quality')
       : null;
-    const lite = qp === 'low' || (qp !== 'ultra' && (
-      /\bCrOS\b|Linux aarch64|Linux arm|Android|Mobile/i.test(ua) || mem <= 4 || cores <= 4
-    ));
-    const hw = { lite, texScale: lite ? 0.25 : 0.5 };
+    let saved = null;
+    try { saved = (typeof localStorage !== 'undefined') ? localStorage.getItem('fod_quality') : null; } catch (_) {}
+    const reqTier = (qp || saved || '').toLowerCase();
+
+    let gpu = '';
+    try {
+      if (typeof document !== 'undefined') {
+        const cv = document.createElement('canvas');
+        cv.width = 1; cv.height = 1;
+        const gl = cv.getContext('webgl2') || cv.getContext('webgl') || cv.getContext('experimental-webgl');
+        if (gl) {
+          const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+          if (dbg) gpu = String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || '');
+          const lc = gl.getExtension('WEBGL_lose_context');
+          if (lc) lc.loseContext();
+        }
+      }
+    } catch (_) {}
+
+    const isSoftwareGpu = /SwiftShader|Microsoft Basic Render|llvmpipe|Software Adapter/i.test(gpu);
+    const isDedicatedWinGpu = /RTX|GTX|Radeon RX|Radeon Pro|Quadro|GeForce/i.test(gpu);
+    const isWinIntegrated = isWindows && !isDedicatedWinGpu;
+
+    let tier = 'ultra';
+    if (reqTier === 'low' || reqTier === 'lite') {
+      tier = 'lite';
+    } else if (reqTier === 'balanced' || reqTier === 'med' || reqTier === 'medium') {
+      tier = 'balanced';
+    } else if (reqTier === 'ultra' || reqTier === 'high') {
+      tier = 'ultra';
+    } else if (isSoftwareGpu || /\bCrOS\b|Linux aarch64|Linux arm|Android|Mobile/i.test(ua) || mem <= 4 || cores <= 4) {
+      tier = 'lite';
+    } else if (isWinIntegrated) {
+      tier = 'balanced';
+    }
+
+    const lite = (tier === 'lite');
+    const balanced = (tier === 'balanced');
+    const perfMode = (tier !== 'ultra');
+    const hw = { tier, lite, balanced, perfMode, isWindows, isSoftwareGpu, gpu, texScale: lite ? 0.25 : 0.5 };
     if (typeof window !== 'undefined') window.FOD_HW = hw;
+    if (typeof document !== 'undefined' && document.documentElement && (isWindows || perfMode)) {
+      document.documentElement.classList.add('win-perf');
+    }
     return hw;
   })();
   const LITE_HW = FOD_HW.lite;
+  const PERF_HW = FOD_HW.perfMode;
 
   // ---------- Procedural facade textures (night city) ----------
   // One tile = 8 window columns x 8 floors -> 32 m wide x 28 m tall.
@@ -1885,8 +1926,8 @@
     const MOON_DIR = new THREE.Vector3(-0.45, 0.8, -0.38).normalize();
     const ACTIVE_LIGHT_DIR = MOON_DIR.clone();
     const moon = new THREE.DirectionalLight(0xbcd0f0, 0.70);
-    moon.castShadow = !LITE_HW;
-    moon.shadow.mapSize.set(LITE_HW ? 512 : 2048, LITE_HW ? 512 : 2048);
+    moon.castShadow = !PERF_HW;
+    moon.shadow.mapSize.set(PERF_HW ? 512 : 2048, PERF_HW ? 512 : 2048);
     moon.shadow.camera.left = -75; moon.shadow.camera.right = 75;
     moon.shadow.camera.top = 75; moon.shadow.camera.bottom = -75;
     moon.shadow.camera.near = 25; moon.shadow.camera.far = 1350;
